@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/partme-ai/codex-image-factory-plugin/schemas/artifact_receipt.schema.json",
+  "title": "ArtifactReceipt",
+  "description": "One collected image artifact. Every hash, size, and dimension in this receipt is recomputed from the file on disk by the collector; nothing here is trusted from the producer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plugin_id",
+    "batch_id",
+    "item_id",
+    "round",
+    "artifact_id",
+    "path",
+    "sha256",
+    "bytes",
+    "width",
+    "height",
+    "prompt_sha256",
+    "idempotency_key",
+    "source",
+    "collected_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "plugin_id": {"const": "codex-image-factory"},
+    "batch_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
+    "item_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+    "round": {"type": "integer", "minimum": 1},
+    "artifact_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,127}$"},
+    "path": {"type": "string", "minLength": 1},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "bytes": {"type": "integer", "minimum": 1},
+    "width": {"type": "integer", "minimum": 1},
+    "height": {"type": "integer", "minimum": 1},
+    "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "idempotency_key": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "session_id", "call_id"],
+      "properties": {
+        "kind": {"const": "codex_image_gen"},
+        "session_id": {"type": "string", "minLength": 1},
+        "call_id": {"type": "string", "minLength": 1},
+        "model_reported": {
+          "type": ["string", "null"],
+          "description": "The model Codex reported, or null when Codex reported none. This plugin never infers or hardcodes a model name."
+        }
+      }
+    },
+    "collected_at": {"type": "string", "format": "date-time"}
+  }
+}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Codex Image Factory">
+  <g fill="none" stroke="#10B981" stroke-width="14" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="36" y="36" width="184" height="184" rx="34"/>
+  </g>
+  <g fill="#10B981">
+    <rect x="114" y="114" width="76" height="76" rx="12"/>
+    <circle cx="88" cy="88" r="19"/>
+  </g>
+</svg>

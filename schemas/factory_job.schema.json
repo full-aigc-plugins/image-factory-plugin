@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/partme-ai/codex-image-factory-plugin/schemas/factory_job.schema.json",
+  "title": "FactoryJob",
+  "description": "The durable ledger for one image production job. Written atomically after every transition so an interrupted batch can be resumed without spending the usage allowance twice.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "job_id",
+    "state",
+    "revision",
+    "created_at",
+    "updated_at",
+    "batch",
+    "rounds",
+    "items",
+    "approval",
+    "usage_limit",
+    "error_category",
+    "history"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "job_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
+    "state": {
+      "enum": [
+        "Draft",
+        "PlanValidated",
+        "Approved",
+        "Running",
+        "Evaluated",
+        "Optimized",
+        "Completed",
+        "Partial",
+        "Failed",
+        "Unknown"
+      ]
+    },
+    "revision": {"type": "integer", "minimum": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "batch": {"type": ["object", "null"]},
+    "rounds": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+    "items": {"type": "array", "items": {"$ref": "#/$defs/jobItem"}},
+    "approval": {"type": ["object", "null"]},
+    "usage_limit": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "limit_id": {"const": "image_gen"},
+        "resets_at": {"type": ["integer", "null"]}
+      }
+    },
+    "error_category": {
+      "enum": [
+        "capability_unavailable",
+        "codex_missing",
+        "quota_exceeded",
+        "timeout",
+        "generation_failed",
+        "artifact_missing",
+        "hash_mismatch",
+        "duplicate_artifact",
+        "plan_invalid",
+        "approval_required",
+        "unknown",
+        null
+      ]
+    },
+    "history": {"type": "array", "items": {"$ref": "#/$defs/historyEntry"}}
+  },
+  "$defs": {
+    "jobItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "state", "attempts"],
+      "properties": {
+        "item_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+        "state": {"enum": ["Pending", "Generated", "Failed", "Skipped"]},
+        "attempts": {"type": "integer", "minimum": 0},
+        "receipt_id": {"type": ["string", "null"]},
+        "idempotency_key": {"type": ["string", "null"]},
+        "error_category": {"type": ["string", "null"]}
+      }
+    },
+    "historyEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_state", "to_state", "at"],
+      "properties": {
+        "from_state": {"type": "string", "minLength": 1},
+        "to_state": {"type": "string", "minLength": 1},
+        "at": {"type": "string", "format": "date-time"},
+        "note": {"type": "string", "maxLength": 500}
+      }
+    }
+  }
+}

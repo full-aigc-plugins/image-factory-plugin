@@ -1,0 +1,190 @@
+import json
+import re
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_DIR = ROOT / "schemas"
+PLUGIN_ID = "codex-image-factory"
+REPOSITORY = "https://github.com/partme-ai/codex-image-factory-plugin"
+JSON_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+SCHEMA_FILES = (
+    "image_batch.schema.json",
+    "artifact_receipt.schema.json",
+    "factory_job.schema.json",
+    "scores.schema.json",
+)
+
+# Governed by codex-rs ext/image-generation/src/tool.rs:59 (MAX_EDIT_IMAGES).
+PLATFORM_MAX_REFERENCE_IMAGES = 5
+# Governed by the platform boundary documented in the architecture: one image per tool call.
+PLATFORM_IMAGES_PER_CALL = 1
+
+
+def load_schema(name: str) -> dict:
+    target = SCHEMA_DIR / name
+    if not target.is_file():
+        raise AssertionError(f"missing schema: {name}")
+    return json.loads(target.read_text(encoding="utf-8"))
+
+
+class SchemaContractTests(unittest.TestCase):
+    def test_every_schema_is_closed_draft_2020_12(self) -> None:
+        for name in SCHEMA_FILES:
+            with self.subTest(schema=name):
+                schema = load_schema(name)
+                self.assertEqual(schema["$schema"], JSON_SCHEMA)
+                self.assertEqual(schema["$id"], f"{REPOSITORY}/schemas/{name}")
+                self.assertIs(schema["additionalProperties"], False)
+                self.assertIn("required", schema)
+                self.assertTrue(schema["required"], "required must not be empty")
+                for required in schema["required"]:
+                    self.assertIn(required, schema["properties"], f"{name}: {required} not declared")
+
+    def test_batch_plan_shape(self) -> None:
+        schema = load_schema("image_batch.schema.json")
+        props = schema["properties"]
+        self.assertEqual(schema["required"], ["schema_version", "batch_id", "round", "items"])
+        self.assertEqual(props["schema_version"]["const"], "1.0.0")
+        self.assertEqual(props["batch_id"]["pattern"], "^[a-z0-9][a-z0-9_-]{2,63}$")
+        self.assertEqual(props["round"]["minimum"], 1)
+        self.assertIsInstance(props["schema_version"]["const"], str)
+
+        items = props["items"]
+        self.assertEqual(items["minItems"], 1)
+        self.assertEqual(items["maxItems"], 200)
+        item = schema["$defs"]["batchItem"]
+        self.assertIs(item["additionalProperties"], False)
+        self.assertEqual(item["required"], ["id", "prompt"])
+        self.assertEqual(item["properties"]["reference_images"]["maxItems"], PLATFORM_MAX_REFERENCE_IMAGES)
+        self.assertEqual(item["properties"]["id"]["pattern"], "^[a-z0-9][a-z0-9_-]{0,63}$")
+        self.assertEqual(item["properties"]["prompt"]["minLength"], 1)
+
+        limits = schema["$defs"]["batchLimits"]
+        self.assertIs(limits["additionalProperties"], False)
+        self.assertEqual(limits["required"], ["max_images", "max_rounds", "require_approval_before_run"])
+        self.assertEqual(limits["properties"]["require_approval_before_run"]["type"], "boolean")
+
+    def test_artifact_receipt_shape(self) -> None:
+        schema = load_schema("artifact_receipt.schema.json")
+        props = schema["properties"]
+        for field in (
+            "schema_version",
+            "plugin_id",
+            "batch_id",
+            "item_id",
+            "round",
+            "artifact_id",
+            "path",
+            "sha256",
+            "bytes",
+            "width",
+            "height",
+            "prompt_sha256",
+            "idempotency_key",
+            "source",
+            "collected_at",
+        ):
+            self.assertIn(field, schema["required"], field)
+        self.assertEqual(props["plugin_id"]["const"], PLUGIN_ID)
+        self.assertEqual(props["schema_version"]["const"], "1.0.0")
+        self.assertEqual(props["sha256"]["pattern"], "^[0-9a-f]{64}$")
+        self.assertEqual(props["prompt_sha256"]["pattern"], "^[0-9a-f]{64}$")
+        self.assertEqual(props["idempotency_key"]["pattern"], "^[0-9a-f]{64}$")
+        self.assertEqual(props["bytes"]["minimum"], 1)
+        self.assertEqual(props["width"]["minimum"], 1)
+        self.assertEqual(props["height"]["minimum"], 1)
+
+        source = props["source"]
+        self.assertIs(source["additionalProperties"], False)
+        self.assertEqual(source["required"], ["kind", "session_id", "call_id"])
+        self.assertEqual(source["properties"]["kind"]["const"], "codex_image_gen")
+        self.assertIn("model_reported", source["properties"])
+        self.assertIn("null", source["properties"]["model_reported"]["type"])
+
+    def test_factory_job_state_machine_shape(self) -> None:
+        schema = load_schema("factory_job.schema.json")
+        props = schema["properties"]
+        self.assertEqual(
+            props["state"]["enum"],
+            [
+                "Draft",
+                "PlanValidated",
+                "Approved",
+                "Running",
+                "Evaluated",
+                "Optimized",
+                "Completed",
+                "Partial",
+                "Failed",
+                "Unknown",
+            ],
+        )
+        error_categories = props["error_category"]["enum"]
+        self.assertIn(None, error_categories, "a healthy job has no error category")
+        self.assertEqual(
+            [category for category in error_categories if category is not None],
+            [
+                "capability_unavailable",
+                "codex_missing",
+                "quota_exceeded",
+                "timeout",
+                "generation_failed",
+                "artifact_missing",
+                "hash_mismatch",
+                "duplicate_artifact",
+                "plan_invalid",
+                "approval_required",
+                "unknown",
+            ],
+        )
+        self.assertEqual(props["revision"]["minimum"], 1)
+        self.assertEqual(props["schema_version"]["const"], "1.0.0")
+
+    def test_scores_shape(self) -> None:
+        schema = load_schema("scores.schema.json")
+        props = schema["properties"]
+        self.assertEqual(
+            schema["required"],
+            ["schema_version", "batch_id", "round", "pass_threshold", "deterministic_gates", "advisory", "human_labels", "decision"],
+        )
+        self.assertEqual(props["schema_version"]["const"], "1.0.0")
+        self.assertEqual(props["decision"]["enum"], ["pass", "fail", "pending_approval"])
+        self.assertEqual(props["advisory"]["properties"]["enabled"]["type"], "boolean")
+        item_score = schema["$defs"]["advisoryScore"]
+        self.assertEqual(item_score["properties"]["score"]["minimum"], 0)
+        self.assertEqual(item_score["properties"]["score"]["maximum"], 1)
+        self.assertEqual(
+            schema["$defs"]["humanLabel"]["properties"]["label"]["enum"],
+            ["approved", "rejected", "unlabeled"],
+        )
+        gate = schema["$defs"]["gateResult"]
+        self.assertEqual(gate["required"], ["item_id", "passed", "failures"])
+        self.assertEqual(gate["properties"]["failures"]["items"]["enum"], [
+            "not_a_png",
+            "below_min_dimension",
+            "duplicate_content",
+            "hash_mismatch",
+            "missing_artifact",
+        ])
+
+    def test_platform_limit_is_recorded_not_assumed(self) -> None:
+        """The plugin must not promise size/quality control the platform lacks."""
+        schema = load_schema("image_batch.schema.json")
+        item_props = schema["$defs"]["batchItem"]["properties"]
+        for forbidden in ("size", "quality", "background", "n", "model"):
+            self.assertNotIn(
+                forbidden,
+                item_props,
+                f"batch items must not accept {forbidden!r}: the built-in tool hardcodes it",
+            )
+        limits = schema["$defs"]["batchLimits"]["properties"]
+        self.assertEqual(limits["max_images"]["maximum"], 200)
+        self.assertEqual(PLATFORM_IMAGES_PER_CALL, 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/partme-ai/codex-image-factory-plugin/schemas/scores.schema.json",
+  "title": "BatchScores",
+  "description": "Evaluation output for one batch round. Deterministic gates are the primary verdict; the model-authored advisory score is recorded as a signal only, and human labels are captured so the advisory can be calibrated against real decisions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "batch_id",
+    "round",
+    "pass_threshold",
+    "deterministic_gates",
+    "advisory",
+    "human_labels",
+    "decision"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "batch_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
+    "round": {"type": "integer", "minimum": 1},
+    "pass_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "deterministic_gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["all_passed", "per_item"],
+      "properties": {
+        "all_passed": {"type": "boolean"},
+        "per_item": {"type": "array", "items": {"$ref": "#/$defs/gateResult"}}
+      }
+    },
+    "advisory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "items"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/advisoryScore"}}
+      }
+    },
+    "human_labels": {"type": "array", "items": {"$ref": "#/$defs/humanLabel"}},
+    "decision": {"enum": ["pass", "fail", "pending_approval"]}
+  },
+  "$defs": {
+    "gateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "passed", "failures"],
+      "properties": {
+        "item_id": {"type": "string", "minLength": 1},
+        "passed": {"type": "boolean"},
+        "failures": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "not_a_png",
+              "below_min_dimension",
+              "duplicate_content",
+              "hash_mismatch",
+              "missing_artifact"
+            ]
+          }
+        }
+      }
+    },
+    "advisoryScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "score", "reason"],
+      "properties": {
+        "item_id": {"type": "string", "minLength": 1},
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "reason": {"type": "string", "maxLength": 2000}
+      }
+    },
+    "humanLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "label"],
+      "properties": {
+        "item_id": {"type": "string", "minLength": 1},
+        "label": {"enum": ["approved", "rejected", "unlabeled"]},
+        "at": {"type": ["string", "null"]}
+      }
+    }
+  }
+}
