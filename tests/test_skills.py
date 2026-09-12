@@ -105,6 +105,25 @@ class FrontmatterTests(unittest.TestCase):
                 )
                 self.assertGreater(len(value), 32)
 
+    def test_description_is_a_valid_yaml_plain_scalar(self) -> None:
+        """A colon-space or a space-hash inside a plain scalar makes the frontmatter invalid YAML.
+
+        Both parsers matter and they pull in opposite directions: the Skill loader
+        splits on the first colon and cannot read a block scalar, while the plugin
+        validator parses the frontmatter as real YAML and rejects a plain scalar
+        containing `": "`. A single line without those sequences satisfies both.
+        """
+        for name in EXPECTED:
+            text = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
+            head = text[4 : text.index("\n---", 4)]
+            match = re.search(r"^description:(.*)$", head, re.MULTILINE)
+            assert match is not None
+            value = match.group(1).strip()
+            with self.subTest(skill=name):
+                self.assertNotIn(": ", value, "a colon-space breaks YAML plain scalars")
+                self.assertNotIn(" #", value, "a space-hash starts a YAML comment")
+                self.assertTrue(value.endswith(".") or value.endswith("`"))
+
     def test_description_states_when_to_use_the_skill(self) -> None:
         for name in EXPECTED:
             with self.subTest(skill=name):
