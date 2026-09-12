@@ -1,13 +1,6 @@
 ---
 name: codex-image-factory-recover
-description: >
-  Use when an image batch was interrupted, when a ledger reports a state the
-  user does not understand, or when the user asks what happened to a batch or
-  whether it is safe to continue. Reads the job ledger, maps the current state to
-  the single legal next step, and reports it without spending anything. Use when
-  the state is `Running`, `Unknown`, or `Partial`, or when a previous attempt
-  stopped unexpectedly. For a batch that has not been started use
-  `codex-image-factory-run`.
+description: Use when an image batch was interrupted, when a ledger reports a state the user does not understand, or when the user asks what happened to a batch and whether it is safe to continue. Reads the job ledger, maps the current state to the single legal next step, and reports it without spending anything. Use when the state is `Running`, `Unknown`, or `Partial`, or when a previous attempt stopped unexpectedly. For a batch that has not been started use `codex-image-factory-run`.
 ---
 
 # Recover an image batch
@@ -22,7 +15,7 @@ Do not use it to generate anything, and do not use it to evaluate results.
 
 ## Workflow
 
-1. **Read the ledger before doing anything else.**
+1Step 1. **Read the ledger before doing anything else.**
 
    ```bash
    bin/image-factory status --job job.json --json
@@ -31,14 +24,14 @@ Do not use it to generate anything, and do not use it to evaluate results.
    The ledger is the record of what was actually attempted, so read it rather
    than inferring the situation from files on disk.
 
-2. **Validate the plan that is still on disk**, so you know what the batch was
+2Step 2. **Validate the plan that is still on disk**, so you know what the batch was
    supposed to do:
 
    ```bash
    bin/image-factory validate-plan plan.json --json
    ```
 
-3. **Map the state to the single legal next step.** Do not improvise beyond it.
+3Step 3. **Map the state to the single legal next step.** Do not improvise beyond it.
 
    | State | Meaning | Next step |
    | --- | --- | --- |
@@ -53,11 +46,11 @@ Do not use it to generate anything, and do not use it to evaluate results.
    | `Failed` | The job cannot proceed and is terminal | Report why, and start a new job if the user wants to try again |
    | `Unknown` | An interruption left the outcome unresolved | Query the state; do not re-run to find out |
 
-4. **Report the failure categories and the usage limit if one is present.** A
+4Step 4. **Report the failure categories and the usage limit if one is present.** A
    ledger carrying `quota_exceeded` holds the reset time for the image
    allowance. Report it and wait.
 
-5. **Tell the user what continuing would cost** before resuming: how many items
+5Step 5. **Tell the user what continuing would cost** before resuming: how many items
    are still pending, and therefore how many generation calls the resume would
    make. Only the items with no recorded attempt are pending.
 
@@ -84,6 +77,15 @@ result, that is a new round with a rewritten prompt, not a recovery.
   slate to overwrite.
 - A ledger holding anything resembling a credential is refused on read. Report
   that as a problem with the file rather than working around it.
+
+## Gotchas
+
+- An unreadable ledger is not an empty one. Overwriting it discards the only record of what was already spent.
+- `Running` does not mean the batch is progressing; it means a run did not finish. Read the item states before resuming.
+- `Partial` is a normal outcome, not corruption. Items that failed are not pending, so a resume will not touch them.
+- A usage limit is not a failure of the batch. Report the reset time instead of resuming.
+- Finished items are skipped on resume by design. Reporting "nothing happened" when the ledger shows zero pending items is misleading.
+- Never resume a ledger whose state is `Failed`. It is terminal so that a bad prompt cannot become a repeated charge.
 
 ## Never do
 

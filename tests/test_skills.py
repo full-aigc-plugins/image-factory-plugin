@@ -38,31 +38,23 @@ FORBIDDEN_PHRASES = (
 
 
 def parse_frontmatter(text: str) -> dict:
-    """Read the small YAML subset used by SKILL.md headers, including block scalars."""
+    """Parse frontmatter the way the consumer does, not the way YAML allows.
+
+    The Skill loader takes everything after the first colon on a line as the
+    value, so it has no notion of YAML block scalars: `description: >` yields the
+    single character `>`. An earlier version of this helper understood block
+    scalars, which made it more permissive than production and therefore unable
+    to prove anything. It now matches the consumer exactly.
+    """
     if not text.startswith("---\n"):
         raise AssertionError("SKILL.md must start with a frontmatter block")
     end = text.index("\n---", 4)
-    lines = text[4:end].splitlines()
     fields: dict[str, str] = {}
-    index = 0
-    while index < len(lines):
-        line = lines[index]
-        if not line.strip() or line.startswith("  "):
-            index += 1
+    for line in text[4:end].splitlines():
+        if not line.strip() or line.startswith((" ", "\t")):
             continue
         key, _, value = line.partition(":")
-        key = key.strip()
-        value = value.strip()
-        if value in ("|", ">"):
-            block: list[str] = []
-            index += 1
-            while index < len(lines) and (lines[index].startswith("  ") or not lines[index].strip()):
-                block.append(lines[index].strip())
-                index += 1
-            fields[key] = " ".join(part for part in block if part)
-            continue
-        fields[key] = value.strip("'\"")
-        index += 1
+        fields[key.strip()] = value.strip().strip("'\"")
     return fields
 
 
@@ -97,7 +89,21 @@ class FrontmatterTests(unittest.TestCase):
                 fields = parse_frontmatter((SKILLS / name / "SKILL.md").read_text(encoding="utf-8"))
                 description = fields.get("description", "")
                 self.assertGreater(len(description), 32)
-                self.assertLessEqual(len(description), 1500)
+                self.assertLessEqual(len(description), 1024)
+
+    def test_description_is_a_single_line_value(self) -> None:
+        """A YAML block scalar parses as one character and the Skill then never triggers."""
+        for name in EXPECTED:
+            text = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
+            head = text[4 : text.index("\n---", 4)]
+            with self.subTest(skill=name):
+                match = re.search(r"^description:(.*)$", head, re.MULTILINE)
+                self.assertIsNotNone(match, f"{name}: no description line")
+                value = match.group(1).strip()
+                self.assertNotIn(
+                    value, ("|", ">", "|-", ">-", "|+", ">+"), "block scalars are not read by the loader"
+                )
+                self.assertGreater(len(value), 32)
 
     def test_description_states_when_to_use_the_skill(self) -> None:
         for name in EXPECTED:

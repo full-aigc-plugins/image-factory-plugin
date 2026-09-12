@@ -1,13 +1,6 @@
 ---
 name: codex-image-factory-judge
-description: >
-  Use when a batch has been generated and its results need a verdict, when the
-  user asks whether a batch came out right, or when the results should be turned
-  into another round. Runs the deterministic gates, records any advisory score
-  next to the human labels so the two can later be compared, and writes the next
-  round's plan from the items that actually need rework. Use when the user says
-  "check these", "score the batch", or "try again with better prompts". For
-  producing the images in the first place use `codex-image-factory-run`.
+description: Use when a batch has been generated and its results need a verdict, when the user asks whether a batch came out right, or when the results should be turned into another round. Runs the deterministic gates, records any advisory score next to the human labels so the two can later be compared, and writes the next round's plan from the items that actually need rework. Use when the user says "check these", "score the batch", or "try again with better prompts". For producing the images in the first place use `codex-image-factory-run`.
 ---
 
 # Evaluate and optimize a batch
@@ -22,11 +15,11 @@ Do not use it to generate images. It never spends the account's allowance.
 
 ## Workflow
 
-1. **Look at the results yourself before scoring them.** Read the generated
+1Step 1. **Look at the results yourself before scoring them.** Read the generated
    images and compare them with what the plan asked for. This is the part Codex
    is genuinely needed for: judging whether a picture matches the intent.
 
-2. **Run the deterministic gates.**
+2Step 2. **Run the deterministic gates.**
 
    ```bash
    bin/image-factory evaluate --plan plan.json --job job.json --scores scores.json \
@@ -37,7 +30,7 @@ Do not use it to generate images. It never spends the account's allowance.
    meets the minimum dimension, its hash matches the receipt, and the same image
    is not standing in for two different items. A failure here is a real failure.
 
-3. **Record your own assessment as advisory, and say that it is advisory.**
+3Step 3. **Record your own assessment as advisory, and say that it is advisory.**
 
    ```bash
    bin/image-factory evaluate ... --advisory advisory.json --json
@@ -54,13 +47,13 @@ Do not use it to generate images. It never spends the account's allowance.
    and then scored the result, refining against that score converges on what the
    scorer likes rather than on what the user asked for.
 
-4. **Capture the user's decision, and let it outrank your score.** Record
+4Step 4. **Capture the user's decision, and let it outrank your score.** Record
    `approved` or `rejected` per item in the labels file. A human rejection fails
    the batch even when every gate passed and your score was perfect. These
    labels are the calibration data for the advisory signal, so record them even
    when they contradict your own assessment.
 
-5. **Turn the failures into the next round.** Decide what to change for each item
+5Step 5. **Turn the failures into the next round.** Decide what to change for each item
    that needs rework, then hand those decisions to the optimizer:
 
    ```bash
@@ -77,7 +70,7 @@ Do not use it to generate images. It never spends the account's allowance.
    instruction to do better. If the palette came out too saturated, say which
    colours should dominate.
 
-6. **Validate the plan for the next round before anyone runs it.**
+6Step 6. **Validate the plan for the next round before anyone runs it.**
 
    ```bash
    bin/image-factory validate-plan next-round.json --json
@@ -115,6 +108,16 @@ never write a prompt whose intent depends on those settings.
   a human.
 - `optimizer_ambiguous_instruction` — an item was given both a rewrite and a
   retry-unchanged. Choose one.
+
+## Gotchas
+
+- A perfect advisory score does not survive a human rejection. If you recorded a rejection, the batch fails.
+- Recording no advisory score at all is legitimate. A made-up number is worse than an empty one, because it looks like evidence.
+- Do not rewrite a prompt for an item you never looked at. Open the image first.
+- A low advisory score asks for a human; it does not fail the batch. Do not describe `pending_approval` to the user as a failure.
+- Reaching the round ceiling is reported as incomplete. Do not present it as a finished job.
+- The previous round's plan is immutable. If you edited it in place, the round number no longer links a result to its instruction.
+- An environmental failure (timeout, missing artifact) does not need a new prompt. Use the explicit retry-unchanged instruction so the decision is visible.
 
 ## Never do
 

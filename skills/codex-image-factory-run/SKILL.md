@@ -1,13 +1,6 @@
 ---
 name: codex-image-factory-run
-description: >
-  Use when a batch plan exists and its images have not been produced yet, or when
-  the user asks to generate the images in a plan. Validates the plan, quotes the
-  batch, obtains approval, generates one image per item through Codex, and
-  collects a hash-verified receipt for every artifact. Use when the user says
-  "run this batch" or "generate these". For evaluating results that already
-  exist use `codex-image-factory-judge`; for a run whose state is unclear use
-  `codex-image-factory-recover`.
+description: Use when a batch plan exists and its images have not been produced yet, or when the user asks to generate the images in a plan. Validates the plan, quotes the batch, obtains approval, generates one image per item through Codex, and collects a hash-verified receipt for every artifact. Use when the user says "run this batch" or "generate these". For evaluating results that already exist use `codex-image-factory-judge`; for a run whose state is unclear use `codex-image-factory-recover`.
 ---
 
 # Run an image batch
@@ -22,7 +15,7 @@ to decide whether the results are good.
 
 ## Workflow
 
-1. **Validate the plan before anything else.**
+1Step 1. **Validate the plan before anything else.**
 
    ```bash
    bin/image-factory validate-plan plan.json --json
@@ -34,7 +27,7 @@ to decide whether the results are good.
    prompt and reference images, so those fields cannot be honoured and are
    refused rather than ignored.
 
-2. **Quote the batch and show the user the size.**
+2Step 2. **Quote the batch and show the user the size.**
 
    ```bash
    bin/image-factory quote plan.json --json
@@ -43,11 +36,11 @@ to decide whether the results are good.
    Report the image count and make clear that each item costs one generation call
    against the Codex account's image allowance. Quoting itself spends nothing.
 
-3. **Obtain approval.** Run the batch only when the user has agreed to generate
+3Step 3. **Obtain approval.** Run the batch only when the user has agreed to generate
    these images. If the plan sets `require_approval_before_run`, the command
    refuses to start without `--approve`.
 
-4. **Run it.**
+4Step 4. **Run it.**
 
    ```bash
    bin/image-factory run --plan plan.json --job job.json --destination out/ --approve --json
@@ -56,7 +49,7 @@ to decide whether the results are good.
    Items already carrying a receipt are skipped, so a resumed run does not
    regenerate finished work.
 
-5. **Report what happened from the output, not from expectation.** The command
+5Step 5. **Report what happened from the output, not from expectation.** The command
    prints the receipts it collected and the final ledger state. An item is
    `Generated` only when a new image file was found and verified on disk; an exit
    code of zero from Codex without a file is recorded as a failure.
@@ -93,6 +86,15 @@ State these to the user rather than working around them:
   time and stop.
 - `artifact_missing`, `timeout`, `generation_failed` — recorded per item. The
   batch continues with the remaining items.
+
+## Gotchas
+
+- A zero exit from Codex is not success. Only a new file in the generation directory is, and the command already reports that distinction.
+- Two new images appearing for one item means the assignment is ambiguous. The command refuses rather than guessing which one belongs to the item.
+- A plan carrying `size` or `quality` will be rejected rather than partially honoured. That is deliberate; move the intent into the prompt instead.
+- The same image across two items is flagged for both, because which item owns it cannot be decided from the files.
+- A resumed run legitimately reports zero receipts. That means everything was already done, not that the run failed.
+- Hitting the usage limit stops the batch. The remaining items stay pending; they are not failed.
 
 ## Never do
 
