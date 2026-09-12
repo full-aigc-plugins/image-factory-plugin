@@ -4,7 +4,8 @@
 The plugin ships its contracts as JSON Schema but must not depend on a third-party
 validator, so this module implements the subset that appears in `schemas/`:
 type, const, enum, pattern, minimum, maximum, minLength, maxLength, minItems,
-maxItems, required, properties, additionalProperties, items, $ref and $defs.
+maxItems, required, properties, additionalProperties, items, $ref, $defs and the
+`date-time` format.
 
 Keeping one checker driven by the published schema means the schema file is the
 enforcement source; a rule can never be enforced in code that the document does
@@ -28,6 +29,7 @@ SUPPORTED_KEYWORDS = frozenset(
         "const",
         "enum",
         "pattern",
+        "format",
         "minimum",
         "maximum",
         "minLength",
@@ -41,6 +43,10 @@ SUPPORTED_KEYWORDS = frozenset(
         "default",
     }
 )
+
+SUPPORTED_FORMATS = frozenset({"date-time"})
+
+RFC3339_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
 
 
 class UnsupportedSchemaError(Exception):
@@ -114,6 +120,12 @@ def validate(instance: object, schema: dict, root: dict | None = None, path: str
             errors.append(f"{path}: shorter than minLength {schema['minLength']}")
         if "maxLength" in schema and len(instance) > schema["maxLength"]:
             errors.append(f"{path}: longer than maxLength {schema['maxLength']}")
+        declared_format = schema.get("format")
+        if declared_format is not None:
+            if declared_format not in SUPPORTED_FORMATS:
+                raise UnsupportedSchemaError(f"{path}: unsupported format {declared_format!r}")
+            if declared_format == "date-time" and RFC3339_UTC.match(instance) is None:
+                errors.append(f"{path}: {instance!r} is not an RFC 3339 timestamp")
 
     if isinstance(instance, (int, float)) and not isinstance(instance, bool):
         if "minimum" in schema and instance < schema["minimum"]:

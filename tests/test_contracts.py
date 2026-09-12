@@ -1,11 +1,15 @@
 import json
 import re
+import sys
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "schemas"
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import schema_lite  # noqa: E402
 PLUGIN_ID = "codex-image-factory"
 REPOSITORY = "https://github.com/partme-ai/codex-image-factory-plugin"
 JSON_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
@@ -29,6 +33,38 @@ def load_schema(name: str) -> dict:
     if not target.is_file():
         raise AssertionError(f"missing schema: {name}")
     return json.loads(target.read_text(encoding="utf-8"))
+
+
+def iter_subschemas(node: dict):
+    """Yield every subschema reachable from the root through schema positions only."""
+    yield node
+    for container in ("properties", "$defs"):
+        children = node.get(container)
+        if isinstance(children, dict):
+            for child in children.values():
+                if isinstance(child, dict):
+                    yield from iter_subschemas(child)
+    items = node.get("items")
+    if isinstance(items, dict):
+        yield from iter_subschemas(items)
+
+
+class SchemaSupportTests(unittest.TestCase):
+    def test_no_schema_uses_a_keyword_the_checker_cannot_enforce(self) -> None:
+        """A keyword the checker silently ignored would be a rule enforced nowhere."""
+        for name in SCHEMA_FILES:
+            for subschema in iter_subschemas(load_schema(name)):
+                with self.subTest(schema=name, title=subschema.get("title")):
+                    unsupported = set(subschema) - schema_lite.SUPPORTED_KEYWORDS
+                    self.assertEqual(unsupported, set(), f"{name}: unsupported keywords {unsupported}")
+
+    def test_no_schema_uses_an_unsupported_format(self) -> None:
+        for name in SCHEMA_FILES:
+            for subschema in iter_subschemas(load_schema(name)):
+                declared = subschema.get("format")
+                if declared is not None:
+                    with self.subTest(schema=name, format=declared):
+                        self.assertIn(declared, schema_lite.SUPPORTED_FORMATS)
 
 
 class SchemaContractTests(unittest.TestCase):
