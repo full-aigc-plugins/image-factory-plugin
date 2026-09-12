@@ -35,7 +35,7 @@ scripts/
   image_factory_cli.py             子命令装配与花费门禁
   validate_distribution.py         发行校验器
 skills/                            四个 Agent Skill
-tests/                             208 个测试，标准库 unittest
+tests/                             226 个测试，标准库 unittest
 docs/                              本文档及其配对版本
 ```
 

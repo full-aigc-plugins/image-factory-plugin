@@ -8,7 +8,7 @@
 
 ## 当前状态
 
-设计阶段。本仓库包含插件契约、发行基线与实施计划。在计划的各项任务完成并将证据记录到 `docs/verification/` 之前，运行期工作流一律标注为目标行为。
+版本 0.1.0 已实现并通过运行期验证。确定性测试、发行检查、插件安装、新会话 Skill 发现以及经授权的两项真实出图证据均记录在 `docs/verification/` 下。
 
 ## 项目定位
 
@@ -52,6 +52,7 @@ Codex -> 校验后的批次清单 -> 内置图像工具 -> 产物采集 + 回执
 - [设计规格](docs/superpowers/specs/2026-09-12-codex-image-factory-plugin-design.md)
 - [实施计划](docs/superpowers/plans/2026-09-12-codex-image-factory-plugin-implementation.md)
 - [便携清单迁移说明](docs/portable-migration.md)
+- [运行期验证](docs/verification/runtime.md)
 
 ## 许可证
 

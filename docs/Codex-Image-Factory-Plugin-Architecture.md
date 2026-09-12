@@ -1,6 +1,6 @@
 # Codex Image Factory Plugin Architecture
 
-> **Status:** implemented and offline-verified; no runtime generation evidence recorded yet. **Version:** 0.1.0. **Updated:** 2026-09-12.
+> **Status:** implemented and runtime-verified. **Version:** 0.1.0. **Updated:** 2026-09-12.
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 

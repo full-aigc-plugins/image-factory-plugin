@@ -34,8 +34,12 @@ REQUIRED_DOCUMENTS = (
     "docs/superpowers/plans/2026-09-12-codex-image-factory-plugin-implementation.md",
 )
 
-# Gates that cannot be satisfied offline must be declared, not implied.
-UNRUN_GATES = ("runtime_generation_evidence", "usage_limit_evidence", "plugin_installation")
+# Gates that cannot be satisfied offline must be declared with their observed status.
+RUNTIME_GATES = {
+    "runtime_generation_evidence": "PASS",
+    "usage_limit_evidence": "NOT_RUN",
+    "plugin_installation": "PASS",
+}
 
 MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
@@ -114,14 +118,21 @@ class DocumentationTests(unittest.TestCase):
                 with self.subTest(document=path.name, model=model):
                     self.assertNotIn(model, text)
 
-    def test_offline_evidence_declares_the_unrun_gates(self) -> None:
+    def test_runtime_evidence_declares_completed_gates(self) -> None:
         text = (ROOT / "docs/verification/offline.md").read_text(encoding="utf-8")
-        self.assertIn("NOT_RUN", text)
-        for gate in UNRUN_GATES:
+        for gate, expected_status in RUNTIME_GATES.items():
             with self.subTest(gate=gate):
                 self.assertIn(gate, text)
                 line = next(row for row in text.splitlines() if gate in row and row.startswith("|"))
-                self.assertIn("NOT_RUN", line)
+                self.assertIn(expected_status, line)
+
+        runtime = (ROOT / "docs/verification/runtime.md").read_text(encoding="utf-8")
+        self.assertIn("## Real two-item generation", runtime)
+        self.assertIn("## Marketplace resolution and installation", runtime)
+        self.assertIn("Status: `PASS`.", runtime)
+        self.assertIn("Installation status: `PASS`.", runtime)
+        self.assertIn("attempted each item exactly once", runtime)
+        self.assertIn("all four exact Skill names as discoverable", runtime)
 
 
 class LinkTests(unittest.TestCase):

@@ -8,7 +8,7 @@
 
 ## Status
 
-Design stage. This repository contains the plugin contracts, the distribution foundation, and an implementation plan. Runtime workflows are described as target behaviour until the plan's tasks are complete and evidence is recorded under `docs/verification/`.
+Implemented and runtime-verified for version 0.1.0. The deterministic suite, distribution checks, plugin installation, fresh-session Skill discovery, and an authorized two-item generation run are recorded under `docs/verification/`.
 
 ## Purpose
 
@@ -52,6 +52,7 @@ Because generation is not parameterised, features that require explicit size or 
 - [Design specification](docs/superpowers/specs/2026-09-12-codex-image-factory-plugin-design.md)
 - [Implementation plan](docs/superpowers/plans/2026-09-12-codex-image-factory-plugin-implementation.md)
 - [Portable manifest migration](docs/portable-migration.md)
+- [Runtime verification](docs/verification/runtime.md)
 
 ## License
 

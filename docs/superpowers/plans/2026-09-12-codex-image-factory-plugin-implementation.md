@@ -94,20 +94,20 @@ The repository already contains the validated `codex-image-factory` compatibilit
 
 **Files:** modify `docs/verification/runtime.md`; no source changes.
 
-- [ ] Run `bin/image-factory probe` on a machine whose account includes image generation and record the verdict verbatim.
-- [ ] Run a two-item batch with `--approve` against a real account and record the receipts, the ledger's final state, and the published files.
-- [ ] Record, not assume, which model the run reports, and whether a usage limit was encountered.
-- [ ] If no such account is available, mark each gate `NOT_RUN` with the specific missing evidence rather than describing a hypothetical result.
-- [ ] Commit `test: record Image Factory runtime evidence`.
+- [x] Run `bin/image-factory probe` on a machine whose account includes image generation and record the verdict verbatim.
+- [x] Run a two-item batch with `--approve` against a real account and record the receipts, the ledger's final state, and the published files.
+- [x] Record, not assume, which model the run reports, and whether a usage limit was encountered.
+- [x] If no such account is available, mark each gate `NOT_RUN` with the specific missing evidence rather than describing a hypothetical result. (Not applicable: an authorized account was available.)
+- [x] Commit `test: record Image Factory runtime evidence`.
 
 ### Task 12 — plugin installation
 
 **Files:** no repository changes; installs `codex-image-factory` locally.
 
-- [ ] Confirm the marketplace entry resolves and the plugin installs with `codex-image-factory` as its identity.
-- [ ] Confirm a new Codex session discovers all four skills.
-- [ ] Confirm the skill text is loaded and the CLI is reachable from a session.
-- [ ] Commit nothing; record the outcome in `docs/verification/runtime.md`.
+- [x] Confirm the marketplace entry resolves and the plugin installs with `codex-image-factory` as its identity.
+- [x] Confirm a new Codex session discovers all four skills.
+- [x] Confirm the skill text is loaded and the CLI is reachable from a session.
+- [x] Commit nothing; record the outcome in `docs/verification/runtime.md`.
 
 ## Completion gate
 

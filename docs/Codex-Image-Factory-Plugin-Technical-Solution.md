@@ -44,7 +44,7 @@ scripts/
   image_factory_cli.py             subcommand wiring and the spend gate
   validate_distribution.py         distribution validator
 skills/                            four Agent Skills
-tests/                             208 tests, stdlib unittest
+tests/                             226 tests, stdlib unittest
 docs/                              this document and its pair
 ```
 

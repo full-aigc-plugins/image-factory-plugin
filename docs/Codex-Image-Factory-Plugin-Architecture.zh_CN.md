@@ -1,6 +1,6 @@
 # Codex Image Factory 插件架构
 
-> **状态**：已实现并通过离线验证；尚未记录运行期出图证据。**版本**：0.1.0。**更新日期**：2026-09-12。
+> **状态**：已实现并通过运行期验证。**版本**：0.1.0。**更新日期**：2026-09-12。
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 
