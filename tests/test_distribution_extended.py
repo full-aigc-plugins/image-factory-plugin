@@ -1,0 +1,203 @@
+import json
+import re
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PLUGIN_ID = "codex-image-factory"
+DISPLAY_NAME = "Codex Image Factory"
+
+EXPECTED_SKILLS = (
+    "codex-image-factory-use",
+    "codex-image-factory-run",
+    "codex-image-factory-judge",
+    "codex-image-factory-recover",
+)
+
+BILINGUAL_PAIRS = (
+    ("README.md", "README.zh-CN.md"),
+    (
+        "docs/Codex-Image-Factory-Plugin-Architecture.md",
+        "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
+    ),
+    (
+        "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
+        "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
+    ),
+)
+
+REQUIRED_DOCUMENTS = (
+    "docs/portable-migration.md",
+    "docs/verification/offline.md",
+    "docs/superpowers/specs/2026-09-12-codex-image-factory-plugin-design.md",
+    "docs/superpowers/plans/2026-09-12-codex-image-factory-plugin-implementation.md",
+)
+
+# Gates that cannot be satisfied offline must be declared, not implied.
+UNRUN_GATES = ("runtime_generation_evidence", "usage_limit_evidence", "plugin_installation")
+
+MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+
+
+def relative_markdown_links(path: Path) -> list[str]:
+    """Collect local targets only; URLs, anchors, and placeholders are out of scope."""
+    targets = []
+    for match in MARKDOWN_LINK.finditer(path.read_text(encoding="utf-8")):
+        target = match.group(1).strip()
+        if target.startswith(("http://", "https://", "mailto:", "#")):
+            continue
+        target = target.split("#", 1)[0].strip()
+        if not target or "{" in target:
+            continue
+        targets.append(target)
+    return targets
+
+
+class SkillInventoryTests(unittest.TestCase):
+    def test_skill_set_is_exactly_as_designed(self) -> None:
+        present = tuple(sorted(entry.name for entry in (ROOT / "skills").iterdir() if entry.is_dir()))
+        self.assertEqual(present, tuple(sorted(EXPECTED_SKILLS)))
+
+    def test_each_skill_frontmatter_name_matches_its_directory(self) -> None:
+        for name in EXPECTED_SKILLS:
+            text = (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+            with self.subTest(skill=name):
+                self.assertTrue(text.startswith("---\n"))
+                head = text[4 : text.index("\n---", 4)]
+                declared = re.search(r"^name:\s*(\S+)\s*$", head, re.MULTILINE)
+                self.assertIsNotNone(declared, f"{name}: no name field")
+                self.assertEqual(declared.group(1), name)
+
+
+class DocumentationTests(unittest.TestCase):
+    def test_bilingual_pairs_exist(self) -> None:
+        for english, chinese in BILINGUAL_PAIRS:
+            with self.subTest(pair=english):
+                self.assertTrue((ROOT / english).is_file(), english)
+                self.assertTrue((ROOT / chinese).is_file(), chinese)
+
+    def test_bilingual_pairs_cross_link(self) -> None:
+        for english, chinese in BILINGUAL_PAIRS:
+            with self.subTest(pair=english):
+                self.assertIn(
+                    Path(chinese).name, (ROOT / english).read_text(encoding="utf-8")
+                )
+                self.assertIn(
+                    Path(english).name, (ROOT / chinese).read_text(encoding="utf-8")
+                )
+
+    def test_required_documents_exist(self) -> None:
+        for relative in REQUIRED_DOCUMENTS:
+            with self.subTest(document=relative):
+                self.assertTrue((ROOT / relative).is_file(), relative)
+
+    def test_architecture_and_solution_declare_their_status(self) -> None:
+        for relative in (
+            "docs/Codex-Image-Factory-Plugin-Architecture.md",
+            "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
+            "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
+            "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
+        ):
+            with self.subTest(document=relative):
+                text = (ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn("0.1.0", text)
+                self.assertIn("2026-09-12", text)
+
+    def test_no_document_names_an_image_model(self) -> None:
+        """The platform chooses the model; claiming one would mislead the reader."""
+        for path in sorted(ROOT.rglob("*.md")):
+            if ".git" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8").lower()
+            for model in ("gpt-image", "image-2.5", "sunburst", "flare"):
+                with self.subTest(document=path.name, model=model):
+                    self.assertNotIn(model, text)
+
+    def test_offline_evidence_declares_the_unrun_gates(self) -> None:
+        text = (ROOT / "docs/verification/offline.md").read_text(encoding="utf-8")
+        self.assertIn("NOT_RUN", text)
+        for gate in UNRUN_GATES:
+            with self.subTest(gate=gate):
+                self.assertIn(gate, text)
+                line = next(row for row in text.splitlines() if gate in row and row.startswith("|"))
+                self.assertIn("NOT_RUN", line)
+
+
+class LinkTests(unittest.TestCase):
+    def test_every_relative_markdown_link_resolves(self) -> None:
+        failures: list[str] = []
+        for path in sorted(ROOT.rglob("*.md")):
+            if ".git" in path.parts or "__pycache__" in path.parts:
+                continue
+            for target in relative_markdown_links(path):
+                resolved = (path.parent / target).resolve()
+                if not resolved.exists():
+                    failures.append(f"{path.relative_to(ROOT)} -> {target}")
+        self.assertEqual(failures, [], "unresolved relative links")
+
+    def test_documents_avoid_absolute_local_paths(self) -> None:
+        for path in sorted(ROOT.rglob("*.md")):
+            if ".git" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(document=path.name):
+                self.assertNotIn("/Users/", text)
+                self.assertNotIn("file://", text)
+
+
+class RepositoryStructureTests(unittest.TestCase):
+    def test_no_symlinks_anywhere(self) -> None:
+        offenders = [
+            str(entry.relative_to(ROOT))
+            for entry in ROOT.rglob("*")
+            if entry.is_symlink() and ".git" not in entry.parts
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_no_build_artifacts_are_tracked(self) -> None:
+        """Caches appear in any working tree that has run the suite; what matters is what is committed."""
+        import subprocess
+
+        tracked = subprocess.run(
+            ["git", "ls-files"], cwd=str(ROOT), capture_output=True, text=True, check=False
+        ).stdout.splitlines()
+        noise = ("__pycache__", ".pytest_cache", "node_modules", ".DS_Store")
+        offenders = [name for name in tracked if any(marker in name for marker in noise)]
+        self.assertEqual(offenders, [])
+
+    def test_the_working_tree_has_no_stray_editor_or_dependency_directories(self) -> None:
+        noise = ("node_modules", ".DS_Store")
+        offenders = [
+            str(entry.relative_to(ROOT))
+            for entry in ROOT.rglob("*")
+            if ".git" not in entry.parts and any(marker in entry.parts for marker in noise)
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_cli_entry_point_is_executable(self) -> None:
+        entry = ROOT / "bin/image-factory"
+        self.assertTrue(entry.is_file())
+        self.assertTrue(entry.stat().st_mode & 0o111, "bin/image-factory must be executable")
+
+    def test_manifest_asset_paths_exist(self) -> None:
+        manifest = json.loads((ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["name"], PLUGIN_ID)
+        self.assertEqual(manifest["interface"]["displayName"], DISPLAY_NAME)
+        for key in ("logo", "logoDark", "composerIcon"):
+            target = ROOT / manifest["interface"][key].lstrip("./")
+            with self.subTest(asset=key):
+                self.assertTrue(target.is_file(), f"{key} -> {target}")
+
+    def test_schema_identifiers_agree_with_the_repository(self) -> None:
+        repository = json.loads(
+            (ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8")
+        )["repository"]
+        for path in sorted((ROOT / "schemas").glob("*.json")):
+            schema = json.loads(path.read_text(encoding="utf-8"))
+            with self.subTest(schema=path.name):
+                self.assertEqual(schema["$id"], f"{repository}/schemas/{path.name}")
+
+
+if __name__ == "__main__":
+    unittest.main()
