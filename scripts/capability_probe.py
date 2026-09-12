@@ -125,6 +125,7 @@ def probe(
     search_path: tuple[str, ...] | list[str] | None = None,
     codex_home: Path | None = None,
     config_path: Path | None = None,
+    binary_override: Path | str | None = None,
 ) -> Capability:
     """Inspect the local environment. Read-only, offline, never executes anything."""
     home = Path(codex_home) if codex_home is not None else _default_codex_home()
@@ -132,15 +133,27 @@ def probe(
     config_file = Path(config_path) if config_path is not None else home / CONFIG_FILE_NAME
     generation_dir = home / GENERATION_DIR_NAME
 
-    binary, source = _find_binary(paths, home)
-    if binary is None:
-        return Capability(
-            verdict="unavailable",
-            reasons=("codex_binary_missing",),
-            guidance=INSTALL_GUIDANCE,
-            codex_home=home,
-            generation_dir=generation_dir,
-        )
+    if binary_override is not None:
+        candidate = Path(binary_override)
+        if not (candidate.is_file() and os.access(candidate, os.X_OK)):
+            return Capability(
+                verdict="unavailable",
+                reasons=("codex_binary_missing",),
+                guidance=f"the binary given explicitly is not executable: {candidate}",
+                codex_home=home,
+                generation_dir=generation_dir,
+            )
+        binary, source = candidate, "explicit"
+    else:
+        binary, source = _find_binary(paths, home)
+        if binary is None:
+            return Capability(
+                verdict="unavailable",
+                reasons=("codex_binary_missing",),
+                guidance=INSTALL_GUIDANCE,
+                codex_home=home,
+                generation_dir=generation_dir,
+            )
 
     reasons: list[str] = ["verified_codex_binary"]
     config, config_ok = _read_config(config_file)
@@ -236,7 +249,10 @@ def main(argv: list[str] | None = None) -> int:
     codex_home = None
     if "--codex-home" in args:
         codex_home = Path(args[args.index("--codex-home") + 1])
-    capability = probe(codex_home=codex_home)
+    binary = None
+    if "--codex-bin" in args:
+        binary = Path(args[args.index("--codex-bin") + 1])
+    capability = probe(codex_home=codex_home, binary_override=binary)
     sys.stdout.write(render_json(capability) + "\n")
     return 0 if capability.is_available else 1
 

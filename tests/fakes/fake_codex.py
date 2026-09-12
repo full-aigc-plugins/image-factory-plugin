@@ -43,13 +43,38 @@ def emit(payload: dict) -> None:
 
 
 def write_png(directory: Path, session: str, call_id: str, source: Path | None) -> Path:
+    """Write a distinct image per call, the way a real generator would.
+
+    A trailing comment is appended after IEND so two calls never produce byte
+    identical files. PNG readers ignore trailing data and this plugin only reads
+    the IHDR header, so the artifact stays a valid image.
+    """
     target = directory / session / f"{call_id}.png"
     target.parent.mkdir(parents=True, exist_ok=True)
     if source is not None and Path(source).is_file():
-        shutil.copyfile(source, target)
+        payload = Path(source).read_bytes()
     else:
-        target.write_bytes(PNG_HEADER + b"\x00" * 64)
+        payload = PNG_HEADER + b"\x00" * 64
+    target.write_bytes(payload + f"\n# {session}/{call_id}\n".encode())
     return target
+
+
+def next_call_id(control_path: Path, override: str | None) -> str:
+    """Give every invocation its own call id.
+
+    A real generator names each output differently, and a batch that reused one
+    name would overwrite its own earlier results. A counter next to the control
+    file keeps runs reproducible while still being unique per invocation.
+    """
+    if override:
+        return override
+    counter_file = control_path.parent / "fake-codex-calls"
+    try:
+        current = int(counter_file.read_text(encoding="utf-8").strip() or "0")
+    except (OSError, ValueError):
+        current = 0
+    counter_file.write_text(str(current + 1), encoding="utf-8")
+    return f"call-{current + 1}"
 
 
 def main() -> int:
@@ -61,7 +86,7 @@ def main() -> int:
 
     mode = control.get("mode", "success")
     session = control.get("session_id", "session-fake")
-    call_id = control.get("call_id", "call-fake")
+    call_id = next_call_id(control_path, control.get("call_id"))
 
     last_message = None
     if "-o" in argv:

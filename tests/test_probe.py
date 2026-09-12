@@ -69,11 +69,19 @@ class ProbeFixture:
         os.chmod(target, 0o755)
         return target
 
-    def probe(self) -> probe.Capability:
+    def probe(self) -> "probe.Capability":
         return probe.probe(
             search_path=(str(self.bin_dir),),
             codex_home=self.codex_home,
             config_path=self.codex_home / "config.toml",
+        )
+
+    def probe_with_binary(self, binary: Path) -> "probe.Capability":
+        return probe.probe(
+            search_path=(str(self.bin_dir),),
+            codex_home=self.codex_home,
+            config_path=self.codex_home / "config.toml",
+            binary_override=binary,
         )
 
     def cleanup(self) -> None:
@@ -207,6 +215,30 @@ class CapabilityProbeTests(unittest.TestCase):
         result = self.fixture.probe()
         self.assertEqual(result.verdict, "available")
         self.assertIn("config_unreadable", result.reasons)
+
+    def test_an_explicit_binary_overrides_the_search(self) -> None:
+        """Without this, a caller that already resolved the binary cannot use it."""
+        self.fixture.write_auth()
+        self.fixture.write_config(CONFIG_WITH_GENERATION_ENABLED)
+        self.fixture.make_generation_dir()
+        explicit = self.fixture.base / "elsewhere" / "codex"
+        explicit.parent.mkdir()
+        explicit.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        os.chmod(explicit, 0o755)
+        result = self.fixture.probe_with_binary(explicit)
+        self.assertEqual(result.verdict, "available", result.reasons)
+        self.assertEqual(result.binary_source, "explicit")
+        self.assertEqual(result.codex_binary, explicit)
+
+    def test_a_non_executable_override_is_unavailable(self) -> None:
+        self.fixture.write_auth()
+        self.fixture.write_config(CONFIG_WITH_GENERATION_ENABLED)
+        self.fixture.make_generation_dir()
+        plain = self.fixture.base / "not-executable"
+        plain.write_text("data", encoding="utf-8")
+        result = self.fixture.probe_with_binary(plain)
+        self.assertEqual(result.verdict, "unavailable")
+        self.assertIn("codex_binary_missing", result.reasons)
 
 
 if __name__ == "__main__":

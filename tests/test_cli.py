@@ -1,0 +1,453 @@
+import json
+import os
+import shutil
+import stat
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import image_factory_cli as cli  # noqa: E402
+
+
+FAKE = ROOT / "tests" / "fakes" / "fake_codex.py"
+REAL_PNG = ROOT / "assets" / "logo.png"
+
+
+def fast_python() -> str:
+    candidate = Path(sys.base_prefix) / "bin" / "python3"
+    return str(candidate) if candidate.is_file() else sys.executable
+
+
+def build_shim() -> Path:
+    directory = Path(tempfile.mkdtemp(prefix="image-factory-cli-shim-"))
+    shim = directory / "codex"
+    shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
+    shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return shim
+
+
+SHIM = build_shim()
+
+
+def valid_plan(**overrides) -> dict:
+    document = {
+        "schema_version": "1.0.0",
+        "batch_id": "portrait-study",
+        "round": 1,
+        "goal": "match the reference lighting",
+        "limits": {"max_images": 20, "max_rounds": 3, "require_approval_before_run": True},
+        "judge_policy": {"min_dimension": 64, "reject_duplicates": True, "pass_threshold": 0.8},
+        "items": [
+            {"id": "item-01", "prompt": "a calm portrait"},
+            {"id": "item-02", "prompt": "a second portrait"},
+        ],
+    }
+    document.update(overrides)
+    return document
+
+
+class CliFixture:
+    def __init__(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self._tmp.name)
+        self.codex_home = self.base / "codex-home"
+        self.codex_home.mkdir()
+        (self.codex_home / "auth.json").write_text("{}", encoding="utf-8")
+        (self.codex_home / "config.toml").write_text('model = "gpt-5.6-sol"\n', encoding="utf-8")
+        self.generation_dir = self.codex_home / "generated_images"
+        self.generation_dir.mkdir()
+        self.plan_path = self.base / "plan.json"
+        self.job_path = self.base / "job.json"
+        self.destination = self.base / "batch-out"
+        self.control_path = self.base / "control.json"
+        self._previous_env: str | None = None
+
+    def write_plan(self, document: dict | None = None) -> Path:
+        self.plan_path.write_text(json.dumps(document or valid_plan()), encoding="utf-8")
+        return self.plan_path
+
+    def control(self, **values) -> None:
+        values.setdefault("mode", "generate")
+        values.setdefault("generation_dir", str(self.generation_dir))
+        values.setdefault("png_source", str(REAL_PNG))
+        self.control_path.write_text(json.dumps(values), encoding="utf-8")
+        self._previous_env = os.environ.get("FAKE_CODEX_CONTROL")
+        os.environ["FAKE_CODEX_CONTROL"] = str(self.control_path)
+
+    def run_cli(self, *args: str) -> tuple[int, str]:
+        return cli.run_cli(list(args))
+
+    def base_args(self) -> list[str]:
+        return [
+            "--codex-home",
+            str(self.codex_home),
+            "--generation-dir",
+            str(self.generation_dir),
+            "--destination",
+            str(self.destination),
+        ]
+
+    def cleanup(self) -> None:
+        if self._previous_env is None:
+            os.environ.pop("FAKE_CODEX_CONTROL", None)
+        else:
+            os.environ["FAKE_CODEX_CONTROL"] = self._previous_env
+        self._tmp.cleanup()
+
+
+class ProbeCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = CliFixture()
+        self.addCleanup(self.fixture.cleanup)
+
+    def test_probe_succeeds_on_a_ready_environment(self) -> None:
+        code, output = self.fixture.run_cli(
+            "probe",
+            "--codex-home",
+            str(self.fixture.codex_home),
+            "--codex-bin",
+            str(SHIM),
+            "--json",
+        )
+        self.assertEqual(code, 0, output)
+        self.assertEqual(json.loads(output)["verdict"], "available")
+
+    def test_probe_fails_with_a_distinct_code_when_unavailable(self) -> None:
+        bare = self.fixture.base / "bare-home"
+        bare.mkdir()
+        code, output = self.fixture.run_cli("probe", "--codex-home", str(bare), "--json")
+        self.assertEqual(code, cli.EXIT_CAPABILITY_UNAVAILABLE, output)
+        self.assertEqual(json.loads(output)["verdict"], "unavailable")
+
+
+class ValidatePlanCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = CliFixture()
+        self.addCleanup(self.fixture.cleanup)
+
+    def test_valid_plan_reports_its_items(self) -> None:
+        self.fixture.write_plan()
+        code, output = self.fixture.run_cli("validate-plan", str(self.fixture.plan_path), "--json")
+        self.assertEqual(code, 0, output)
+        payload = json.loads(output)
+        self.assertEqual([row["item_id"] for row in payload["items"]], ["item-01", "item-02"])
+        self.assertTrue(payload["require_approval_before_run"])
+
+    def test_invalid_plan_exits_with_usage_error(self) -> None:
+        self.fixture.write_plan(valid_plan(round=999))
+        code, output = self.fixture.run_cli("validate-plan", str(self.fixture.plan_path), "--json")
+        self.assertEqual(code, cli.EXIT_USAGE, output)
+        self.assertTrue(json.loads(output)["errors"])
+
+
+class QuoteCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = CliFixture()
+        self.addCleanup(self.fixture.cleanup)
+
+    def test_quote_reports_the_cost_shape_before_anything_runs(self) -> None:
+        self.fixture.write_plan()
+        code, output = self.fixture.run_cli("quote", str(self.fixture.plan_path), "--json")
+        self.assertEqual(code, 0, output)
+        payload = json.loads(output)
+        self.assertEqual(payload["image_count"], 2)
+        self.assertTrue(payload["approval_required"])
+        self.assertFalse(payload["spends_allowance_on_quote"])
+
+
+class RunCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = CliFixture()
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.write_plan()
+        self.fixture.control()
+
+    def run_batch(self, *extra: str) -> tuple[int, str]:
+        return self.fixture.run_cli(
+            "run",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
+            "--codex-bin",
+            str(SHIM),
+            *self.fixture.base_args(),
+            "--json",
+            *extra,
+        )
+
+    def test_run_without_approval_stops_before_spending(self) -> None:
+        code, output = self.run_batch()
+        self.assertEqual(code, cli.EXIT_APPROVAL_REQUIRED, output)
+        ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+        self.assertEqual(ledger["error_category"], "approval_required")
+        self.assertEqual(len(list(self.fixture.generation_dir.rglob("*.png"))), 0)
+
+    def test_approved_run_produces_receipts_and_completes(self) -> None:
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, 0, output)
+        payload = json.loads(output)
+        self.assertEqual(len(payload["receipts"]), 2)
+        ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+        self.assertEqual(ledger["state"], "Completed")
+        self.assertTrue(all(row["state"] == "Generated" for row in ledger["items"]))
+
+    def test_receipts_verify_against_the_files_on_disk(self) -> None:
+        _code, output = self.run_batch("--approve")
+        receipts = json.loads(output)["receipts"]
+        for receipt in receipts:
+            published = self.fixture.destination / receipt["path"]
+            self.assertTrue(published.is_file(), receipt["path"])
+
+    def test_a_resumed_run_does_not_regenerate_finished_items(self) -> None:
+        """The allowance is only spent once per item."""
+        self.run_batch("--approve")
+        before = len(list(self.fixture.generation_dir.rglob("*.png")))
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, 0, output)
+        after = len(list(self.fixture.generation_dir.rglob("*.png")))
+        self.assertEqual(before, after, "a resumed run must not call the generator again")
+        self.assertEqual(json.loads(output)["receipts"], [])
+
+    def test_usage_limit_stops_the_run_and_is_recorded(self) -> None:
+        self.fixture.control(mode="usage_limit", resets_at=1_800_000_000)
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+        self.assertEqual(ledger["error_category"], "quota_exceeded")
+        self.assertEqual(ledger["usage_limit"]["limit_id"], "image_gen")
+        self.assertEqual(ledger["usage_limit"]["resets_at"], 1_800_000_000)
+
+    def test_usage_limit_does_not_attempt_the_remaining_items(self) -> None:
+        self.fixture.control(mode="usage_limit")
+        self.run_batch("--approve")
+        attempts = len(list(self.fixture.base.glob("**/*last-message.txt")))
+        self.assertEqual(attempts, 1, "the second item must not be attempted after the limit is hit")
+
+    def test_missing_artifact_is_recorded_as_a_failed_item(self) -> None:
+        self.fixture.control(mode="silent")
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+        self.assertEqual(ledger["state"], "Partial")
+        self.assertEqual(ledger["items"][0]["error_category"], "artifact_missing")
+
+    def test_run_refuses_when_the_capability_probe_fails(self) -> None:
+        bare = self.fixture.base / "bare-home"
+        bare.mkdir()
+        code, output = self.fixture.run_cli(
+            "run",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
+            "--codex-bin",
+            str(SHIM),
+            "--codex-home",
+            str(bare),
+            "--generation-dir",
+            str(self.fixture.generation_dir),
+            "--destination",
+            str(self.fixture.destination),
+            "--approve",
+            "--json",
+        )
+        self.assertEqual(code, cli.EXIT_CAPABILITY_UNAVAILABLE, output)
+
+    def test_run_rejects_an_invalid_plan_before_writing_a_ledger(self) -> None:
+        self.fixture.write_plan(valid_plan(items=[]))
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, cli.EXIT_USAGE, output)
+        self.assertFalse(self.fixture.job_path.exists())
+
+
+class StatusCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = CliFixture()
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.write_plan()
+        self.fixture.control()
+
+    def test_status_reports_the_ledger_state(self) -> None:
+        self.fixture.run_cli(
+            "run",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
+            "--codex-bin",
+            str(SHIM),
+            *self.fixture.base_args(),
+            "--approve",
+            "--json",
+        )
+        code, output = self.fixture.run_cli("status", "--job", str(self.fixture.job_path), "--json")
+        self.assertEqual(code, 0, output)
+        self.assertEqual(json.loads(output)["state"], "Completed")
+
+    def test_status_on_a_missing_ledger_is_an_error(self) -> None:
+        code, _output = self.fixture.run_cli(
+            "status", "--job", str(self.fixture.base / "absent.json"), "--json"
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE)
+
+
+class EvaluateAndOptimizeCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = CliFixture()
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.write_plan()
+        self.fixture.control()
+        self.scores_path = self.fixture.base / "scores.json"
+        self.fixture.run_cli(
+            "run",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
+            "--codex-bin",
+            str(SHIM),
+            *self.fixture.base_args(),
+            "--approve",
+            "--json",
+        )
+
+    def test_evaluate_writes_a_scores_document(self) -> None:
+        code, output = self.fixture.run_cli(
+            "evaluate",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
+            "--scores",
+            str(self.scores_path),
+            *self.fixture.base_args(),
+            "--json",
+        )
+        self.assertEqual(code, 0, output)
+        scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
+        self.assertEqual(scores["decision"], "pass")
+        self.assertTrue(scores["deterministic_gates"]["all_passed"])
+
+    def test_optimize_reports_completion_when_everything_passed(self) -> None:
+        self.fixture.run_cli(
+            "evaluate",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
+            "--scores",
+            str(self.scores_path),
+            *self.fixture.base_args(),
+            "--json",
+        )
+        next_plan = self.fixture.base / "next.json"
+        code, output = self.fixture.run_cli(
+            "optimize",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--scores",
+            str(self.scores_path),
+            "--out",
+            str(next_plan),
+            "--json",
+        )
+        self.assertEqual(code, 0, output)
+        self.assertTrue(json.loads(output)["complete"])
+        self.assertFalse(next_plan.exists())
+
+    def test_optimize_requires_an_instruction_for_each_item_needing_rework(self) -> None:
+        scores = json.loads(
+            (ROOT / "schemas/scores.schema.json").read_text(encoding="utf-8")
+        )  # shape reference only; build a failing document below
+        failing = {
+            "schema_version": "1.0.0",
+            "batch_id": "portrait-study",
+            "round": 1,
+            "pass_threshold": 0.8,
+            "deterministic_gates": {
+                "all_passed": False,
+                "per_item": [
+                    {"item_id": "item-01", "passed": False, "failures": ["not_a_png"]},
+                    {"item_id": "item-02", "passed": True, "failures": []},
+                ],
+            },
+            "advisory": {"enabled": False, "items": []},
+            "human_labels": [],
+            "decision": "fail",
+        }
+        self.scores_path.write_text(json.dumps(failing), encoding="utf-8")
+        code, output = self.fixture.run_cli(
+            "optimize",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--scores",
+            str(self.scores_path),
+            "--out",
+            str(self.fixture.base / "next.json"),
+            "--json",
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(json.loads(output)["errors"][0]["code"], "optimizer_missing_instruction")
+        self.assertTrue(scores["required"])
+
+    def test_optimize_with_a_rewrite_writes_the_next_round(self) -> None:
+        failing = {
+            "schema_version": "1.0.0",
+            "batch_id": "portrait-study",
+            "round": 1,
+            "pass_threshold": 0.8,
+            "deterministic_gates": {
+                "all_passed": False,
+                "per_item": [
+                    {"item_id": "item-01", "passed": False, "failures": ["not_a_png"]},
+                    {"item_id": "item-02", "passed": True, "failures": []},
+                ],
+            },
+            "advisory": {"enabled": False, "items": []},
+            "human_labels": [],
+            "decision": "fail",
+        }
+        self.scores_path.write_text(json.dumps(failing), encoding="utf-8")
+        rewrites = self.fixture.base / "rewrites.json"
+        rewrites.write_text(json.dumps({"item-01": "a calmer portrait"}), encoding="utf-8")
+        next_plan = self.fixture.base / "next.json"
+        code, output = self.fixture.run_cli(
+            "optimize",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--scores",
+            str(self.scores_path),
+            "--rewrites",
+            str(rewrites),
+            "--out",
+            str(next_plan),
+            "--json",
+        )
+        self.assertEqual(code, 0, output)
+        document = json.loads(next_plan.read_text(encoding="utf-8"))
+        self.assertEqual(document["round"], 2)
+        self.assertEqual(document["items"], [{"id": "item-01", "prompt": "a calmer portrait"}])
+
+
+class NoCertificateFilesTests(unittest.TestCase):
+    def test_cli_module_exposes_stable_exit_codes(self) -> None:
+        self.assertEqual(
+            (
+                cli.EXIT_OK,
+                cli.EXIT_FAILURE,
+                cli.EXIT_USAGE,
+                cli.EXIT_APPROVAL_REQUIRED,
+                cli.EXIT_CAPABILITY_UNAVAILABLE,
+            ),
+            (0, 1, 2, 3, 4),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
