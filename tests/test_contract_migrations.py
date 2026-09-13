@@ -16,6 +16,30 @@ def load_schema(name: str) -> dict:
     return json.loads((ROOT / "schemas" / name).read_text(encoding="utf-8"))
 
 
+def legacy_job(**overrides) -> dict:
+    document = {
+        "schema_version": "1.0.0",
+        "job_id": "portrait-study",
+        "state": "Completed",
+        "revision": 4,
+        "created_at": "2026-09-14T12:00:00Z",
+        "updated_at": "2026-09-14T12:05:00Z",
+        "batch": None,
+        "rounds": [1],
+        "items": [{"item_id": "item-01", "state": "Generated", "attempts": 1}],
+        "approval": None,
+        "usage_limit": None,
+        "error_category": None,
+        "history": [{
+            "from_state": "Running",
+            "to_state": "Completed",
+            "at": "2026-09-14T12:05:00Z",
+        }],
+    }
+    document.update(overrides)
+    return document
+
+
 class ImageBatchMigrationTests(unittest.TestCase):
     def test_legacy_plan_is_safety_strengthened_without_mutating_input(self) -> None:
         original = {
@@ -68,6 +92,61 @@ class ImageBatchMigrationTests(unittest.TestCase):
 
 
 class FactoryJobMigrationTests(unittest.TestCase):
+    def test_every_legacy_optional_shape_migrates_to_a_valid_job(self) -> None:
+        cases = {
+            "arbitrary batch": {"batch": {"legacy_name": "round-one"}},
+            "empty usage limit": {"usage_limit": {}},
+            "omitted item fields": {
+                "items": [{"item_id": "item-01", "state": "Generated", "attempts": 1}],
+            },
+            "legacy free-form strings": {
+                "items": [{
+                    "item_id": "item-01",
+                    "state": "Failed",
+                    "attempts": 1,
+                    "receipt_id": "legacy-receipt",
+                    "idempotency_key": "legacy-key",
+                    "error_category": "provider_refused_legacy_request",
+                }],
+            },
+        }
+        schema = load_schema("factory_job.schema.json")
+        for name, overrides in cases.items():
+            with self.subTest(case=name):
+                original = legacy_job(**overrides)
+                before = copy.deepcopy(original)
+
+                migrated = contract_migrations.migrate_factory_job(original).document
+
+                self.assertEqual(schema_lite.validate(migrated, schema), [])
+                self.assertEqual(migrated["items"][0]["state"], original["items"][0]["state"])
+                self.assertEqual(migrated["history"], original["history"])
+                self.assertEqual(original, before)
+
+    def test_legacy_ambiguous_evidence_is_normalized_without_invention(self) -> None:
+        original = legacy_job(
+            batch={"legacy_name": "round-one"},
+            usage_limit={},
+            items=[{
+                "item_id": "item-01",
+                "state": "Failed",
+                "attempts": 1,
+                "idempotency_key": "legacy-key",
+                "error_category": "provider_refused_legacy_request",
+            }],
+        )
+
+        migrated = contract_migrations.migrate_factory_job(original).document
+
+        self.assertIsNone(migrated["batch"])
+        self.assertIsNone(migrated["usage_limit"])
+        self.assertIsNone(migrated["items"][0]["idempotency_key"])
+        self.assertEqual(
+            migrated["items"][0]["error_category"],
+            "provider_refused_legacy_request",
+        )
+        self.assertIsNone(migrated["items"][0]["receipt_id"])
+
     def test_legacy_job_preserves_outcomes_and_history_without_inventing_approval(self) -> None:
         original = {
             "schema_version": "1.0.0",

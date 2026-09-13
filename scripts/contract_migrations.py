@@ -4,7 +4,46 @@
 from __future__ import annotations
 
 import copy
+import re
 from dataclasses import dataclass
+
+
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+BATCH_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{2,63}$")
+
+
+def _is_transaction_batch(value: object) -> bool:
+    if not isinstance(value, dict) or set(value) != {
+        "batch_id",
+        "round",
+        "plan_sha256",
+        "image_count",
+    }:
+        return False
+    return (
+        isinstance(value["batch_id"], str)
+        and BATCH_ID_PATTERN.fullmatch(value["batch_id"]) is not None
+        and isinstance(value["round"], int)
+        and not isinstance(value["round"], bool)
+        and value["round"] >= 1
+        and isinstance(value["plan_sha256"], str)
+        and SHA256_PATTERN.fullmatch(value["plan_sha256"]) is not None
+        and isinstance(value["image_count"], int)
+        and not isinstance(value["image_count"], bool)
+        and 1 <= value["image_count"] <= 200
+    )
+
+
+def _is_usage_limit(value: object) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == {"limit_id", "resets_at"}
+        and value["limit_id"] == "image_gen"
+        and (
+            value["resets_at"] is None
+            or (isinstance(value["resets_at"], int) and not isinstance(value["resets_at"], bool))
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -58,6 +97,10 @@ def migrate_factory_job(document: object) -> MigrationResult:
         raise ValueError("factory job 1.0.0 approval evidence cannot be migrated safely")
     if job.get("batch") is not None and not isinstance(job.get("batch"), dict):
         raise ValueError("factory job batch must be a JSON object or null")
+    if job.get("batch") is not None and not _is_transaction_batch(job["batch"]):
+        job["batch"] = None
+    if job.get("usage_limit") is not None and not _is_usage_limit(job["usage_limit"]):
+        job["usage_limit"] = None
     job["approval"] = {"current": None, "history": []}
     job["evaluation"] = None
     job["optimization"] = None
@@ -67,4 +110,12 @@ def migrate_factory_job(document: object) -> MigrationResult:
             if isinstance(item, dict):
                 item.setdefault("attempt_id", None)
                 item.setdefault("attempt_started_at", None)
+                item.setdefault("receipt_id", None)
+                item.setdefault("idempotency_key", None)
+                item.setdefault("error_category", None)
+                key = item["idempotency_key"]
+                if key is not None and (
+                    not isinstance(key, str) or SHA256_PATTERN.fullmatch(key) is None
+                ):
+                    item["idempotency_key"] = None
     return MigrationResult(job, ("migrated factory job 1.0.0 to 1.1.0",))

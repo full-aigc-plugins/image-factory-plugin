@@ -212,11 +212,15 @@ def load_ledger(path: Path) -> dict:
     except OSError as error:
         raise LedgerCorruptError(f"ledger at {target} could not be read: {error}") from error
     try:
-        migration = contract_migrations.migrate_factory_job(json.loads(raw))
-        payload = migration.document
+        decoded = json.loads(raw)
     except ValueError as error:
         raise LedgerCorruptError(f"ledger at {target} is not valid JSON: {error}") from error
-    _scrub(payload)
+    _scrub(decoded)
+    try:
+        migration = contract_migrations.migrate_factory_job(decoded)
+    except ValueError as error:
+        raise LedgerCorruptError(f"ledger at {target} could not be migrated: {error}") from error
+    payload = migration.document
     return _assert_well_formed(payload)
 
 

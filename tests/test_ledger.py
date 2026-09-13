@@ -174,10 +174,28 @@ class PersistenceTests(unittest.TestCase):
         with self.assertRaises(job_ledger.LedgerCorruptError):
             ledger.read()
 
+    def test_legacy_batch_secret_is_refused_before_normalization(self) -> None:
+        payload = job_ledger.new_job("portrait-study")
+        payload["schema_version"] = "1.0.0"
+        payload["approval"] = None
+        payload.pop("evaluation")
+        payload.pop("optimization")
+        payload["batch"] = {"api_key": "must-not-be-hidden-by-migration"}
+        self.fixture.path.write_text(json.dumps(payload), encoding="utf-8")
+        with self.assertRaises(job_ledger.LedgerCorruptError):
+            self.fixture.ledger().read()
+
     def test_corrupt_json_is_refused(self) -> None:
         self.fixture.path.write_text("{not json", encoding="utf-8")
         with self.assertRaises(job_ledger.LedgerCorruptError):
             self.fixture.ledger().read()
+
+    def test_valid_json_migration_failure_is_not_reported_as_json_syntax(self) -> None:
+        self.fixture.path.write_text(json.dumps({"schema_version": "2.0.0"}), encoding="utf-8")
+        with self.assertRaises(job_ledger.LedgerCorruptError) as raised:
+            self.fixture.ledger().read()
+        self.assertIn("could not be migrated", str(raised.exception))
+        self.assertNotIn("not valid JSON", str(raised.exception))
 
     def test_missing_required_fields_are_refused(self) -> None:
         self.fixture.path.write_text(json.dumps({"schema_version": "1.1.0"}), encoding="utf-8")

@@ -107,7 +107,7 @@
         "attempt_started_at": {"type": ["string", "null"], "format": "date-time"},
         "receipt_id": {"type": ["string", "null"]},
         "idempotency_key": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-        "error_category": {"enum": ["capability_unavailable", "codex_missing", "quota_exceeded", "timeout", "generation_failed", "artifact_missing", "hash_mismatch", "duplicate_artifact", "plan_invalid", "approval_required", "job_already_running", "recovery_required", "unknown", null]}
+        "error_category": {"type": ["string", "null"]}
       }
     },
     "historyEntry": {
