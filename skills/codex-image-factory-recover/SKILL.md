@@ -36,7 +36,12 @@ counts, remaining generation-call count, and one legal next action in plain lang
    bin/image-factory validate-plan plan.json --json
    ```
 
-3Step 3. **Reconcile durable evidence under the job lock.** This command validates
+3Step 3. **Reconcile only a command-supported recoverable state.** Call
+   `recover` only when `status` reports `Running`, `Unknown`, `Partial`, or `Completed`.
+   For every other state, do not call `recover`; use the legal non-reconcile
+   action in the table below.
+
+   The command validates
    every per-item receipt against the artifact on disk, marks stale attempts
    without a matching receipt `Unknown`, and rebuilds the receipt manifest. It
    makes zero generation calls.

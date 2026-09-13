@@ -218,6 +218,8 @@ class BodyTests(unittest.TestCase):
         self.assertIn("pending", body)
         self.assertIn("unknown", body)
         self.assertNotIn("resume with `run`", body)
+        self.assertIn("running`, `unknown`, `partial`, or `completed`", body)
+        self.assertIn("do not call `recover`", body)
 
     def test_run_skill_requires_a_fresh_approval_for_partial_resume(self) -> None:
         body = self.body("codex-image-factory-run").lower()

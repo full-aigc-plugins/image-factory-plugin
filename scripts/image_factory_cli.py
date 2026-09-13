@@ -441,7 +441,19 @@ def command_recover(args: argparse.Namespace) -> tuple[int, str]:
     ):
         raise ValueError(f"job state {source_state.value} does not require recovery")
 
-    # Verification is deliberately completed before the ledger is mutated.
+    plan_by_id = {item.id: item for item in result.items}
+    rows_by_id: dict[str, dict] = {}
+    keys_seen: set[str] = set()
+    for row in current["items"]:
+        item = plan_by_id.get(row["item_id"])
+        if item is None or row["idempotency_key"] != item.idempotency_key:
+            raise ValueError("ledger item does not match the current plan")
+        if row["item_id"] in rows_by_id or row["idempotency_key"] in keys_seen:
+            raise ValueError("duplicate ledger item for the current plan")
+        rows_by_id[row["item_id"]] = row
+        keys_seen.add(row["idempotency_key"])
+
+    # Verification and all consistency checks complete before ledger mutation.
     verified = receipt_store.load_verified_receipts(job_path, destination)
     plan_by_key = {item.idempotency_key: item for item in result.items}
     applicable: dict[str, dict] = {}
@@ -457,32 +469,41 @@ def command_recover(args: argparse.Namespace) -> tuple[int, str]:
             or receipt["item_id"] != item.id
         ):
             raise ValueError("verified receipt does not match the recovery plan")
+        expected_prompt_sha256 = hashlib.sha256(item.prompt.encode("utf-8")).hexdigest()
+        if receipt["prompt_sha256"] != expected_prompt_sha256:
+            raise ValueError("verified receipt prompt hash does not match the planned prompt")
+        if item.id not in rows_by_id:
+            raise ValueError("verified receipt has no matching current-plan ledger item")
         applicable[key] = receipt
 
     reconciled: list[str] = []
     unknown: list[str] = []
-    for row in current["items"]:
-        if row["state"] not in ("Attempting", "Unknown"):
+    for item in result.items:
+        row = rows_by_id.get(item.id)
+        if row is None:
             continue
-        receipt = applicable.get(row["idempotency_key"])
-        if receipt is not None and receipt["item_id"] == row["item_id"]:
+        receipt = applicable.get(item.idempotency_key)
+        if row["state"] in ("Attempting", "Unknown") and receipt is not None:
             row["state"] = "Generated"
             row["receipt_id"] = receipt["artifact_id"]
             row["error_category"] = None
             reconciled.append(row["item_id"])
-        else:
+        elif row["state"] in ("Attempting", "Unknown") or (
+            row["state"] == "Generated"
+            and (
+                receipt is None
+                or row["receipt_id"] != receipt["artifact_id"]
+            )
+        ):
             row["state"] = "Unknown"
             row["receipt_id"] = None
             row["error_category"] = "unknown"
             unknown.append(row["item_id"])
 
-    recorded_keys = {
-        row["idempotency_key"] for row in current["items"] if row["idempotency_key"]
-    }
-    pending_count = sum(item.idempotency_key not in recorded_keys for item in result.items)
-    generated_count = sum(row["state"] == "Generated" for row in current["items"])
-    failed_count = sum(row["state"] == "Failed" for row in current["items"])
-    unknown_count = sum(row["state"] == "Unknown" for row in current["items"])
+    pending_count = sum(item.id not in rows_by_id for item in result.items)
+    generated_count = sum(row["state"] == "Generated" for row in rows_by_id.values())
+    failed_count = sum(row["state"] in ("Failed", "Skipped") for row in rows_by_id.values())
+    unknown_count = sum(row["state"] == "Unknown" for row in rows_by_id.values())
     if unknown_count:
         target = job_ledger.JobState.UNKNOWN
     elif generated_count == len(result.items):

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sys
 import unittest
@@ -111,6 +112,83 @@ class RecoveryCommandTests(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_FAILURE, report)
         self.assertIn("artifact verification", report["error"])
         self.assertEqual(self.fixture.job_path.read_bytes(), before)
+
+    def test_prompt_hash_mismatch_is_refused_without_mutating_the_ledger(self) -> None:
+        self.rewrite_item(0, "Attempting")
+        stored = receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[0]["idempotency_key"]
+        )
+        receipt = json.loads(stored.read_text(encoding="utf-8"))
+        receipt["prompt_sha256"] = hashlib.sha256(b"a different prompt").hexdigest()
+        stored.write_text(json.dumps(receipt), encoding="utf-8")
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
+        before = self.fixture.job_path.read_bytes()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_FAILURE, report)
+        self.assertIn("prompt", report["error"])
+        self.assertEqual(self.fixture.job_path.read_bytes(), before)
+
+    def test_generated_without_matching_per_item_receipt_becomes_unknown(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Running"
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[0]["idempotency_key"]
+        ).unlink()
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, report)
+        self.assertEqual(report["state"], "Unknown")
+        self.assertIn("item-01", report["unknown"])
+        self.assertEqual(self.fixture.read_job()["items"][0]["state"], "Unknown")
+
+    def test_foreign_ledger_row_is_refused_without_mutation(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Running"
+        foreign = dict(ledger["items"][0])
+        foreign.update(item_id="foreign", idempotency_key="d" * 64)
+        ledger["items"].append(foreign)
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        before = self.fixture.job_path.read_bytes()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_FAILURE, report)
+        self.assertIn("current plan", report["error"])
+        self.assertEqual(self.fixture.job_path.read_bytes(), before)
+
+    def test_duplicate_ledger_rows_are_refused_without_mutation(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Running"
+        ledger["items"].append(dict(ledger["items"][0]))
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        before = self.fixture.job_path.read_bytes()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_FAILURE, report)
+        self.assertIn("duplicate", report["error"])
+        self.assertEqual(self.fixture.job_path.read_bytes(), before)
+
+    def test_report_counts_conserve_exact_current_plan_items(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Partial"
+        ledger["items"] = ledger["items"][:1]
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[1]["idempotency_key"]
+        ).unlink()
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_OK, report)
+        self.assertEqual(report["state"], "Partial")
+        self.assertEqual(report["completed_count"], 1)
+        self.assertEqual(report["failed_count"], 0)
+        self.assertEqual(report["unknown_count"], 0)
+        self.assertEqual(report["pending_count"], 1)
+        self.assertEqual(
+            report["completed_count"]
+            + report["failed_count"]
+            + report["unknown_count"]
+            + report["pending_count"],
+            2,
+        )
 
     def test_unresolved_unknown_blocks_an_ordinary_run(self) -> None:
         self.rewrite_item(0, "Attempting")
