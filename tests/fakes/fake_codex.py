@@ -19,6 +19,7 @@ assert exactly how Codex was invoked.
 import json
 import os
 import shutil
+import signal
 import sys
 import time
 import uuid
@@ -98,6 +99,9 @@ def main() -> int:
     delay = float(control.get("delay_before_result_seconds", 0))
     if delay:
         time.sleep(delay)
+
+    if control.get("mode") == "signal":
+        os.kill(os.getpid(), signal.SIGTERM)
 
     mode = control.get("mode", "success")
     session = control.get("session_id", "session-fake")

@@ -335,7 +335,7 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         if not outcome.ok:
             assert outcome.failure is not None
             failed += 1
-            if outcome.failure.code in ("timeout", "artifact_missing"):
+            if outcome.failure.code in ("timeout", "artifact_missing", "interrupted"):
                 ledger.mark_attempt_unknown(item.id, attempt_id)
                 unknown = True
                 break

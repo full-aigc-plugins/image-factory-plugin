@@ -270,6 +270,17 @@ def run_item(
         "attempts_made": 1,
     }
 
+    if completed.returncode < 0:
+        return GenerationOutcome(
+            ok=False,
+            failure=GenerationFailure(
+                "interrupted",
+                f"codex was terminated by signal {-completed.returncode}; its external outcome is unknown",
+            ),
+            before_snapshot=before,
+            **common,
+        )
+
     limit = _usage_limit_failure(completed.stdout or "", completed.stderr or "", events)
     if limit is not None:
         return GenerationOutcome(ok=False, failure=limit, before_snapshot=before, **common)

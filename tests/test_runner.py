@@ -222,6 +222,15 @@ class RunTests(unittest.TestCase):
         self.assertEqual(result.failure.code, "timeout")
         self.assertEqual(result.attempts_made, 1)
 
+    @unittest.skipIf(os.name == "nt", "negative signal return codes are a Unix contract")
+    def test_signal_termination_is_classified_as_interrupted(self) -> None:
+        self.fixture.control(mode="signal")
+        result = self.fixture.run()
+        self.assertFalse(result.ok)
+        self.assertEqual(result.exit_code, -15)
+        self.assertEqual(result.failure.code, "interrupted")
+        self.assertEqual(result.attempts_made, 1)
+
     def test_usage_limit_is_classified_with_its_reset_time(self) -> None:
         self.fixture.control(mode="usage_limit", resets_at=1_800_000_000)
         result = self.fixture.run()

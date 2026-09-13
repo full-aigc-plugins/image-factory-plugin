@@ -362,6 +362,17 @@ class RunCommandTests(unittest.TestCase):
         self.assertEqual(ledger["state"], "Unknown")
         self.assertEqual(ledger["items"][0]["error_category"], "unknown")
 
+    @unittest.skipIf(os.name == "nt", "negative signal return codes are a Unix contract")
+    def test_signal_interruption_becomes_unknown_and_stops_later_items(self) -> None:
+        invocation_dir = self.fixture.base / "signal-invocations"
+        self.fixture.control(mode="signal", invocation_dir=str(invocation_dir))
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+        self.assertEqual(ledger["state"], "Unknown")
+        self.assertEqual(ledger["items"][0]["state"], "Unknown")
+        self.assertEqual(len(list(invocation_dir.glob("*.json"))), 1)
+
     def test_run_refuses_when_the_capability_probe_fails(self) -> None:
         bare = self.fixture.base / "bare-home"
         bare.mkdir()
