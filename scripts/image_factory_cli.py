@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import uuid
 from pathlib import Path
 
 import artifact_collector
@@ -181,22 +182,64 @@ def command_quote(args: argparse.Namespace) -> tuple[int, str]:
 # ------------------------------------------------------------------------- run
 
 
-def _drive_to_running(ledger: job_ledger.JobLedger, approved: bool) -> job_ledger.JobState:
-    state = job_ledger.JobState(ledger.read()["state"])
-    if state in (
+class ApprovalRequiredError(RuntimeError):
+    def __init__(self, image_count: int) -> None:
+        super().__init__("this plan requires approval; rerun with --approve to spend the allowance")
+        self.image_count = image_count
+
+
+class RunStateError(RuntimeError):
+    """The durable job state cannot safely enter an ordinary generation run."""
+
+
+def require_runnable_state(payload: dict, pending: list[plan_validator.PlanItem]) -> None:
+    state = job_ledger.JobState(payload["state"])
+    if state is job_ledger.JobState.COMPLETED and not pending:
+        return
+    if state is job_ledger.JobState.PARTIAL:
+        if pending and payload["usage_limit"] is None and not any(
+            row["state"] == "Unknown" for row in payload["items"]
+        ):
+            return
+        raise RunStateError("this partial job is not eligible for an automatic generation resume")
+    if state not in (
         job_ledger.JobState.DRAFT,
         job_ledger.JobState.OPTIMIZED,
-        job_ledger.JobState.PARTIAL,
+        job_ledger.JobState.PLAN_VALIDATED,
+        job_ledger.JobState.APPROVED,
     ):
-        ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
-        state = job_ledger.JobState.PLAN_VALIDATED
-    if state is job_ledger.JobState.PLAN_VALIDATED and approved:
-        ledger.transition(job_ledger.JobState.APPROVED)
-        state = job_ledger.JobState.APPROVED
-    if state is job_ledger.JobState.APPROVED:
+        raise RunStateError(f"job state {state.value} requires recovery before generation")
+
+
+def prepare_run(
+    ledger: job_ledger.JobLedger,
+    plan: plan_validator.PlanResult,
+    approved: bool,
+) -> list[plan_validator.PlanItem]:
+    pending = ledger.pending_items(plan.items)
+    payload = ledger.read()
+    require_runnable_state(payload, pending)
+    if job_ledger.JobState(payload["state"]) is job_ledger.JobState.COMPLETED:
+        expected = {
+            "batch_id": plan.batch_id,
+            "round": plan.round,
+            "plan_sha256": plan.plan_sha256,
+            "image_count": len(plan.items),
+        }
+        if payload["batch"] != expected:
+            raise RunStateError("a changed completed job cannot be resumed as a generation run")
+    ledger.bind_plan(plan.plan_sha256, plan.round, len(plan.items))
+    if pending and not approved:
+        raise ApprovalRequiredError(len(pending))
+    if pending:
+        ledger.record_approval(plan.plan_sha256, plan.round, len(pending), "run_approve_flag")
+        state = job_ledger.JobState(ledger.read()["state"])
+        if state in (job_ledger.JobState.DRAFT, job_ledger.JobState.OPTIMIZED, job_ledger.JobState.PARTIAL):
+            ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
+        if job_ledger.JobState(ledger.read()["state"]) is job_ledger.JobState.PLAN_VALIDATED:
+            ledger.transition(job_ledger.JobState.APPROVED)
         ledger.transition(job_ledger.JobState.RUNNING)
-        return job_ledger.JobState.RUNNING
-    return state
+    return pending
 
 
 def command_run(args: argparse.Namespace) -> tuple[int, str]:
@@ -223,21 +266,27 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
     else:
         ledger.write(job_ledger.new_job(result.batch_id))
 
-    if result.require_approval_before_run and not args.approve:
-        state = job_ledger.JobState(ledger.read()["state"])
-        if state is job_ledger.JobState.DRAFT:
-            ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
+    try:
+        pending = prepare_run(ledger, result, args.approve)
+    except ApprovalRequiredError as error:
         ledger.set_error_category("approval_required")
         payload = {
             "ok": False,
             "stage": "approval",
             "error_category": "approval_required",
-            "image_count": len(result.items),
-            "message": "this plan requires approval; rerun with --approve to spend the allowance",
+            "image_count": error.image_count,
+            "message": str(error),
         }
         return EXIT_APPROVAL_REQUIRED, _emit(payload, args.json)
+    except RunStateError as error:
+        payload = {
+            "ok": False,
+            "stage": "ledger",
+            "error_category": "recovery_required",
+            "message": str(error),
+        }
+        return EXIT_RECOVERY_REQUIRED, _emit(payload, args.json)
 
-    pending = ledger.pending_items(result.items)
     ledger_payload = ledger.read()
     state = job_ledger.JobState(ledger_payload["state"])
     completed_binding = {
@@ -267,35 +316,13 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         }
         return EXIT_FAILURE, _emit(payload, args.json)
 
-    if state is job_ledger.JobState.PARTIAL and (
-        not pending
-        or ledger_payload["usage_limit"] is not None
-        or any(row["state"] == "Unknown" for row in ledger_payload["items"])
-    ):
-        payload = {
-            "ok": False,
-            "stage": "ledger",
-            "error_category": "recovery_required",
-            "message": "this partial job is not eligible for an automatic generation resume",
-        }
-        return EXIT_FAILURE, _emit(payload, args.json)
-
-    ledger.bind_plan(result.plan_sha256, result.round, len(result.items))
-    ledger.record_approval(
-        result.plan_sha256,
-        result.round,
-        len(pending),
-        "run_approve_flag",
-    )
-    if not ledger.approval_matches(result.plan_sha256, result.round, len(pending)):
-        raise RuntimeError("recorded approval does not match the bound generation plan")
-
-    _drive_to_running(ledger, approved=True)
-
     receipts: list[dict] = []
     failed = 0
+    unknown = False
 
     for item in pending:
+        attempt_id = uuid.uuid4().hex
+        ledger.start_attempt(item, attempt_id)
         outcome = generation_runner.run_item(
             binary=codex_binary,
             item=item,
@@ -308,16 +335,18 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         if not outcome.ok:
             assert outcome.failure is not None
             failed += 1
+            if outcome.failure.code in ("timeout", "artifact_missing"):
+                ledger.mark_attempt_unknown(item.id, attempt_id)
+                unknown = True
+                break
             if outcome.failure.code == "quota_exceeded":
                 ledger.note_usage_limit(
                     limit_id=outcome.failure.limit_id or job_ledger.IMAGE_LIMIT_ID,
                     resets_at=outcome.failure.resets_at,
                 )
-                ledger.record_item(item, state="Failed", error_category="quota_exceeded")
+                ledger.fail_attempt(item, attempt_id, "quota_exceeded")
                 break
-            ledger.record_item(
-                item, state="Failed", error_category=_error_category(outcome.failure.code)
-            )
+            ledger.fail_attempt(item, attempt_id, _error_category(outcome.failure.code))
             continue
 
         collected = artifact_collector.collect_artifact(
@@ -335,23 +364,20 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         if not collected.ok:
             assert collected.failure is not None
             failed += 1
-            ledger.record_item(
-                item, state="Failed", error_category=_error_category(collected.failure.code)
-            )
+            ledger.fail_attempt(item, attempt_id, _error_category(collected.failure.code))
             continue
 
         assert collected.receipt is not None
         receipt_store.write_receipt(job_path, collected.receipt)
-        ledger.record_item(
-            item, state="Generated", receipt_id=collected.receipt["artifact_id"]
-        )
+        ledger.complete_attempt(item, attempt_id, collected.receipt["artifact_id"])
         receipts.append(collected.receipt)
 
-    if receipts:
-        verified = receipt_store.load_verified_receipts(job_path, destination)
-        receipt_store.rebuild_manifest(job_path, verified)
+    verified = receipt_store.load_verified_receipts(job_path, destination)
+    receipt_store.rebuild_manifest(job_path, verified)
 
-    final = job_ledger.JobState.PARTIAL if failed else job_ledger.JobState.COMPLETED
+    final = job_ledger.JobState.UNKNOWN if unknown else (
+        job_ledger.JobState.PARTIAL if failed else job_ledger.JobState.COMPLETED
+    )
     ledger.transition(final)
 
     payload = {

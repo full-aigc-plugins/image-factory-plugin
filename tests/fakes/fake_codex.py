@@ -21,6 +21,7 @@ import os
 import shutil
 import sys
 import time
+import uuid
 from pathlib import Path
 
 PNG_HEADER = (
@@ -83,6 +84,20 @@ def main() -> int:
     (control_path.parent / "fake-codex-argv.json").write_text(
         json.dumps({"argv": argv}, indent=2), encoding="utf-8"
     )
+    invocation_dir = control.get("invocation_dir")
+    if invocation_dir:
+        evidence_dir = Path(invocation_dir)
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        evidence = evidence_dir / f"{os.getpid()}-{uuid.uuid4().hex}.json"
+        temporary = evidence.with_suffix(".tmp")
+        with temporary.open("x", encoding="utf-8") as handle:
+            json.dump({"pid": os.getpid(), "argv": argv}, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, evidence)
+    delay = float(control.get("delay_before_result_seconds", 0))
+    if delay:
+        time.sleep(delay)
 
     mode = control.get("mode", "success")
     session = control.get("session_id", "session-fake")

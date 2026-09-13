@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -195,6 +196,28 @@ class RunCommandTests(unittest.TestCase):
         ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
         self.assertEqual(ledger["error_category"], "approval_required")
         self.assertEqual(len(list(self.fixture.generation_dir.rglob("*.png"))), 0)
+        self.assertFalse((self.fixture.base / "fake-codex-argv.json").exists())
+
+    def test_approval_is_bound_before_the_first_invocation_without_plan_secrets(self) -> None:
+        validated, _ = cli._validated_plan(
+            type("Args", (), {"plan": str(self.fixture.plan_path)})()
+        )
+        original = cli.generation_runner.run_item
+
+        def assert_binding(**kwargs):
+            ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+            current = ledger["approval"]["current"]
+            self.assertEqual(current["plan_sha256"], validated.plan_sha256)
+            self.assertEqual(current["round"], validated.round)
+            self.assertEqual(current["image_count"], 2)
+            serialized = json.dumps(ledger)
+            self.assertNotIn("a calm portrait", serialized)
+            self.assertNotIn("reference_images", serialized)
+            return original(**kwargs)
+
+        with patch.object(cli.generation_runner, "run_item", side_effect=assert_binding):
+            code, output = self.run_batch("--approve")
+        self.assertEqual(code, cli.EXIT_OK, output)
 
     def test_approved_run_produces_receipts_and_completes(self) -> None:
         code, output = self.run_batch("--approve")
@@ -239,6 +262,9 @@ class RunCommandTests(unittest.TestCase):
         code, output = self.run_batch("--approve")
 
         self.assertEqual(code, 0, output)
+        ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+        self.assertEqual(len(ledger["approval"]["history"]), 2)
+        self.assertEqual(ledger["approval"]["current"]["image_count"], 1)
         rebuilt = json.loads(legacy_manifest.read_text(encoding="utf-8"))
         self.assertEqual(
             [receipt["item_id"] for receipt in rebuilt],
@@ -261,7 +287,7 @@ class RunCommandTests(unittest.TestCase):
         self.fixture.write_plan(plan)
         code, output = self.run_batch("--approve")
 
-        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
         self.assertEqual(json.loads(output)["error_category"], "recovery_required")
         after = len(list(self.fixture.generation_dir.rglob("*.png")))
         self.assertEqual(before, after)
@@ -276,7 +302,7 @@ class RunCommandTests(unittest.TestCase):
         self.fixture.write_plan(plan)
         code, output = self.run_batch("--approve")
 
-        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
         self.assertEqual(json.loads(output)["error_category"], "recovery_required")
         self.assertEqual(before, len(list(self.fixture.generation_dir.rglob("*.png"))))
 
@@ -290,7 +316,7 @@ class RunCommandTests(unittest.TestCase):
 
         code, output = self.run_batch("--approve")
 
-        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
         self.assertEqual(json.loads(output)["error_category"], "recovery_required")
         self.assertEqual(before, len(list(self.fixture.generation_dir.rglob("*.png"))))
 
@@ -309,7 +335,7 @@ class RunCommandTests(unittest.TestCase):
 
         code, output = self.run_batch("--approve")
 
-        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
         self.assertEqual(json.loads(output)["error_category"], "recovery_required")
         self.assertEqual(before, len(list(self.fixture.generation_dir.rglob("*.png"))))
 
@@ -328,13 +354,13 @@ class RunCommandTests(unittest.TestCase):
         attempts = len(list(self.fixture.base.glob("**/*last-message.txt")))
         self.assertEqual(attempts, 1, "the second item must not be attempted after the limit is hit")
 
-    def test_missing_artifact_is_recorded_as_a_failed_item(self) -> None:
+    def test_missing_artifact_is_recorded_as_an_unknown_item(self) -> None:
         self.fixture.control(mode="silent")
         code, output = self.run_batch("--approve")
         self.assertEqual(code, cli.EXIT_FAILURE, output)
         ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
-        self.assertEqual(ledger["state"], "Partial")
-        self.assertEqual(ledger["items"][0]["error_category"], "artifact_missing")
+        self.assertEqual(ledger["state"], "Unknown")
+        self.assertEqual(ledger["items"][0]["error_category"], "unknown")
 
     def test_run_refuses_when_the_capability_probe_fails(self) -> None:
         bare = self.fixture.base / "bare-home"
