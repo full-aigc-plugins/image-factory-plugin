@@ -17,6 +17,8 @@ import schema_lite  # noqa: E402
 
 JOB_SCHEMA = json.loads((ROOT / "schemas/factory_job.schema.json").read_text(encoding="utf-8"))
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+ATTEMPT_1 = "1" * 32
+ATTEMPT_2 = "2" * 32
 
 
 def make_item(item_id: str, prompt: str = "a calm portrait") -> plan_validator.PlanItem:
@@ -331,25 +333,53 @@ class ItemTrackingTests(unittest.TestCase):
         self.item = self.items[0]
 
     def test_attempt_is_counted_once_when_it_starts(self) -> None:
-        started = self.ledger.start_attempt(self.item, "attempt-1")
-        completed = self.ledger.complete_attempt(self.item, "attempt-1", "receipt-1")
+        started = self.ledger.start_attempt(self.item, ATTEMPT_1)
+        completed = self.ledger.complete_attempt(self.item, ATTEMPT_1, "receipt-1")
         self.assertEqual(started["items"][0]["attempts"], 1)
         self.assertEqual(completed["items"][0]["attempts"], 1)
 
     def test_unknown_attempt_is_never_pending(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
-        self.ledger.mark_attempt_unknown(self.item.id, "attempt-1")
+        self.ledger.start_attempt(self.item, ATTEMPT_1)
+        payload = self.ledger.mark_attempt_unknown(self.item.id, ATTEMPT_1)
+        self.assertEqual(payload["items"][0]["attempts"], 1)
         self.assertEqual(self.ledger.pending_items((self.item,)), [])
 
     def test_attempt_completion_requires_the_active_attempt(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
+        self.ledger.start_attempt(self.item, ATTEMPT_1)
         with self.assertRaises(ValueError):
-            self.ledger.complete_attempt(self.item, "attempt-2", "receipt-1")
+            self.ledger.complete_attempt(self.item, ATTEMPT_2, "receipt-1")
 
     def test_attempt_key_cannot_be_started_twice(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
+        self.ledger.start_attempt(self.item, ATTEMPT_1)
         with self.assertRaises(ValueError):
-            self.ledger.start_attempt(self.item, "attempt-2")
+            self.ledger.start_attempt(self.item, ATTEMPT_2)
+
+    def test_failure_does_not_increment_and_requires_the_active_attempt(self) -> None:
+        self.ledger.start_attempt(self.item, ATTEMPT_1)
+        with self.assertRaises(ValueError):
+            self.ledger.fail_attempt(self.item, ATTEMPT_2, "generation_failed")
+        payload = self.ledger.fail_attempt(self.item, ATTEMPT_1, "generation_failed")
+        self.assertEqual(payload["items"][0]["attempts"], 1)
+
+    def test_unknown_requires_the_active_attempt(self) -> None:
+        self.ledger.start_attempt(self.item, ATTEMPT_1)
+        with self.assertRaises(ValueError):
+            self.ledger.mark_attempt_unknown(self.item.id, ATTEMPT_2)
+
+    def test_start_refuses_every_recorded_outcome(self) -> None:
+        for state in ("Generated", "Failed", "Skipped", "Unknown"):
+            with self.subTest(state=state):
+                fixture = LedgerFixture()
+                self.addCleanup(fixture.cleanup)
+                ledger = fixture.ledger()
+                ledger.write(job_ledger.new_job("portrait-study"))
+                ledger.record_item(self.item, state=state)
+                with self.assertRaises(ValueError):
+                    ledger.start_attempt(self.item, ATTEMPT_1)
+
+    def test_attempt_id_must_be_uuid_hex(self) -> None:
+        with self.assertRaises(ValueError):
+            self.ledger.start_attempt(self.item, "attempt-1")
 
     def test_fresh_job_has_every_item_pending(self) -> None:
         pending = self.ledger.pending_items(self.items)
@@ -402,6 +432,7 @@ class ApprovalTests(unittest.TestCase):
         self.ledger.write(job_ledger.new_job("portrait-study"))
 
     def test_approval_is_bound_to_exact_plan_and_count(self) -> None:
+        self.ledger.bind_plan("a" * 64, 1, 2)
         self.ledger.record_approval("a" * 64, 1, 2, "run_approve_flag")
         self.assertTrue(self.ledger.approval_matches("a" * 64, 1, 2))
         self.assertFalse(self.ledger.approval_matches("b" * 64, 1, 2))
@@ -424,8 +455,16 @@ class ApprovalTests(unittest.TestCase):
         )
 
     def test_approval_source_must_be_the_cli_flag(self) -> None:
+        self.ledger.bind_plan("a" * 64, 1, 2)
         with self.assertRaises(ValueError):
             self.ledger.record_approval("a" * 64, 1, 2, "conversation")
+
+    def test_approval_must_match_the_bound_batch(self) -> None:
+        self.ledger.bind_plan("a" * 64, 1, 2)
+        with self.assertRaises(ValueError):
+            self.ledger.record_approval("b" * 64, 1, 2, "run_approve_flag")
+        self.assertFalse(self.ledger.approval_matches("b" * 64, 1, 2))
+        self.assertEqual(self.ledger.read()["approval"]["history"], [])
 
 
 class UsageLimitTests(unittest.TestCase):

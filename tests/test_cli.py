@@ -260,6 +260,53 @@ class RunCommandTests(unittest.TestCase):
         after = len(list(self.fixture.generation_dir.rglob("*.png")))
         self.assertEqual(before, after)
 
+    def test_changed_completed_metadata_is_refused_even_when_no_item_is_pending(self) -> None:
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, 0, output)
+        before = len(list(self.fixture.generation_dir.rglob("*.png")))
+
+        plan = valid_plan()
+        plan["judge_policy"]["pass_threshold"] = 0.9
+        self.fixture.write_plan(plan)
+        code, output = self.run_batch("--approve")
+
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(json.loads(output)["error_category"], "recovery_required")
+        self.assertEqual(before, len(list(self.fixture.generation_dir.rglob("*.png"))))
+
+    def test_partial_with_zero_pending_is_refused_without_generation(self) -> None:
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, 0, output)
+        ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+        ledger["state"] = "Partial"
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        before = len(list(self.fixture.generation_dir.rglob("*.png")))
+
+        code, output = self.run_batch("--approve")
+
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(json.loads(output)["error_category"], "recovery_required")
+        self.assertEqual(before, len(list(self.fixture.generation_dir.rglob("*.png"))))
+
+    def test_partial_with_unknown_and_new_item_is_refused_without_generation(self) -> None:
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, 0, output)
+        ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+        ledger["state"] = "Partial"
+        ledger["items"][0]["state"] = "Unknown"
+        ledger["items"][0]["error_category"] = "unknown"
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        plan = valid_plan()
+        plan["items"].append({"id": "item-03", "prompt": "a third portrait"})
+        self.fixture.write_plan(plan)
+        before = len(list(self.fixture.generation_dir.rglob("*.png")))
+
+        code, output = self.run_batch("--approve")
+
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(json.loads(output)["error_category"], "recovery_required")
+        self.assertEqual(before, len(list(self.fixture.generation_dir.rglob("*.png"))))
+
     def test_usage_limit_stops_the_run_and_is_recorded(self) -> None:
         self.fixture.control(mode="usage_limit", resets_at=1_800_000_000)
         code, output = self.run_batch("--approve")

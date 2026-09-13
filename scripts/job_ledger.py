@@ -32,6 +32,7 @@ SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "factory_job.sch
 JOB_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{2,63}$"
 IMAGE_LIMIT_ID = "image_gen"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
+ATTEMPT_ID_PATTERN = r"^[0-9a-f]{32}$"
 
 FORBIDDEN_KEYS = frozenset(
     {
@@ -296,6 +297,14 @@ class JobLedger:
         if source != "run_approve_flag":
             raise ValueError("approval source must be 'run_approve_flag'")
         payload = self.read()
+        expected_binding = {
+            "batch_id": self._job_id or payload["job_id"],
+            "round": round_number,
+            "plan_sha256": plan_sha256,
+            "image_count": image_count,
+        }
+        if payload["batch"] != expected_binding:
+            raise ValueError("approval must exactly match the bound batch")
         record = {
             "plan_sha256": plan_sha256,
             "round": round_number,
@@ -309,8 +318,15 @@ class JobLedger:
         return payload
 
     def approval_matches(self, plan_sha256: str, round_number: int, image_count: int) -> bool:
-        current = self.read()["approval"]["current"]
-        return current is not None and all(
+        payload = self.read()
+        current = payload["approval"]["current"]
+        expected_binding = {
+            "batch_id": self._job_id or payload["job_id"],
+            "round": round_number,
+            "plan_sha256": plan_sha256,
+            "image_count": image_count,
+        }
+        return payload["batch"] == expected_binding and current is not None and all(
             (
                 current["plan_sha256"] == plan_sha256,
                 current["round"] == round_number,
@@ -402,8 +418,10 @@ class JobLedger:
 
     @staticmethod
     def _validate_attempt_id(attempt_id: str) -> None:
-        if not isinstance(attempt_id, str) or not attempt_id or len(attempt_id) > 128:
-            raise ValueError("attempt_id must be a non-empty string of at most 128 characters")
+        if not isinstance(attempt_id, str) or not json_pattern_match(
+            attempt_id, ATTEMPT_ID_PATTERN
+        ):
+            raise ValueError("attempt_id must be 32 lowercase hexadecimal characters")
 
     def _active_attempt(self, item_id: str, attempt_id: str) -> tuple[dict, dict]:
         self._validate_attempt_id(attempt_id)

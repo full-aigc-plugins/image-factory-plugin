@@ -238,20 +238,27 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         return EXIT_APPROVAL_REQUIRED, _emit(payload, args.json)
 
     pending = ledger.pending_items(result.items)
-    if job_ledger.JobState(ledger.read()["state"]) is job_ledger.JobState.COMPLETED and not pending:
-        payload = {
-            "ok": True,
-            "batch_id": result.batch_id,
-            "round": result.round,
-            "state": job_ledger.JobState.COMPLETED.value,
-            "attempted": 0,
-            "failed": 0,
-            "receipts": [],
-            "ledger": str(job_path),
-        }
-        return EXIT_OK, _emit(payload, args.json)
-
-    if job_ledger.JobState(ledger.read()["state"]) is job_ledger.JobState.COMPLETED:
+    ledger_payload = ledger.read()
+    state = job_ledger.JobState(ledger_payload["state"])
+    completed_binding = {
+        "batch_id": result.batch_id,
+        "round": result.round,
+        "plan_sha256": result.plan_sha256,
+        "image_count": len(result.items),
+    }
+    if state is job_ledger.JobState.COMPLETED:
+        if not pending and ledger_payload["batch"] == completed_binding:
+            payload = {
+                "ok": True,
+                "batch_id": result.batch_id,
+                "round": result.round,
+                "state": job_ledger.JobState.COMPLETED.value,
+                "attempted": 0,
+                "failed": 0,
+                "receipts": [],
+                "ledger": str(job_path),
+            }
+            return EXIT_OK, _emit(payload, args.json)
         payload = {
             "ok": False,
             "stage": "ledger",
@@ -259,6 +266,29 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
             "message": "a changed completed job cannot be resumed as a generation run",
         }
         return EXIT_FAILURE, _emit(payload, args.json)
+
+    if state is job_ledger.JobState.PARTIAL and (
+        not pending
+        or ledger_payload["usage_limit"] is not None
+        or any(row["state"] == "Unknown" for row in ledger_payload["items"])
+    ):
+        payload = {
+            "ok": False,
+            "stage": "ledger",
+            "error_category": "recovery_required",
+            "message": "this partial job is not eligible for an automatic generation resume",
+        }
+        return EXIT_FAILURE, _emit(payload, args.json)
+
+    ledger.bind_plan(result.plan_sha256, result.round, len(pending))
+    ledger.record_approval(
+        result.plan_sha256,
+        result.round,
+        len(pending),
+        "run_approve_flag",
+    )
+    if not ledger.approval_matches(result.plan_sha256, result.round, len(pending)):
+        raise RuntimeError("recorded approval does not match the bound generation plan")
 
     _drive_to_running(ledger, approved=True)
 
