@@ -8,7 +8,7 @@
 
 ## Status
 
-Implemented and runtime-verified for version 0.1.0. The deterministic suite, distribution checks, plugin installation, fresh-session Skill discovery, and an authorized two-item generation run are recorded under `docs/verification/`.
+Version 0.1.1 adds attributed offline prompt discovery, pinned upstream Skill snapshots, Creative Studio architecture, and a 72-case Chinese documentation library. The image production core remains runtime-verified; current and historical evidence is recorded under `docs/verification/`.
 
 ## Purpose
 
@@ -45,6 +45,11 @@ Because generation is not parameterised, features that require explicit size or 
 
 ## Documents
 
+Prompt preparation now includes an offline template search:
+`bin/image-factory prompt-search 'storybook illustration' --limit 3 --json`.
+See [prompt reference integration](docs/prompt-library.md) for bundled templates,
+case indexes, source attribution and the limits of this integration.
+
 - [Architecture](docs/Codex-Image-Factory-Plugin-Architecture.md)
 - [架构文档](docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 - [Technical solution](docs/Codex-Image-Factory-Plugin-Technical-Solution.md)
@@ -53,6 +58,14 @@ Because generation is not parameterised, features that require explicit size or 
 - [Implementation plan](docs/superpowers/plans/2026-09-12-codex-image-factory-plugin-implementation.md)
 - [Portable manifest migration](docs/portable-migration.md)
 - [Runtime verification](docs/verification/runtime.md)
+- [Upstream Skill capability analysis](docs/upstream-skill-capability-analysis.md)
+- [Creative Studio design](docs/superpowers/specs/2026-09-13-codex-creative-studio-design.md)
+- [Creative Studio implementation plan](docs/superpowers/plans/2026-09-13-codex-creative-studio-implementation.md)
+- [Creative Studio Chinese user guide](docs/guides/creative-studio-user-guide.zh-CN.md)
+- [Chinese use-case library](docs/use-cases/README.zh-CN.md)
+- [Current CLI recipes in Chinese](docs/guides/current-cli-recipes.zh-CN.md)
+- [Original upstream snapshots](vendor/upstream/README.md)
+- [Upstream snapshot verification](docs/verification/upstream-snapshots.md)
 
 ## License
 

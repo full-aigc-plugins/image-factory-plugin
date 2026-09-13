@@ -28,6 +28,7 @@ import generation_runner
 import job_ledger
 import optimizer
 import plan_validator
+import prompt_library
 
 EXIT_OK = 0
 EXIT_FAILURE = 1
@@ -439,6 +440,10 @@ def command_status(args: argparse.Namespace) -> tuple[int, str]:
 # ------------------------------------------------------------------------ wiring
 
 
+def command_prompt_search(args: argparse.Namespace) -> tuple[int, str]:
+    return EXIT_OK, _emit(prompt_library.search(args.query, args.limit), args.json)
+
+
 def build_parser() -> argparse.ArgumentParser:
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument("--codex-home", default=None)
@@ -451,6 +456,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("probe", parents=[shared])
+    search = subparsers.add_parser("prompt-search", parents=[shared])
+    search.add_argument("query")
+    search.add_argument("--limit", type=int, default=3)
 
     validate = subparsers.add_parser("validate-plan", parents=[shared])
     validate.add_argument("plan")
@@ -485,6 +493,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 HANDLERS = {
+    "prompt-search": command_prompt_search,
     "probe": command_probe,
     "validate-plan": command_validate_plan,
     "quote": command_quote,

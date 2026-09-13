@@ -15,6 +15,11 @@ to decide whether the results are good.
 
 ## Workflow
 
+When a user describes a batch but has no plan yet, read
+[prompt preparation](references/prompt-preparation.md). Use the bundled
+template search to prepare prompts and a valid batch plan before validation.
+For an already approved plan, preserve its prompts and proceed directly.
+
 1Step 1. **Validate the plan before anything else.**
 
    ```bash

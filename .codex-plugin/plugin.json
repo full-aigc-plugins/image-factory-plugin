@@ -1,7 +1,7 @@
 {
   "name": "codex-image-factory",
-  "version": "0.1.0",
-  "description": "Batch image production workflows for Codex with verified receipts, evaluation, and prompt optimization.",
+  "version": "0.1.1",
+  "description": "Batch image production for Codex with attributed prompt discovery, verified receipts, evaluation, and prompt optimization.",
   "author": {"name": "Full Stack Skills / PartMe.AI", "url": "https://github.com/partme-ai"},
   "homepage": "https://github.com/partme-ai/codex-image-factory-plugin",
   "repository": "https://github.com/partme-ai/codex-image-factory-plugin",
@@ -10,8 +10,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex Image Factory",
-    "shortDescription": "Batch-produce and evaluate images with Codex",
-    "longDescription": "Run a reference-driven image production loop inside Codex: validate a batch plan, generate through the built-in image tool, collect a hash-verified receipt for every artifact, evaluate against deterministic gates, and optimize prompts into a new round with explicit approval.",
+    "shortDescription": "Discover, batch-produce, and evaluate images with Codex",
+    "longDescription": "Discover attributed prompt directions, then run a reference-driven image production loop inside Codex: validate a batch plan, generate through the built-in image tool, collect a hash-verified receipt for every artifact, evaluate against deterministic gates, and optimize prompts into a new round with explicit approval.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "category": "Creativity",
     "capabilities": ["Interactive", "Read", "Write"],
@@ -19,9 +19,9 @@
     "privacyPolicyURL": "https://github.com/partme-ai/codex-image-factory-plugin/blob/main/PRIVACY.md",
     "termsOfServiceURL": "https://github.com/partme-ai/codex-image-factory-plugin/blob/main/TERMS.md",
     "defaultPrompt": [
+      "Find prompt directions for my image batch",
       "Run this image batch plan and collect a receipt for every artifact",
-      "Evaluate the generated batch and record my approval labels",
-      "Optimize the failed items into a new round"
+      "Evaluate the generated batch and record my approval labels"
     ],
     "brandColor": "#10B981",
     "composerIcon": "./assets/composer-icon.png",

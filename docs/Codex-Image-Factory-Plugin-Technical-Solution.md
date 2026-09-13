@@ -1,6 +1,6 @@
 # Codex Image Factory Plugin Technical Solution
 
-> Implemented technical proposal for version 0.1.0. Updated 2026-09-12. Describes what the code does today, not what it might do.
+> Implemented technical proposal for version 0.1.1. Updated 2026-09-13. Describes what the code does today, not what it might do.
 
 [English](Codex-Image-Factory-Plugin-Technical-Solution.md) | [简体中文](Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 
@@ -36,6 +36,7 @@ scripts/
   schema_lite.py                   schema subset enforcement, stdlib only
   capability_probe.py              offline environment probe
   plan_validator.py                plan validation, idempotency keys, caps
+  prompt_library.py                offline attributed prompt discovery
   generation_runner.py             one Codex call per item
   artifact_collector.py            locate, verify, publish, receipt
   job_ledger.py                    durable state machine
@@ -44,7 +45,9 @@ scripts/
   image_factory_cli.py             subcommand wiring and the spend gate
   validate_distribution.py         distribution validator
 skills/                            four Agent Skills
-tests/                             226 tests, stdlib unittest
+data/                              attributed templates and source indexes
+vendor/upstream/                   inactive pinned upstream snapshots
+tests/                             238 tests, stdlib unittest
 docs/                              this document and its pair
 ```
 

@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0.0",
+  "policy": {
+    "runtime_discovery": false,
+    "execute_upstream_instructions": false,
+    "update_mode": "explicit-review-only"
+  },
+  "sources": [
+    {
+      "id": "freestylefly-awesome-gpt-image-2",
+      "repository": "https://github.com/freestylefly/awesome-gpt-image-2",
+      "revision": "0dc09c46c8a30b1fdd89c18cc78a894dac2104e3",
+      "license": "MIT",
+      "kind": "skill",
+      "vendored": true,
+      "files": 7,
+      "entrypoints": ["agents/skills/gpt-image-2-style-library/SKILL.md"]
+    },
+    {
+      "id": "wuyoscar-gpt-image2-skill",
+      "repository": "https://github.com/wuyoscar/GPT-Image2-Skill",
+      "revision": "05cb1130bba29e0fc028220376280a2e934a8041",
+      "license": "MIT",
+      "kind": "skills",
+      "vendored": true,
+      "files": 50,
+      "entrypoints": [
+        "skills/gpt-image/SKILL.md",
+        "skills/get-prompt-from-image/SKILL.md"
+      ]
+    },
+    {
+      "id": "youmind-ai-image-prompts-skill",
+      "repository": "https://github.com/YouMind-OpenLab/ai-image-prompts-skill",
+      "revision": "6e8339bbfda7ed3f21978df84f266f1c393f5918",
+      "license": "MIT",
+      "kind": "skill-and-prompt-data",
+      "vendored": true,
+      "files": 18,
+      "entrypoints": ["SKILL.md", "references/manifest.json"]
+    },
+    {
+      "id": "youmind-awesome-gpt-image-2",
+      "repository": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+      "revision": "7516ce0d3132231e0de80f8a7978bc6ed728abe5",
+      "license": "CC-BY-4.0",
+      "kind": "reference-gallery",
+      "vendored": true,
+      "files": 2,
+      "entrypoints": ["README.md", "LICENSE"]
+    },
+    {
+      "id": "songguoxs-gpt4o-image-prompts",
+      "repository": "https://github.com/songguoxs/gpt4o-image-prompts",
+      "revision": "c282b673debc8ddb31258c0474228774a628069d",
+      "license": "UNSPECIFIED",
+      "kind": "reference-dataset",
+      "vendored": false,
+      "files": 0,
+      "entrypoints": ["README.md", "data/prompts.json"]
+    },
+    {
+      "id": "dongyubin-awesome-ai-images-prompts",
+      "repository": "https://github.com/dongyubin/Awesome-AI-Images-Prompts",
+      "revision": "b4467b0e2215b735e45f93b9950305400a1c1530",
+      "license": "UNSPECIFIED",
+      "kind": "reference-gallery",
+      "vendored": false,
+      "files": 0,
+      "entrypoints": ["README.md"]
+    }
+  ]
+}

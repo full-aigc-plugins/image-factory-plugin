@@ -1,6 +1,6 @@
 # Codex Image Factory 插件架构
 
-> **状态**：已实现并通过运行期验证。**版本**：0.1.0。**更新日期**：2026-09-12。
+> **状态**：图片内核已实现并通过运行验证；提示词检索已实现并通过离线验证。**版本**：0.1.1。**更新日期**：2026-09-13。
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 
@@ -40,6 +40,7 @@ flowchart LR
 | `scripts/capability_probe.py` | 读取本地环境，判断批次能否运行 | 安装或修复任何东西 |
 | `scripts/schema_lite.py` | 执行已发布的 JSON Schema | 定义 schema 未声明的契约 |
 | `scripts/plan_validator.py` | 批次清单校验、幂等键、花费上限 | 生成任何图像 |
+| `scripts/prompt_library.py` | 离线模板与分类检索、来源归属 | 调用生成器或执行上游 Skill |
 | `scripts/generation_runner.py` | 每项一次 Codex 调用与失败分类 | 重试，撰写 prompt |
 | `scripts/artifact_collector.py` | 定位、核验、发布产物；生成回执 | 判断结果好不好 |
 | `scripts/job_ledger.py` | 持久作业状态、原子写、拒绝密钥 | 花费决策 |
@@ -127,6 +128,11 @@ sequenceDiagram
 `tomllib` 需要 Python 3.11 或更高版本。全部脚本仅使用标准库。
 
 ## 9. 演进
+
+Creative Studio 的目标架构、傻瓜化界面、上游 Skill 隔离、父项目状态机和本地视频
+流水线已形成独立规格：
+[`2026-09-13-codex-creative-studio-design.md`](superpowers/specs/2026-09-13-codex-creative-studio-design.md)。
+本文件继续描述 0.1.1 已实现的图片内核和提示词检索层，不能把目标架构当作已交付功能。
 
 设计留下三个清晰的接缝：
 

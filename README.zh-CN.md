@@ -8,7 +8,7 @@
 
 ## 当前状态
 
-版本 0.1.0 已实现并通过运行期验证。确定性测试、发行检查、插件安装、新会话 Skill 发现以及经授权的两项真实出图证据均记录在 `docs/verification/` 下。
+版本 0.1.1 新增带来源的离线提示词检索、固定上游 Skill 快照、Creative Studio 架构和 72 个中文使用案例。图片生产内核已通过运行验证；当前与历史证据均记录在 `docs/verification/` 下。
 
 ## 项目定位
 
@@ -45,6 +45,11 @@ Codex -> 校验后的批次清单 -> 内置图像工具 -> 产物采集 + 回执
 
 ## 文档
 
+新增离线提示词模板检索：
+`bin/image-factory prompt-search '成语绘本分镜' --limit 3 --json`。
+已集成 22 套模板、31 类案例索引、11 类检索目录与六个来源入口。
+全文图库按需查阅；详见[提示词参考层](docs/prompt-library.md)。
+
 - [Architecture](docs/Codex-Image-Factory-Plugin-Architecture.md)
 - [架构文档](docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 - [Technical solution](docs/Codex-Image-Factory-Plugin-Technical-Solution.md)
@@ -53,6 +58,14 @@ Codex -> 校验后的批次清单 -> 内置图像工具 -> 产物采集 + 回执
 - [实施计划](docs/superpowers/plans/2026-09-12-codex-image-factory-plugin-implementation.md)
 - [便携清单迁移说明](docs/portable-migration.md)
 - [运行期验证](docs/verification/runtime.md)
+- [上游 Skill 能力分析](docs/upstream-skill-capability-analysis.md)
+- [Creative Studio 设计规格](docs/superpowers/specs/2026-09-13-codex-creative-studio-design.md)
+- [Creative Studio 实施计划](docs/superpowers/plans/2026-09-13-codex-creative-studio-implementation.md)
+- [Creative Studio 用户手册](docs/guides/creative-studio-user-guide.zh-CN.md)
+- [72 个使用案例](docs/use-cases/README.zh-CN.md)
+- [当前版本 CLI 实操手册](docs/guides/current-cli-recipes.zh-CN.md)
+- [原始上游快照](vendor/upstream/README.md)
+- [上游快照验证记录](docs/verification/upstream-snapshots.md)
 
 ## 许可证
 

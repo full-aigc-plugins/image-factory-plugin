@@ -21,7 +21,7 @@ user named, or for a job ledger left by an earlier round.
 
 Step 2. Classify the request into exactly one of three situations:
 
-- **Nothing has been generated yet.** Delegate to `codex-image-factory-run`.
+- **Nothing has been generated yet, including requests needing prompt inspiration or a batch plan.** Delegate to `codex-image-factory-run`; its prompt preparation reference covers template search and series consistency.
 - **Results exist and need a verdict, or need another round.**
   Delegate to `codex-image-factory-judge`.
 - **The state is unclear, a run was interrupted, or the user is asking what

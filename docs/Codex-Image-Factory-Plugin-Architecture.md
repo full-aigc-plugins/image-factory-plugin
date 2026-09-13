@@ -1,6 +1,6 @@
 # Codex Image Factory Plugin Architecture
 
-> **Status:** implemented and runtime-verified. **Version:** 0.1.0. **Updated:** 2026-09-12.
+> **Status:** image core implemented and runtime-verified; prompt discovery implemented and offline-verified. **Version:** 0.1.1. **Updated:** 2026-09-13.
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 
@@ -56,6 +56,7 @@ own credentials.
 | `scripts/capability_probe.py` | Reading the local environment to decide whether a batch can run | Installing or repairing anything |
 | `scripts/schema_lite.py` | Enforcing the published JSON Schemas | Defining contracts the schema does not state |
 | `scripts/plan_validator.py` | Batch plan validation, idempotency keys, spend caps | Generating anything |
+| `scripts/prompt_library.py` | Offline attributed template and category discovery | Calling a generator or executing upstream Skills |
 | `scripts/generation_runner.py` | One Codex invocation per item and failure classification | Retrying, and writing prompts |
 | `scripts/artifact_collector.py` | Locating, verifying, and publishing artifacts; receipts | Deciding whether a result is good |
 | `scripts/job_ledger.py` | Durable job state, atomic writes, secret refusal | Spending decisions |
@@ -182,6 +183,12 @@ Python 3.11 or later is required for `tomllib`. All scripts use the standard
 library only.
 
 ## 9. Evolution
+
+The target Creative Studio architecture, guided UI, upstream Skill isolation,
+parent project state machine and local video pipeline are specified in
+[`2026-09-13-codex-creative-studio-design.md`](superpowers/specs/2026-09-13-codex-creative-studio-design.md).
+This document continues to describe the implemented 0.1.1 image core and prompt-discovery layer; target
+architecture is not presented as shipped behavior.
 
 The design leaves three clean seams:
 

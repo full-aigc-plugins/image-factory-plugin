@@ -55,8 +55,8 @@ def validate(root: Path) -> list[str]:
     repository = manifest.get("repository", "")
     if NAME_PATTERN.fullmatch(plugin_id) is None or not plugin_id.startswith("codex-"):
         errors.append("manifest name must be a codex-prefixed kebab-case identifier")
-    if manifest.get("version") != "0.1.0":
-        errors.append("foundation version must be 0.1.0")
+    if manifest.get("version") != "0.1.1":
+        errors.append("release version must be 0.1.1")
     if manifest.get("skills") != "./skills/":
         errors.append("manifest skills path must be ./skills/")
     if "mcpServers" in manifest or (root / ".mcp.json").exists():
@@ -124,4 +124,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

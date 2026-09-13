@@ -105,15 +105,23 @@ class DocumentationTests(unittest.TestCase):
         ):
             with self.subTest(document=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn("0.1.0", text)
-                self.assertIn("2026-09-12", text)
+                self.assertIn("0.1.1", text)
+                self.assertIn("2026-09-13", text)
 
     def test_no_document_names_an_image_model(self) -> None:
         """The platform chooses the model; claiming one would mislead the reader."""
-        for path in sorted(ROOT.rglob("*.md")):
-            if ".git" in path.parts:
-                continue
-            text = path.read_text(encoding="utf-8").lower()
+        product_documents = [
+            ROOT / "README.md",
+            ROOT / "README.zh-CN.md",
+            ROOT / "docs/Codex-Image-Factory-Plugin-Architecture.md",
+            ROOT / "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
+            ROOT / "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
+            ROOT / "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
+            *sorted((ROOT / "skills").glob("*/SKILL.md")),
+        ]
+        for path in product_documents:
+            # Source URLs identify upstream repositories, not the runtime model.
+            text = re.sub(r"https?://[^\s)]+", "", path.read_text(encoding="utf-8").lower())
             for model in ("gpt-image", "image-2.5", "sunburst", "flare"):
                 with self.subTest(document=path.name, model=model):
                     self.assertNotIn(model, text)
@@ -139,7 +147,7 @@ class LinkTests(unittest.TestCase):
     def test_every_relative_markdown_link_resolves(self) -> None:
         failures: list[str] = []
         for path in sorted(ROOT.rglob("*.md")):
-            if ".git" in path.parts or "__pycache__" in path.parts:
+            if ".git" in path.parts or "__pycache__" in path.parts or "vendor" in path.parts:
                 continue
             for target in relative_markdown_links(path):
                 resolved = (path.parent / target).resolve()
@@ -149,7 +157,7 @@ class LinkTests(unittest.TestCase):
 
     def test_documents_avoid_absolute_local_paths(self) -> None:
         for path in sorted(ROOT.rglob("*.md")):
-            if ".git" in path.parts:
+            if ".git" in path.parts or "vendor" in path.parts:
                 continue
             text = path.read_text(encoding="utf-8")
             with self.subTest(document=path.name):

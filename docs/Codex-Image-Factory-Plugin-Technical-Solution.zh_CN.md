@@ -1,6 +1,6 @@
 # Codex Image Factory 插件技术方案
 
-> 版本 0.1.0 的已实现技术方案，更新日期 2026-09-12。描述代码今天的行为，而非未来可能的行为。
+> 版本 0.1.1 的已实现技术方案，更新日期 2026-09-13。描述代码今天的行为，而非未来可能的行为。
 
 [English](Codex-Image-Factory-Plugin-Technical-Solution.md) | [简体中文](Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 
@@ -27,6 +27,7 @@ scripts/
   schema_lite.py                   schema 子集执行器，仅标准库
   capability_probe.py              离线环境探测
   plan_validator.py                清单校验、幂等键、上限
+  prompt_library.py                离线提示词检索与来源归属
   generation_runner.py             每项一次 Codex 调用
   artifact_collector.py            定位、核验、发布、回执
   job_ledger.py                    持久状态机
@@ -35,7 +36,9 @@ scripts/
   image_factory_cli.py             子命令装配与花费门禁
   validate_distribution.py         发行校验器
 skills/                            四个 Agent Skill
-tests/                             226 个测试，标准库 unittest
+data/                              带来源的模板与分类索引
+vendor/upstream/                   非活跃固定上游快照
+tests/                             238 个测试，标准库 unittest
 docs/                              本文档及其配对版本
 ```
 

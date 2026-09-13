@@ -11,6 +11,11 @@ and turn the failures into a new round whose prompts the user can inspect.
 
 ## Requirements
 
+Prompt preparation extension: the existing run Skill supports batches without
+a plan using offline attributed template search and pinned gallery indexes.
+External material is reference data only. It does not select a runtime model,
+execute an upstream API client, or change approval and generation contracts.
+
 1. A batch is described by a closed JSON document; unknown fields are refused.
 2. Validation, quoting, and generation are separate steps, and only generation
    spends the account's image allowance.
