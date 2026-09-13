@@ -110,6 +110,9 @@ class NextRoundTests(unittest.TestCase):
         result = self.optimize(
             current, scores({"item-01": False}), rewrites={"item-01": "try again"}
         )
+        self.assertEqual(result.next_plan["schema_version"], "1.1.0")
+        self.assertIs(result.next_plan["limits"]["require_approval_before_run"], True)
+        self.assertIs(result.next_plan["judge_policy"]["require_human_labels"], True)
         self.assertEqual(schema_lite.validate(result.next_plan, BATCH_SCHEMA), [])
 
     def test_the_original_plan_is_never_mutated(self) -> None:
@@ -121,8 +124,10 @@ class NextRoundTests(unittest.TestCase):
     def test_limits_and_policy_are_preserved(self) -> None:
         current = plan([item("item-01")])
         result = self.optimize(current, scores({"item-01": False}), rewrites={"item-01": "x"})
-        self.assertEqual(result.next_plan["limits"], current["limits"])
-        self.assertEqual(result.next_plan["judge_policy"], current["judge_policy"])
+        expected_limits = {**current["limits"], "require_approval_before_run": True}
+        expected_policy = {**current["judge_policy"], "require_human_labels": True}
+        self.assertEqual(result.next_plan["limits"], expected_limits)
+        self.assertEqual(result.next_plan["judge_policy"], expected_policy)
         self.assertEqual(result.next_plan["goal"], current["goal"])
 
     def test_item_ids_are_preserved_so_history_lines_up(self) -> None:

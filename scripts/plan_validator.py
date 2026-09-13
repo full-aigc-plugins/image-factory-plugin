@@ -20,6 +20,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import contract_migrations
 import schema_lite
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "image_batch.schema.json"
@@ -150,6 +151,13 @@ def validate_plan(
         assert coercion_error is not None
         return PlanResult(**{**empty.__dict__, "errors": (coercion_error,)})
 
+    try:
+        migration = contract_migrations.migrate_image_batch(instance)
+    except ValueError as error:
+        return PlanResult(
+            **{**empty.__dict__, "errors": (PlanError("plan_schema_invalid", str(error)),)}
+        )
+    instance = migration.document
     structural = schema_lite.validate(instance, document)
     if structural:
         errors = tuple(PlanError("plan_schema_invalid", message) for message in structural)

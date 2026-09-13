@@ -25,9 +25,10 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
+import contract_migrations
 import schema_lite
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "factory_job.schema.json"
 JOB_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{2,63}$"
 IMAGE_LIMIT_ID = "image_gen"
@@ -60,6 +61,8 @@ ERROR_CATEGORIES = (
     "duplicate_artifact",
     "plan_invalid",
     "approval_required",
+    "job_already_running",
+    "recovery_required",
     "unknown",
 )
 
@@ -70,14 +73,16 @@ class JobState(str, Enum):
     APPROVED = "Approved"
     RUNNING = "Running"
     EVALUATED = "Evaluated"
+    PENDING_APPROVAL = "PendingApproval"
     OPTIMIZED = "Optimized"
+    ACCEPTED = "Accepted"
     COMPLETED = "Completed"
     PARTIAL = "Partial"
     FAILED = "Failed"
     UNKNOWN = "Unknown"
 
 
-ITEM_STATES = ("Pending", "Generated", "Failed", "Skipped")
+ITEM_STATES = ("Pending", "Attempting", "Generated", "Failed", "Skipped", "Unknown")
 ATTEMPTED_ITEM_STATES = ("Generated", "Failed", "Skipped")
 
 ALLOWED_TRANSITIONS: dict[JobState, frozenset[JobState]] = {
@@ -90,14 +95,23 @@ ALLOWED_TRANSITIONS: dict[JobState, frozenset[JobState]] = {
     JobState.COMPLETED: frozenset({JobState.EVALUATED, JobState.RUNNING, JobState.FAILED}),
     JobState.PARTIAL: frozenset({JobState.EVALUATED, JobState.RUNNING, JobState.FAILED}),
     JobState.EVALUATED: frozenset(
-        {JobState.OPTIMIZED, JobState.COMPLETED, JobState.PARTIAL, JobState.FAILED}
+        {
+            JobState.PENDING_APPROVAL,
+            JobState.OPTIMIZED,
+            JobState.ACCEPTED,
+            JobState.COMPLETED,
+            JobState.PARTIAL,
+            JobState.FAILED,
+        }
     ),
+    JobState.PENDING_APPROVAL: frozenset({JobState.EVALUATED, JobState.FAILED}),
     JobState.OPTIMIZED: frozenset(
         {JobState.PLAN_VALIDATED, JobState.RUNNING, JobState.COMPLETED, JobState.FAILED}
     ),
     JobState.UNKNOWN: frozenset(
         {JobState.RUNNING, JobState.COMPLETED, JobState.PARTIAL, JobState.FAILED}
     ),
+    JobState.ACCEPTED: frozenset(),
     JobState.FAILED: frozenset(),
 }
 
@@ -140,7 +154,9 @@ def new_job(job_id: str) -> dict:
         "batch": None,
         "rounds": [],
         "items": [],
-        "approval": None,
+        "approval": {"current": None, "history": []},
+        "evaluation": None,
+        "optimization": None,
         "usage_limit": None,
         "error_category": None,
         "history": [],
@@ -180,6 +196,10 @@ def _assert_well_formed(payload: object) -> dict:
         raise LedgerCorruptError(f"unknown ledger state {payload['state']!r}")
     if not isinstance(payload["revision"], int) or payload["revision"] < 1:
         raise LedgerCorruptError("ledger revision must be a positive integer")
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    violations = schema_lite.validate(payload, schema)
+    if violations:
+        raise LedgerCorruptError(f"ledger does not conform to its schema: {'; '.join(violations)}")
     return payload
 
 
@@ -192,7 +212,8 @@ def load_ledger(path: Path) -> dict:
     except OSError as error:
         raise LedgerCorruptError(f"ledger at {target} could not be read: {error}") from error
     try:
-        payload = json.loads(raw)
+        migration = contract_migrations.migrate_factory_job(json.loads(raw))
+        payload = migration.document
     except ValueError as error:
         raise LedgerCorruptError(f"ledger at {target} is not valid JSON: {error}") from error
     _scrub(payload)
@@ -288,6 +309,8 @@ class JobLedger:
                 "item_id": item_id,
                 "state": state,
                 "attempts": 0,
+                "attempt_id": None,
+                "attempt_started_at": None,
                 "receipt_id": None,
                 "idempotency_key": None,
                 "error_category": None,

@@ -18,9 +18,20 @@ SCHEMA = json.loads((ROOT / "schemas/image_batch.schema.json").read_text(encodin
 
 def minimal_plan(**overrides) -> dict:
     plan = {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "batch_id": "portrait-study",
         "round": 1,
+        "limits": {
+            "max_images": 20,
+            "max_rounds": 3,
+            "require_approval_before_run": True,
+        },
+        "judge_policy": {
+            "min_dimension": 256,
+            "reject_duplicates": True,
+            "pass_threshold": 0.8,
+            "require_human_labels": True,
+        },
         "items": [{"id": "item-01", "prompt": "A calm portrait on rice paper"}],
     }
     plan.update(overrides)
@@ -155,12 +166,23 @@ class PlanValidatorTests(unittest.TestCase):
         result = self.fixture.validate(minimal_plan())
         self.assertTrue(result.require_approval_before_run)
 
-    def test_approval_can_only_be_waived_explicitly(self) -> None:
+    def test_approval_cannot_be_waived(self) -> None:
         result = self.fixture.validate(
             minimal_plan(limits={"max_images": 5, "max_rounds": 2, "require_approval_before_run": False})
         )
+        self.assertFalse(result.ok)
+        self.assertEqual(result.errors[0].code, "plan_schema_invalid")
+
+    def test_legacy_plan_is_migrated_before_validation(self) -> None:
+        legacy = {
+            "schema_version": "1.0.0",
+            "batch_id": "portrait-study",
+            "round": 1,
+            "items": [{"id": "item-01", "prompt": "legacy portrait"}],
+        }
+        result = self.fixture.validate(legacy)
         self.assertTrue(result.ok, result.errors)
-        self.assertFalse(result.require_approval_before_run)
+        self.assertTrue(result.require_approval_before_run)
 
     def test_validator_caps_match_the_published_schema(self) -> None:
         item_cap = SCHEMA["properties"]["items"]["maxItems"]

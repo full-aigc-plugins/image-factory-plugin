@@ -25,6 +25,8 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 
+import contract_migrations
+
 DEFAULT_MAX_ROUNDS = 20
 
 NEEDS_WORK_WITHOUT_INSTRUCTION = "optimizer_missing_instruction"
@@ -207,6 +209,7 @@ def plan_next_round(
         next_plan["limits"] = copy.deepcopy(current_plan["limits"])
     if "judge_policy" in current_plan:
         next_plan["judge_policy"] = copy.deepcopy(current_plan["judge_policy"])
+    next_plan = contract_migrations.migrate_image_batch(next_plan).document
 
     return OptimizeResult(
         complete=False,

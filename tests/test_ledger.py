@@ -65,7 +65,9 @@ class NewJobTests(unittest.TestCase):
         self.assertEqual(payload["items"], [])
         self.assertIsNone(payload["error_category"])
         self.assertIsNone(payload["usage_limit"])
-        self.assertIsNone(payload["approval"])
+        self.assertEqual(payload["approval"], {"current": None, "history": []})
+        self.assertIsNone(payload["evaluation"])
+        self.assertIsNone(payload["optimization"])
         self.assertRegex(payload["created_at"], ISO)
 
     def test_invalid_job_id_is_rejected(self) -> None:
@@ -178,7 +180,14 @@ class PersistenceTests(unittest.TestCase):
             self.fixture.ledger().read()
 
     def test_missing_required_fields_are_refused(self) -> None:
-        self.fixture.path.write_text(json.dumps({"schema_version": "1.0.0"}), encoding="utf-8")
+        self.fixture.path.write_text(json.dumps({"schema_version": "1.1.0"}), encoding="utf-8")
+        with self.assertRaises(job_ledger.LedgerCorruptError):
+            self.fixture.ledger().read()
+
+    def test_schema_invalid_ledger_is_refused_on_load(self) -> None:
+        payload = job_ledger.new_job("portrait-study")
+        payload["unexpected"] = True
+        self.fixture.path.write_text(json.dumps(payload), encoding="utf-8")
         with self.assertRaises(job_ledger.LedgerCorruptError):
             self.fixture.ledger().read()
 
@@ -198,6 +207,21 @@ class PersistenceTests(unittest.TestCase):
         payload["batch"] = {"API_KEY": "x"}
         with self.assertRaises(job_ledger.LedgerCorruptError):
             self.fixture.ledger().write(payload)
+
+    def test_legacy_ledger_is_migrated_in_memory_without_rewriting_disk(self) -> None:
+        payload = job_ledger.new_job("portrait-study")
+        payload["schema_version"] = "1.0.0"
+        payload["approval"] = None
+        payload.pop("evaluation")
+        payload.pop("optimization")
+        raw = json.dumps(payload, sort_keys=True)
+        self.fixture.path.write_text(raw, encoding="utf-8")
+
+        loaded = self.fixture.ledger().read()
+
+        self.assertEqual(loaded["schema_version"], "1.1.0")
+        self.assertEqual(loaded["approval"], {"current": None, "history": []})
+        self.assertEqual(self.fixture.path.read_text(encoding="utf-8"), raw)
 
 
 class ItemTrackingTests(unittest.TestCase):
@@ -235,6 +259,8 @@ class ItemTrackingTests(unittest.TestCase):
         self.assertEqual(entry["receipt_id"], "rec-1")
         self.assertEqual(entry["idempotency_key"], self.items[0].idempotency_key)
         self.assertIsNone(entry["error_category"])
+        self.assertIsNone(entry["attempt_id"])
+        self.assertIsNone(entry["attempt_started_at"])
 
     def test_ledger_with_items_validates_against_the_schema(self) -> None:
         payload = self.ledger.record_item(self.items[0], state="Generated", receipt_id="rec-1")

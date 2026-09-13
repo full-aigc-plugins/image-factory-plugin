@@ -5,83 +5,109 @@
   "description": "The durable ledger for one image production job. Written atomically after every transition so an interrupted batch can be resumed without spending the usage allowance twice.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "job_id",
-    "state",
-    "revision",
-    "created_at",
-    "updated_at",
-    "batch",
-    "rounds",
-    "items",
-    "approval",
-    "usage_limit",
-    "error_category",
-    "history"
-  ],
+  "required": ["schema_version", "job_id", "state", "revision", "created_at", "updated_at", "batch", "rounds", "items", "approval", "evaluation", "optimization", "usage_limit", "error_category", "history"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"const": "1.1.0"},
     "job_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
-    "state": {
-      "enum": [
-        "Draft",
-        "PlanValidated",
-        "Approved",
-        "Running",
-        "Evaluated",
-        "Optimized",
-        "Completed",
-        "Partial",
-        "Failed",
-        "Unknown"
-      ]
-    },
+    "state": {"enum": ["Draft", "PlanValidated", "Approved", "Running", "Evaluated", "PendingApproval", "Optimized", "Accepted", "Completed", "Partial", "Failed", "Unknown"]},
     "revision": {"type": "integer", "minimum": 1},
     "created_at": {"type": "string", "format": "date-time"},
     "updated_at": {"type": "string", "format": "date-time"},
-    "batch": {"type": ["object", "null"]},
+    "batch": {"$ref": "#/$defs/batchRecord"},
     "rounds": {"type": "array", "items": {"type": "integer", "minimum": 1}},
     "items": {"type": "array", "items": {"$ref": "#/$defs/jobItem"}},
-    "approval": {"type": ["object", "null"]},
+    "approval": {"$ref": "#/$defs/approvalLedger"},
+    "evaluation": {"$ref": "#/$defs/evaluationRecord"},
+    "optimization": {"$ref": "#/$defs/optimizationRecord"},
     "usage_limit": {
       "type": ["object", "null"],
       "additionalProperties": false,
+      "required": ["limit_id", "resets_at"],
       "properties": {
         "limit_id": {"const": "image_gen"},
         "resets_at": {"type": ["integer", "null"]}
       }
     },
-    "error_category": {
-      "enum": [
-        "capability_unavailable",
-        "codex_missing",
-        "quota_exceeded",
-        "timeout",
-        "generation_failed",
-        "artifact_missing",
-        "hash_mismatch",
-        "duplicate_artifact",
-        "plan_invalid",
-        "approval_required",
-        "unknown",
-        null
-      ]
-    },
+    "error_category": {"enum": ["capability_unavailable", "codex_missing", "quota_exceeded", "timeout", "generation_failed", "artifact_missing", "hash_mismatch", "duplicate_artifact", "plan_invalid", "approval_required", "job_already_running", "recovery_required", "unknown", null]},
     "history": {"type": "array", "items": {"$ref": "#/$defs/historyEntry"}}
   },
   "$defs": {
+    "batchRecord": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["batch_id", "round", "plan_sha256", "image_count"],
+      "properties": {
+        "batch_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
+        "round": {"type": "integer", "minimum": 1},
+        "plan_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "image_count": {"type": "integer", "minimum": 1, "maximum": 200}
+      }
+    },
+    "approvalRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_sha256", "round", "image_count", "source", "approved_at"],
+      "properties": {
+        "plan_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "round": {"type": "integer", "minimum": 1},
+        "image_count": {"type": "integer", "minimum": 1, "maximum": 200},
+        "source": {"const": "run_approve_flag"},
+        "approved_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "approvalLedger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["current", "history"],
+      "properties": {
+        "current": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["plan_sha256", "round", "image_count", "source", "approved_at"],
+          "properties": {
+            "plan_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "round": {"type": "integer", "minimum": 1},
+            "image_count": {"type": "integer", "minimum": 1, "maximum": 200},
+            "source": {"const": "run_approve_flag"},
+            "approved_at": {"type": "string", "format": "date-time"}
+          }
+        },
+        "history": {"type": "array", "items": {"$ref": "#/$defs/approvalRecord"}}
+      }
+    },
+    "evaluationRecord": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["scores_sha256", "decision", "evaluated_at"],
+      "properties": {
+        "scores_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "decision": {"enum": ["pass", "fail", "pending_approval"]},
+        "evaluated_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "optimizationRecord": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["next_plan_sha256", "next_round", "created_at"],
+      "properties": {
+        "next_plan_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "next_round": {"type": "integer", "minimum": 2},
+        "created_at": {"type": "string", "format": "date-time"}
+      }
+    },
     "jobItem": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["item_id", "state", "attempts"],
+      "required": ["item_id", "state", "attempts", "attempt_id", "attempt_started_at", "receipt_id", "idempotency_key", "error_category"],
       "properties": {
         "item_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
-        "state": {"enum": ["Pending", "Generated", "Failed", "Skipped"]},
+        "state": {"enum": ["Pending", "Attempting", "Generated", "Failed", "Skipped", "Unknown"]},
         "attempts": {"type": "integer", "minimum": 0},
+        "attempt_id": {"type": ["string", "null"], "pattern": "^[0-9a-f]{32}$"},
+        "attempt_started_at": {"type": ["string", "null"], "format": "date-time"},
         "receipt_id": {"type": ["string", "null"]},
-        "idempotency_key": {"type": ["string", "null"]},
-        "error_category": {"type": ["string", "null"]}
+        "idempotency_key": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "error_category": {"enum": ["capability_unavailable", "codex_missing", "quota_exceeded", "timeout", "generation_failed", "artifact_missing", "hash_mismatch", "duplicate_artifact", "plan_invalid", "approval_required", "job_already_running", "recovery_required", "unknown", null]}
       }
     },
     "historyEntry": {
