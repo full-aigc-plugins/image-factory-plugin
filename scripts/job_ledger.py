@@ -85,31 +85,24 @@ ITEM_STATES = ("Pending", "Attempting", "Generated", "Failed", "Skipped", "Unkno
 ATTEMPTED_ITEM_STATES = ("Generated", "Failed", "Skipped")
 
 ALLOWED_TRANSITIONS: dict[JobState, frozenset[JobState]] = {
-    JobState.DRAFT: frozenset({JobState.PLAN_VALIDATED, JobState.FAILED}),
-    JobState.PLAN_VALIDATED: frozenset({JobState.APPROVED, JobState.RUNNING, JobState.FAILED}),
-    JobState.APPROVED: frozenset({JobState.RUNNING, JobState.FAILED}),
+    JobState.DRAFT: frozenset({JobState.PLAN_VALIDATED}),
+    JobState.PLAN_VALIDATED: frozenset({JobState.APPROVED}),
+    JobState.APPROVED: frozenset({JobState.RUNNING}),
     JobState.RUNNING: frozenset(
         {JobState.COMPLETED, JobState.PARTIAL, JobState.UNKNOWN, JobState.FAILED}
     ),
-    JobState.COMPLETED: frozenset({JobState.EVALUATED, JobState.RUNNING, JobState.FAILED}),
-    JobState.PARTIAL: frozenset({JobState.EVALUATED, JobState.RUNNING, JobState.FAILED}),
+    JobState.COMPLETED: frozenset({JobState.EVALUATED}),
+    JobState.PARTIAL: frozenset({JobState.EVALUATED, JobState.PLAN_VALIDATED}),
     JobState.EVALUATED: frozenset(
         {
             JobState.PENDING_APPROVAL,
             JobState.OPTIMIZED,
             JobState.ACCEPTED,
-            JobState.COMPLETED,
-            JobState.PARTIAL,
-            JobState.FAILED,
         }
     ),
-    JobState.PENDING_APPROVAL: frozenset({JobState.EVALUATED, JobState.FAILED}),
-    JobState.OPTIMIZED: frozenset(
-        {JobState.PLAN_VALIDATED, JobState.RUNNING, JobState.COMPLETED, JobState.FAILED}
-    ),
-    JobState.UNKNOWN: frozenset(
-        {JobState.RUNNING, JobState.COMPLETED, JobState.PARTIAL, JobState.FAILED}
-    ),
+    JobState.PENDING_APPROVAL: frozenset({JobState.EVALUATED}),
+    JobState.OPTIMIZED: frozenset({JobState.PLAN_VALIDATED}),
+    JobState.UNKNOWN: frozenset({JobState.COMPLETED, JobState.PARTIAL, JobState.FAILED}),
     JobState.ACCEPTED: frozenset(),
     JobState.FAILED: frozenset(),
 }
@@ -276,6 +269,157 @@ class JobLedger:
             payload[key] = value
         self.write(payload)
         return payload
+
+    def bind_plan(self, plan_sha256: str, round_number: int, image_count: int) -> dict:
+        self._validate_plan_binding(plan_sha256, round_number, image_count)
+        payload = self.read()
+        binding = {
+            "batch_id": self._job_id or payload["job_id"],
+            "round": round_number,
+            "plan_sha256": plan_sha256,
+            "image_count": image_count,
+        }
+        if payload["batch"] != binding:
+            payload["batch"] = binding
+            payload["approval"]["current"] = None
+            self._persist_mutation(payload)
+        return payload
+
+    def record_approval(
+        self,
+        plan_sha256: str,
+        round_number: int,
+        image_count: int,
+        source: str,
+    ) -> dict:
+        self._validate_plan_binding(plan_sha256, round_number, image_count)
+        if source != "run_approve_flag":
+            raise ValueError("approval source must be 'run_approve_flag'")
+        payload = self.read()
+        record = {
+            "plan_sha256": plan_sha256,
+            "round": round_number,
+            "image_count": image_count,
+            "source": source,
+            "approved_at": _timestamp(),
+        }
+        payload["approval"]["history"].append(record)
+        payload["approval"]["current"] = record.copy()
+        self._persist_mutation(payload)
+        return payload
+
+    def approval_matches(self, plan_sha256: str, round_number: int, image_count: int) -> bool:
+        current = self.read()["approval"]["current"]
+        return current is not None and all(
+            (
+                current["plan_sha256"] == plan_sha256,
+                current["round"] == round_number,
+                current["image_count"] == image_count,
+            )
+        )
+
+    def start_attempt(self, item: object, attempt_id: str) -> dict:
+        self._validate_attempt_id(attempt_id)
+        payload = self.read()
+        key = getattr(item, "idempotency_key")
+        entry = next(
+            (row for row in payload["items"] if row.get("idempotency_key") == key),
+            None,
+        )
+        if entry is not None and entry["state"] != "Pending":
+            raise ValueError(
+                f"idempotency key {key!r} is already in state {entry['state']!r}"
+            )
+        if entry is None:
+            entry = {
+                "item_id": getattr(item, "id"),
+                "state": "Pending",
+                "attempts": 0,
+                "attempt_id": None,
+                "attempt_started_at": None,
+                "receipt_id": None,
+                "idempotency_key": key,
+                "error_category": None,
+            }
+            payload["items"].append(entry)
+        entry.update(
+            {
+                "item_id": getattr(item, "id"),
+                "state": "Attempting",
+                "attempts": entry["attempts"] + 1,
+                "attempt_id": attempt_id,
+                "attempt_started_at": _timestamp(),
+                "receipt_id": None,
+                "idempotency_key": key,
+                "error_category": None,
+            }
+        )
+        self._persist_mutation(payload)
+        return payload
+
+    def complete_attempt(self, item: object, attempt_id: str, receipt_id: str) -> dict:
+        payload, entry = self._active_attempt(getattr(item, "id"), attempt_id)
+        if entry["idempotency_key"] != getattr(item, "idempotency_key"):
+            raise ValueError("active attempt does not match the item's idempotency key")
+        entry["state"] = "Generated"
+        entry["receipt_id"] = receipt_id
+        entry["error_category"] = None
+        self._persist_mutation(payload)
+        return payload
+
+    def fail_attempt(
+        self, item: object, attempt_id: str, error_category: str
+    ) -> dict:
+        if error_category not in ERROR_CATEGORIES:
+            raise ValueError(f"unknown error category {error_category!r}")
+        payload, entry = self._active_attempt(getattr(item, "id"), attempt_id)
+        if entry["idempotency_key"] != getattr(item, "idempotency_key"):
+            raise ValueError("active attempt does not match the item's idempotency key")
+        entry["state"] = "Failed"
+        entry["receipt_id"] = None
+        entry["error_category"] = error_category
+        self._persist_mutation(payload)
+        return payload
+
+    def mark_attempt_unknown(self, item_id: str, attempt_id: str) -> dict:
+        payload, entry = self._active_attempt(item_id, attempt_id)
+        entry["state"] = "Unknown"
+        entry["receipt_id"] = None
+        entry["error_category"] = "unknown"
+        self._persist_mutation(payload)
+        return payload
+
+    @staticmethod
+    def _validate_plan_binding(plan_sha256: str, round_number: int, image_count: int) -> None:
+        if not isinstance(plan_sha256, str) or not json_pattern_match(
+            plan_sha256, SHA256_PATTERN
+        ):
+            raise ValueError("plan_sha256 must be 64 lowercase hexadecimal characters")
+        if not isinstance(round_number, int) or isinstance(round_number, bool) or round_number < 1:
+            raise ValueError("round_number must be a positive integer")
+        if not isinstance(image_count, int) or isinstance(image_count, bool) or not 1 <= image_count <= 200:
+            raise ValueError("image_count must be between 1 and 200")
+
+    @staticmethod
+    def _validate_attempt_id(attempt_id: str) -> None:
+        if not isinstance(attempt_id, str) or not attempt_id or len(attempt_id) > 128:
+            raise ValueError("attempt_id must be a non-empty string of at most 128 characters")
+
+    def _active_attempt(self, item_id: str, attempt_id: str) -> tuple[dict, dict]:
+        self._validate_attempt_id(attempt_id)
+        payload = self.read()
+        entry = next(
+            (row for row in payload["items"] if row["item_id"] == item_id),
+            None,
+        )
+        if entry is None or entry["state"] != "Attempting" or entry["attempt_id"] != attempt_id:
+            raise ValueError(f"no active attempt {attempt_id!r} for item {item_id!r}")
+        return payload, entry
+
+    def _persist_mutation(self, payload: dict) -> None:
+        payload["revision"] += 1
+        payload["updated_at"] = _timestamp()
+        self.write(payload)
 
     def record_item(
         self,

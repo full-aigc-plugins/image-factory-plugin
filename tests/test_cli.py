@@ -229,6 +229,10 @@ class RunCommandTests(unittest.TestCase):
         prior = json.loads(legacy_manifest.read_text(encoding="utf-8"))
         shutil.rmtree(Path(str(self.fixture.job_path) + ".receipts"))
 
+        ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+        ledger["state"] = "Partial"
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+
         plan = valid_plan()
         plan["items"].append({"id": "item-03", "prompt": "a third portrait"})
         self.fixture.write_plan(plan)
@@ -240,6 +244,21 @@ class RunCommandTests(unittest.TestCase):
             [receipt["item_id"] for receipt in rebuilt],
             [receipt["item_id"] for receipt in prior] + ["item-03"],
         )
+
+    def test_changed_completed_job_is_refused_without_generation(self) -> None:
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, 0, output)
+        before = len(list(self.fixture.generation_dir.rglob("*.png")))
+
+        plan = valid_plan()
+        plan["items"].append({"id": "item-03", "prompt": "a third portrait"})
+        self.fixture.write_plan(plan)
+        code, output = self.run_batch("--approve")
+
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(json.loads(output)["error_category"], "recovery_required")
+        after = len(list(self.fixture.generation_dir.rglob("*.png")))
+        self.assertEqual(before, after)
 
     def test_usage_limit_stops_the_run_and_is_recorded(self) -> None:
         self.fixture.control(mode="usage_limit", resets_at=1_800_000_000)

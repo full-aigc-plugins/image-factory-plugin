@@ -103,7 +103,7 @@
         "item_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
         "state": {"enum": ["Pending", "Attempting", "Generated", "Failed", "Skipped", "Unknown"]},
         "attempts": {"type": "integer", "minimum": 0},
-        "attempt_id": {"type": ["string", "null"], "pattern": "^[0-9a-f]{32}$"},
+        "attempt_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
         "attempt_started_at": {"type": ["string", "null"], "format": "date-time"},
         "receipt_id": {"type": ["string", "null"]},
         "idempotency_key": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},

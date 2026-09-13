@@ -183,19 +183,17 @@ def command_quote(args: argparse.Namespace) -> tuple[int, str]:
 
 def _drive_to_running(ledger: job_ledger.JobLedger, approved: bool) -> job_ledger.JobState:
     state = job_ledger.JobState(ledger.read()["state"])
-    if state in (job_ledger.JobState.DRAFT, job_ledger.JobState.OPTIMIZED):
+    if state in (
+        job_ledger.JobState.DRAFT,
+        job_ledger.JobState.OPTIMIZED,
+        job_ledger.JobState.PARTIAL,
+    ):
         ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
         state = job_ledger.JobState.PLAN_VALIDATED
     if state is job_ledger.JobState.PLAN_VALIDATED and approved:
         ledger.transition(job_ledger.JobState.APPROVED)
         state = job_ledger.JobState.APPROVED
-    if state in (
-        job_ledger.JobState.APPROVED,
-        job_ledger.JobState.COMPLETED,
-        job_ledger.JobState.PARTIAL,
-        job_ledger.JobState.EVALUATED,
-        job_ledger.JobState.UNKNOWN,
-    ):
+    if state is job_ledger.JobState.APPROVED:
         ledger.transition(job_ledger.JobState.RUNNING)
         return job_ledger.JobState.RUNNING
     return state
@@ -239,9 +237,31 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         }
         return EXIT_APPROVAL_REQUIRED, _emit(payload, args.json)
 
+    pending = ledger.pending_items(result.items)
+    if job_ledger.JobState(ledger.read()["state"]) is job_ledger.JobState.COMPLETED and not pending:
+        payload = {
+            "ok": True,
+            "batch_id": result.batch_id,
+            "round": result.round,
+            "state": job_ledger.JobState.COMPLETED.value,
+            "attempted": 0,
+            "failed": 0,
+            "receipts": [],
+            "ledger": str(job_path),
+        }
+        return EXIT_OK, _emit(payload, args.json)
+
+    if job_ledger.JobState(ledger.read()["state"]) is job_ledger.JobState.COMPLETED:
+        payload = {
+            "ok": False,
+            "stage": "ledger",
+            "error_category": "recovery_required",
+            "message": "a changed completed job cannot be resumed as a generation run",
+        }
+        return EXIT_FAILURE, _emit(payload, args.json)
+
     _drive_to_running(ledger, approved=True)
 
-    pending = ledger.pending_items(result.items)
     receipts: list[dict] = []
     failed = 0
 
