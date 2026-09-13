@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -26,15 +27,50 @@ def fast_python() -> str:
     return str(candidate) if candidate.is_file() else sys.executable
 
 
-def build_shim() -> Path:
+def build_shim(platform_name: str | None = None) -> Path:
     directory = Path(tempfile.mkdtemp(prefix="image-factory-cli-shim-"))
-    shim = directory / "codex"
-    shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
-    shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    selected_platform = os.name if platform_name is None else platform_name
+    if selected_platform == "nt":
+        shim = directory / "codex.cmd"
+        shim.write_text(f'@"{fast_python()}" "{FAKE}" %*\n', encoding="utf-8")
+    else:
+        shim = directory / "codex"
+        shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
+        shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return shim
 
 
 SHIM = build_shim()
+
+
+class PortableShimTests(unittest.TestCase):
+    def test_windows_shim_uses_cmd_launcher_syntax(self) -> None:
+        shim = build_shim(platform_name="nt")
+        self.addCleanup(shutil.rmtree, shim.parent)
+        self.assertEqual(shim.suffix, ".cmd")
+        self.assertIn("%*", shim.read_text(encoding="utf-8"))
+
+    def test_shim_uses_the_platform_launcher_and_forwards_arguments(self) -> None:
+        expected_suffix = ".cmd" if os.name == "nt" else ""
+        self.assertEqual(SHIM.suffix, expected_suffix)
+
+        with tempfile.TemporaryDirectory() as directory:
+            control_path = Path(directory) / "control.json"
+            control_path.write_text(json.dumps({"mode": "success"}), encoding="utf-8")
+            environment = os.environ.copy()
+            environment["FAKE_CODEX_CONTROL"] = str(control_path)
+            result = subprocess.run(
+                [str(SHIM), "exec", "portable-check"],
+                capture_output=True,
+                text=True,
+                env=environment,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            invocation = json.loads(
+                (control_path.parent / "fake-codex-argv.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(invocation["argv"], ["exec", "portable-check"])
 
 
 def valid_plan(**overrides) -> dict:

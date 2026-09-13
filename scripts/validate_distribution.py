@@ -15,6 +15,7 @@ SECRET_PATTERNS = (
     re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 )
 REQUIRED_FILES = (
+    ".github/workflows/ci.yml",
     "README.md",
     "README.zh-CN.md",
     "LICENSE",
@@ -23,6 +24,8 @@ REQUIRED_FILES = (
     "TERMS.md",
     "THIRD_PARTY_NOTICES.md",
     "docs/portable-migration.md",
+    "docs/verification/offline.md",
+    "docs/verification/runtime.md",
 )
 REQUIRED_DIRECTORIES = ("assets", "skills", "schemas", "scripts", "tests")
 
@@ -86,6 +89,45 @@ def validate(root: Path) -> list[str]:
     for filename in REQUIRED_FILES:
         if not (root / filename).is_file():
             errors.append(f"missing required file: {filename}")
+
+    workflow_path = root / ".github" / "workflows" / "ci.yml"
+    if workflow_path.is_file():
+        workflow = workflow_path.read_text(encoding="utf-8")
+        for required in (
+            "ubuntu-latest",
+            "macos-latest",
+            "windows-latest",
+            '"3.11"',
+            '"3.13"',
+            "python -m compileall -q scripts tests",
+            "python -m unittest discover -s tests -v",
+            "python scripts/validate_distribution.py .",
+            "git diff --check",
+        ):
+            if required not in workflow:
+                errors.append(f"CI workflow missing required contract: {required}")
+
+    runtime_evidence_path = root / "docs" / "verification" / "runtime.md"
+    if runtime_evidence_path.is_file():
+        runtime_evidence = runtime_evidence_path.read_text(encoding="utf-8")
+        if "0.1.2" not in runtime_evidence:
+            errors.append("runtime evidence must identify release candidate 0.1.2")
+        for gate in (
+            "remote_ci_matrix",
+            "remote_sha_parity",
+            "fresh_marketplace_install",
+            "fresh_session_no_spend_smoke",
+            "paid_canary",
+            "usage_limit_evidence",
+        ):
+            rows = [
+                line
+                for line in runtime_evidence.splitlines()
+                if line.startswith("|") and gate in line
+            ]
+            status = rows[0].split("|")[2].strip().strip("`") if len(rows) == 1 else ""
+            if status not in {"PASS", "FAIL", "NOT_RUN"}:
+                errors.append(f"runtime evidence missing explicit status for {gate}")
     if (root / "plugin.json").exists() or (root / "mcp.json").exists():
         errors.append("portable manifests must remain inactive during compatibility-first scaffolding")
 

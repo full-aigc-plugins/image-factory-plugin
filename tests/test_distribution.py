@@ -29,6 +29,21 @@ def png_shape(relative: str) -> tuple[int, int, int]:
 
 
 class DistributionTests(unittest.TestCase):
+    def test_ci_runs_the_offline_gates_on_the_supported_matrix(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        for operating_system in ("ubuntu-latest", "macos-latest", "windows-latest"):
+            self.assertIn(operating_system, workflow)
+        for python_version in ('"3.11"', '"3.13"'):
+            self.assertIn(python_version, workflow)
+        for command in (
+            "python -m compileall -q scripts tests",
+            "python -m unittest discover -s tests -v",
+            "python scripts/validate_distribution.py .",
+            "git diff --check",
+        ):
+            self.assertIn(command, workflow)
+        self.assertNotIn("pip install", workflow)
+
     def test_validator_accepts_distribution(self) -> None:
         result = subprocess.run(
             [sys.executable, str(ROOT / "scripts/validate_distribution.py"), str(ROOT)],

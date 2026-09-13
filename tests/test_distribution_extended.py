@@ -36,9 +36,12 @@ REQUIRED_DOCUMENTS = (
 
 # Gates that cannot be satisfied offline must be declared with their observed status.
 RUNTIME_GATES = {
-    "runtime_generation_evidence": "PASS",
+    "remote_ci_matrix": "NOT_RUN",
+    "remote_sha_parity": "NOT_RUN",
+    "fresh_marketplace_install": "NOT_RUN",
+    "fresh_session_no_spend_smoke": "NOT_RUN",
+    "paid_canary": "NOT_RUN",
     "usage_limit_evidence": "NOT_RUN",
-    "plugin_installation": "PASS",
 }
 
 MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
@@ -105,8 +108,8 @@ class DocumentationTests(unittest.TestCase):
         ):
             with self.subTest(document=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn("0.1.1", text)
-                self.assertIn("2026-09-13", text)
+                self.assertIn("0.1.2", text)
+                self.assertIn("release candidate", text.lower())
 
     def test_no_document_names_an_image_model(self) -> None:
         """The platform chooses the model; claiming one would mislead the reader."""
@@ -126,21 +129,19 @@ class DocumentationTests(unittest.TestCase):
                 with self.subTest(document=path.name, model=model):
                     self.assertNotIn(model, text)
 
-    def test_runtime_evidence_declares_completed_gates(self) -> None:
-        text = (ROOT / "docs/verification/offline.md").read_text(encoding="utf-8")
+    def test_runtime_evidence_is_versioned_and_declares_every_external_gate(self) -> None:
+        text = (ROOT / "docs/verification/runtime.md").read_text(encoding="utf-8")
+        self.assertIn("0.1.2", text)
         for gate, expected_status in RUNTIME_GATES.items():
             with self.subTest(gate=gate):
                 self.assertIn(gate, text)
                 line = next(row for row in text.splitlines() if gate in row and row.startswith("|"))
                 self.assertIn(expected_status, line)
+                status = line.split("|")[2].strip().strip("`")
+                self.assertIn(status, {"PASS", "FAIL", "NOT_RUN"})
 
-        runtime = (ROOT / "docs/verification/runtime.md").read_text(encoding="utf-8")
-        self.assertIn("## Real two-item generation", runtime)
-        self.assertIn("## Marketplace resolution and installation", runtime)
-        self.assertIn("Status: `PASS`.", runtime)
-        self.assertIn("Installation status: `PASS`.", runtime)
-        self.assertIn("attempted each item exactly once", runtime)
-        self.assertIn("all four exact Skill names as discoverable", runtime)
+        self.assertNotIn("fff20c9aad9a9cd7893644306c752b2f7231071d", text)
+        self.assertNotIn("version `0.1.0`", text)
 
 
 class LinkTests(unittest.TestCase):

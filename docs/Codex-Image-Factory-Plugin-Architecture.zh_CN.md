@@ -1,6 +1,6 @@
 # Codex Image Factory 插件架构
 
-> **状态**：图片内核已实现并通过运行验证；提示词检索已实现并通过离线验证。**版本**：0.1.1。**更新日期**：2026-09-13。
+> **状态**：0.1.2 release candidate（发布候选）已通过离线验证，外部发布门禁尚未运行。**更新日期**：2026-09-14。
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 
@@ -69,13 +69,17 @@ sequenceDiagram
   C-->>K: 通过，并给出幂等键
   K->>C: quote
   C-->>K: 图像张数、是否需要批准
-  U->>K: 批准
-  K->>C: run --approve
+  U->>K: 批准准确轮次与调用数
+  K->>C: run --approve（绑定已校验计划哈希）
+  C->>D: 获取作业锁
   loop 每个待处理项
+    C->>D: 记录 Attempting 与 attempt id
     C->>X: exec，一次 prompt
     X->>D: 图像文件
-    C->>D: 核验、发布、写回执
+    C->>D: 核验并原子写入逐项回执
+    C->>D: 记录 Generated
   end
+  C->>D: 重建聚合回执清单
   C-->>K: 回执与最终状态
   K->>C: evaluate
   C-->>K: 门禁、参考分、判定
@@ -85,10 +89,12 @@ sequenceDiagram
 
 失败、取消与超时语义：
 
-- **超时**只结束该项，归类为 `timeout`，不重试；批次继续处理其余项。
+- **预留后的超时或子进程中断**具有歧义。除非有效逐项回执证明完成，否则该项进入
+  `Unknown`，且绝不自动重试。
 - **用量超限**终止整个批次，记录限额 id 与重置时间，该次运行不再尝试任何项。
 - 退出码为 0 但**没有产物**属于失败，不是成功。生成方的声明与磁盘的证据是两件事。
-- **取消**会让台账停在 `Running`，已完成的项已记录在案，下次运行会跳过它们。
+- **取消**保留持久的 `Attempting` 证据。恢复只会核验其回执或将其改为 `Unknown`，
+  不会把它重新变成待执行项。
 
 ## 5. 契约
 
@@ -98,7 +104,8 @@ sequenceDiagram
 
 **`schemas/artifact_receipt.schema.json`** —— 一件已采集的产物。包含路径、`sha256`、`bytes`、`width`、`height`、`prompt_sha256`、`idempotency_key`，以及记录生成会话与调用号的 `source` 块。`source.model_reported` 可为空且实际为 `null`：插件只记录 Codex 报告的内容，从不已推断模型。
 
-**`schemas/factory_job.schema.json`** —— 台账。约束状态机、批次项状态与封闭的失败分类集合。
+**`schemas/factory_job.schema.json`** —— 1.1.0 台账。约束状态机、批准历史、计划哈希绑定及
+`Attempting`/`Unknown` 生命周期。旧 1.0.0 文档在内存中迁移，不虚构批准证据，也不改变已观察结果。
 
 **`schemas/scores.schema.json`** —— 一次评测。把 `deterministic_gates` 与 `advisory`、`human_labels` 分开，并以 `pass`、`fail` 或 `pending_approval` 收尾。
 
@@ -118,6 +125,9 @@ sequenceDiagram
 - **默认不可生成。** 计划要求批准时，`run` 在没有 `--approve` 的情况下拒绝启动。
 - **不绕开审批。** 插件从不传 `--dangerously-bypass-approvals-and-sandbox` 或 `--dangerously-bypass-hook-trust`，用户配置的审批姿态保持不变；测试断言这些 flag 绝不会出现在调用中。
 - **不静默重试。** 代码中没有任何重试循环。失败的项被记录并上报。
+- **跨进程仅一个写者。** 从作业路径派生的 OS 锁覆盖批准、预留、调用、回执持久化与最终迁移；第二个写者会在调用 Codex 前以 `job_already_running` 失败。
+- **逐项回执才是事实源。** 每项原子写入、符合 schema 且哈希核验通过的回执具有权威性；聚合清单只是可在恢复时重建的投影。
+- **需要时强制人工标注。** 缺少任一必需人工标签时，确定性成功和模型参考意见都不能产生 `pass`。
 - **密钥是被拒绝而非被清洗。** 台账在读写两侧都拒绝形似凭据的键，因此台账始终可以安全地作为证据分享。
 - **原子写。** 台账写入经临时文件、`fsync`、`os.replace`，读者看到的是前一状态或后一状态，不会是撕裂状态。
 - **独立核验。** 哈希与尺寸全部重算，发布后再复核一次，以发现验证窗口内被改写的文件。
@@ -130,11 +140,12 @@ sequenceDiagram
 
 运行期前置条件：用户已安装的 Codex、已登录且套餐包含图像生成的账号、可写的 `$CODEX_HOME/generated_images` 目录。`bin/image-factory probe` 会指出缺哪一项以及该怎么处理，且不联网、不执行任何程序。
 
-`tomllib` 需要 Python 3.11 或更高版本。全部脚本仅使用标准库。
+`tomllib` 需要 Python 3.11 或更高版本。全部脚本仅使用标准库。GitHub Actions 定义六个离线单元：
+Linux、macOS、Windows 分别运行 Python 3.11 与 3.13；每个单元都编译源码、执行完整测试、校验发行结构并检查 diff，不安装运行时依赖。
 
 ## 9. 演进
 
-本文件只描述 0.1.1 已实现的图片内核和提示词检索层。工作台界面、父项目状态与非图片
+本文件只描述 0.1.2 release candidate 已实现的图片内核和提示词检索层。工作台界面、父项目状态与非图片
 媒体流水线属于其他产品职责，不在本插件仓库实现或规划。
 
 设计留下三个清晰的接缝：
