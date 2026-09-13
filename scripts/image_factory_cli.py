@@ -500,7 +500,12 @@ def command_recover(args: argparse.Namespace) -> tuple[int, str]:
             row["error_category"] = "unknown"
             unknown.append(row["item_id"])
 
-    pending_count = sum(item.id not in rows_by_id for item in result.items)
+    pending_item_ids = {
+        item.id
+        for item in result.items
+        if item.id not in rows_by_id or rows_by_id[item.id]["state"] == "Pending"
+    }
+    pending_count = len(pending_item_ids)
     generated_count = sum(row["state"] == "Generated" for row in rows_by_id.values())
     failed_count = sum(row["state"] in ("Failed", "Skipped") for row in rows_by_id.values())
     unknown_count = sum(row["state"] == "Unknown" for row in rows_by_id.values())

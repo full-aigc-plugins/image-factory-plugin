@@ -190,6 +190,39 @@ class RecoveryCommandTests(unittest.TestCase):
             2,
         )
 
+    def test_explicit_pending_row_counts_as_pending_and_remaining_work(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Partial"
+        pending = ledger["items"][1]
+        pending.update(
+            state="Pending",
+            attempts=0,
+            attempt_id=None,
+            attempt_started_at=None,
+            receipt_id=None,
+            error_category=None,
+        )
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[1]["idempotency_key"]
+        ).unlink()
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
+
+        code, report = self.recover()
+
+        self.assertEqual(code, cli.EXIT_OK, report)
+        self.assertEqual(report["state"], "Partial")
+        self.assertEqual(report["completed_count"], 1)
+        self.assertEqual(report["pending_count"], 1)
+        self.assertEqual(report["remaining_generation_calls"], 1)
+        self.assertEqual(
+            report["completed_count"]
+            + report["failed_count"]
+            + report["unknown_count"]
+            + report["pending_count"],
+            2,
+        )
+
     def test_unresolved_unknown_blocks_an_ordinary_run(self) -> None:
         self.rewrite_item(0, "Attempting")
         receipt_store.receipt_path(
