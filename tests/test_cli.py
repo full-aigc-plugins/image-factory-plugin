@@ -221,6 +221,25 @@ class RunCommandTests(unittest.TestCase):
         self.assertEqual(before, after, "a resumed run must not call the generator again")
         self.assertEqual(json.loads(output)["receipts"], [])
 
+    def test_resumed_legacy_manifest_keeps_prior_receipts_when_one_item_is_added(self) -> None:
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, 0, output)
+        legacy_manifest = Path(str(self.fixture.job_path) + ".receipts.json")
+        prior = json.loads(legacy_manifest.read_text(encoding="utf-8"))
+        shutil.rmtree(Path(str(self.fixture.job_path) + ".receipts"))
+
+        plan = valid_plan()
+        plan["items"].append({"id": "item-03", "prompt": "a third portrait"})
+        self.fixture.write_plan(plan)
+        code, output = self.run_batch("--approve")
+
+        self.assertEqual(code, 0, output)
+        rebuilt = json.loads(legacy_manifest.read_text(encoding="utf-8"))
+        self.assertEqual(
+            [receipt["item_id"] for receipt in rebuilt],
+            [receipt["item_id"] for receipt in prior] + ["item-03"],
+        )
+
     def test_usage_limit_stops_the_run_and_is_recorded(self) -> None:
         self.fixture.control(mode="usage_limit", resets_at=1_800_000_000)
         code, output = self.run_batch("--approve")

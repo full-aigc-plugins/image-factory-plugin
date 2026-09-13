@@ -109,6 +109,15 @@ class ReceiptStoreTests(unittest.TestCase):
         with self.assertRaises(receipt_store.ReceiptStoreError):
             receipt_store.load_verified_receipts(self.job, self.destination)
 
+    def test_load_refuses_invalid_legacy_manifest_receipts(self) -> None:
+        receipt = self.fixture.receipt("a" * 64)
+        receipt["unexpected"] = True
+        receipt_store.manifest_path(self.job).write_text(
+            json.dumps([receipt]), encoding="utf-8"
+        )
+        with self.assertRaises(receipt_store.ReceiptStoreError):
+            receipt_store.load_verified_receipts(self.job, self.destination)
+
 
 if __name__ == "__main__":
     unittest.main()

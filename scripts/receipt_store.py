@@ -61,14 +61,45 @@ def _artifact_path(destination_dir: Path, receipt: dict) -> Path:
     return target
 
 
+def _verify_artifact(receipt: dict, source: Path, destination_dir: Path) -> None:
+    artifact = _artifact_path(destination_dir, receipt)
+    verification = artifact_collector.verify_receipt(receipt, artifact)
+    if verification:
+        raise ReceiptStoreError(
+            f"receipt at {source} failed artifact verification: {'; '.join(verification)}"
+        )
+
+
+def _load_legacy_manifest(job_path: Path, destination_dir: Path) -> dict[str, dict]:
+    source = manifest_path(job_path)
+    if not source.exists():
+        return {}
+    try:
+        decoded = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ReceiptStoreError(f"receipt manifest at {source} could not be read: {error}") from error
+    if not isinstance(decoded, list):
+        raise ReceiptStoreError(f"receipt manifest at {source} must be a JSON array")
+
+    loaded: dict[str, dict] = {}
+    for index, candidate in enumerate(decoded):
+        receipt = _validate(candidate, Path(f"{source}[{index}]"))
+        key = receipt["idempotency_key"]
+        if key in loaded:
+            raise ReceiptStoreError(f"duplicate idempotency key {key!r} in {source}")
+        _verify_artifact(receipt, source, destination_dir)
+        loaded[key] = receipt
+    return loaded
+
+
 def load_verified_receipts(job_path: Path, destination_dir: Path) -> dict[str, dict]:
+    loaded = _load_legacy_manifest(job_path, destination_dir)
     directory = receipt_directory(job_path)
     if not directory.exists():
-        return {}
+        return loaded
     if not directory.is_dir():
         raise ReceiptStoreError(f"receipt store is not a directory: {directory}")
 
-    loaded: dict[str, dict] = {}
     for source in sorted(directory.glob("*.json")):
         try:
             decoded = json.loads(source.read_text(encoding="utf-8"))
@@ -80,20 +111,19 @@ def load_verified_receipts(job_path: Path, destination_dir: Path) -> dict[str, d
             raise ReceiptStoreError(
                 f"receipt filename {source.name!r} does not match idempotency key {key!r}"
             )
-        if key in loaded:
-            raise ReceiptStoreError(f"duplicate idempotency key {key!r}")
-        artifact = _artifact_path(destination_dir, receipt)
-        verification = artifact_collector.verify_receipt(receipt, artifact)
-        if verification:
+        if key in loaded and loaded[key] != receipt:
             raise ReceiptStoreError(
-                f"receipt at {source} failed artifact verification: {'; '.join(verification)}"
+                f"conflicting receipts for idempotency key {key!r}"
             )
+        _verify_artifact(receipt, source, destination_dir)
         loaded[key] = receipt
     return loaded
 
 
 def rebuild_manifest(job_path: Path, receipts: dict[str, dict]) -> Path:
-    ordered = [receipts[key] for key in sorted(receipts)]
+    # The compatibility manifest historically used append order. The verified
+    # loader inserts legacy entries first and newly persisted entries after them.
+    ordered = list(receipts.values())
     for receipt in ordered:
         _validate(receipt)
     target = manifest_path(job_path)
