@@ -465,6 +465,36 @@ class StatusCommandTests(unittest.TestCase):
         self.assertNotIn("items", payload)
         self.assertNotIn("history", payload["approval"])
 
+    def test_status_counts_every_item_state_and_conserves_the_bound_total(self) -> None:
+        self.fixture.run_approved_batch()
+        ledger = self.fixture.read_job()
+        template = ledger["items"][0]
+        states = ("Generated", "Failed", "Pending", "Unknown", "Attempting", "Skipped")
+        ledger["items"] = []
+        for index, state in enumerate(states, start=1):
+            row = dict(template)
+            row.update(
+                item_id=f"item-{index:02d}",
+                state=state,
+                idempotency_key=f"{index:064x}",
+                receipt_id="receipt" if state == "Generated" else None,
+                error_category="unknown" if state == "Unknown" else None,
+            )
+            ledger["items"].append(row)
+        ledger["batch"]["image_count"] = len(states)
+        cli.job_ledger.write_ledger(self.fixture.job_path, ledger)
+
+        code, output = self.fixture.run_cli("status", "--job", str(self.fixture.job_path), "--json")
+
+        self.assertEqual(code, 0, output)
+        payload = json.loads(output)
+        self.assertEqual(
+            payload["counts"],
+            {"attempting": 1, "failed": 1, "generated": 1, "pending": 1, "skipped": 1, "unknown": 1},
+        )
+        self.assertEqual(sum(payload["counts"].values()), payload["batch"]["image_count"])
+        self.assertNotIn("items", payload)
+
     def test_status_on_a_missing_ledger_is_an_error(self) -> None:
         code, _output = self.fixture.run_cli(
             "status", "--job", str(self.fixture.base / "absent.json"), "--json"
@@ -504,11 +534,31 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
                 ],
             },
             "advisory": {"enabled": False, "items": []},
-            "human_labels": [], "decision": "fail",
+            "human_labels": [
+                {"item_id": "item-01", "label": "unlabeled", "at": None},
+                {"item_id": "item-02", "label": "unlabeled", "at": None},
+            ],
+            "decision": "fail",
         }
         cli.atomic_json.write_json_atomic(self.scores_path, failing)
         ledger = cli.job_ledger.JobLedger(self.fixture.job_path)
         ledger.record_evaluation(hashlib.sha256(self.scores_path.read_bytes()).hexdigest(), "fail")
+
+    def replace_scores_evidence(self, scores: object) -> None:
+        cli.atomic_json.write_json_atomic(self.scores_path, scores)
+        ledger = self.fixture.read_job()
+        ledger["evaluation"]["scores_sha256"] = hashlib.sha256(self.scores_path.read_bytes()).hexdigest()
+        cli.job_ledger.write_ledger(self.fixture.job_path, ledger)
+
+    def optimize(self, out_path: Path | None = None, rewrites: Path | None = None) -> tuple[int, str]:
+        arguments = [
+            "optimize", "--job", str(self.fixture.job_path), "--plan", str(self.fixture.plan_path),
+            "--scores", str(self.scores_path), "--out", str(out_path or self.fixture.base / "next.json"),
+            "--json",
+        ]
+        if rewrites is not None:
+            arguments.extend(("--rewrites", str(rewrites)))
+        return self.fixture.run_cli(*arguments)
 
     def test_evaluate_writes_a_scores_document(self) -> None:
         code, output = self.fixture.run_cli(
@@ -704,6 +754,58 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
         )
         self.assertEqual(code, cli.EXIT_FAILURE, output)
         self.assertIn("batch and round", json.loads(output)["error"])
+
+    def test_optimize_validates_next_plan_before_replacing_existing_output(self) -> None:
+        self.persist_failing_evaluation()
+        rewrites = self.fixture.base / "rewrites.json"
+        rewrites.write_text(json.dumps({"item-01": "x" * 20_001}), encoding="utf-8")
+        next_plan = self.fixture.base / "next.json"
+        next_plan.write_bytes(b"existing output must survive\n")
+        before = next_plan.read_bytes()
+
+        code, output = self.optimize(next_plan, rewrites)
+
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertTrue(json.loads(output)["errors"])
+        self.assertEqual(next_plan.read_bytes(), before)
+        self.assertEqual(self.fixture.read_job()["state"], "Evaluated")
+
+    def test_optimize_refuses_schema_invalid_scores(self) -> None:
+        self.persist_failing_evaluation()
+        scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
+        scores.pop("deterministic_gates")
+        self.replace_scores_evidence(scores)
+        code, output = self.optimize()
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("scores schema invalid", json.loads(output)["error"])
+
+    def test_optimize_refuses_missing_item_rows(self) -> None:
+        self.persist_failing_evaluation()
+        scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
+        scores["deterministic_gates"]["per_item"] = scores["deterministic_gates"]["per_item"][:1]
+        self.replace_scores_evidence(scores)
+        code, output = self.optimize()
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("exactly one deterministic row", json.loads(output)["error"])
+
+    def test_optimize_refuses_duplicate_item_rows(self) -> None:
+        self.persist_failing_evaluation()
+        scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
+        rows = scores["deterministic_gates"]["per_item"]
+        scores["deterministic_gates"]["per_item"] = rows + [rows[0]]
+        self.replace_scores_evidence(scores)
+        code, output = self.optimize()
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("exactly one deterministic row", json.loads(output)["error"])
+
+    def test_optimize_refuses_decision_mismatch_with_ledger(self) -> None:
+        self.persist_failing_evaluation()
+        scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
+        scores["decision"] = "pass"
+        self.replace_scores_evidence(scores)
+        code, output = self.optimize()
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("decision does not match", json.loads(output)["error"])
 
 
 class NoCertificateFilesTests(unittest.TestCase):

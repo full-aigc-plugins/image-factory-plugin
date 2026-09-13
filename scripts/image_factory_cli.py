@@ -35,6 +35,7 @@ import optimizer
 import plan_validator
 import prompt_library
 import receipt_store
+import schema_lite
 
 EXIT_OK = 0
 EXIT_FAILURE = 1
@@ -45,6 +46,7 @@ EXIT_JOB_LOCKED = 5
 EXIT_RECOVERY_REQUIRED = 6
 
 DEFAULT_TIMEOUT_SECONDS = generation_runner.DEFAULT_TIMEOUT_SECONDS
+SCORES_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "scores.schema.json"
 
 # Collection failures share one vocabulary with the ledger, which is narrower
 # because a ledger entry has to mean something a resume can act on.
@@ -490,7 +492,12 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
     migration = contract_migrations.migrate_image_batch(plan)
     plan = migration.document
     scores_path = Path(args.scores)
-    scores = _load_json(scores_path)
+    scores_bytes = scores_path.read_bytes()
+    scores = json.loads(scores_bytes)
+    scores_schema = json.loads(SCORES_SCHEMA_PATH.read_text(encoding="utf-8"))
+    scores_errors = schema_lite.validate(scores, scores_schema)
+    if scores_errors:
+        raise ValueError(f"scores schema invalid: {'; '.join(scores_errors)}")
     ledger = job_ledger.JobLedger(Path(args.job))
     current = ledger.read()
     if current["state"] != job_ledger.JobState.EVALUATED.value:
@@ -507,7 +514,7 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
     if evaluation_record is None:
         raise ValueError("job has no persisted evaluation")
     if (
-        hashlib.sha256(scores_path.read_bytes()).hexdigest()
+        hashlib.sha256(scores_bytes).hexdigest()
         != evaluation_record["scores_sha256"]
     ):
         raise ValueError("scores file does not match the persisted evaluation")
@@ -517,6 +524,21 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
         or scores.get("round") != validation.round
     ):
         raise ValueError("scores batch and round must match the current plan")
+    if scores["decision"] != evaluation_record["decision"]:
+        raise ValueError("scores decision does not match the persisted evaluation decision")
+    expected_items = {item.id for item in validation.items}
+    for section, rows in (
+        ("deterministic", scores["deterministic_gates"]["per_item"]),
+        ("human label", scores["human_labels"]),
+    ):
+        identifiers = [row["item_id"] for row in rows]
+        if len(identifiers) != len(expected_items) or set(identifiers) != expected_items:
+            raise ValueError(
+                f"scores must contain exactly one {section} row for every plan item"
+            )
+    advisory_ids = [row["item_id"] for row in scores["advisory"]["items"]]
+    if len(advisory_ids) != len(set(advisory_ids)) or not set(advisory_ids) <= expected_items:
+        raise ValueError("scores advisory rows must be unique and belong to the current plan")
     rewrites = _load_json(Path(args.rewrites)) if args.rewrites else {}
     if not isinstance(rewrites, dict):
         return EXIT_USAGE, _emit({"ok": False, "error": "rewrites must be a JSON object"}, args.json)
@@ -543,14 +565,15 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
 
     assert outcome.next_plan is not None
     out_path = Path(args.out)
-    atomic_json.write_json_atomic(out_path, outcome.next_plan)
     next_validation = plan_validator.validate_plan(outcome.next_plan, base_dir=out_path.parent)
     if not next_validation.ok:
-        out_path.unlink(missing_ok=True)
         return EXIT_FAILURE, _emit(_plan_error_payload(next_validation), args.json)
-    if next_validation.batch_id != validation.batch_id or next_validation.round != validation.round + 1:
-        out_path.unlink(missing_ok=True)
+    if (
+        next_validation.batch_id != validation.batch_id
+        or next_validation.round != validation.round + 1
+    ):
         raise ValueError("optimized plan must preserve batch id and advance exactly one round")
+    atomic_json.write_json_atomic(out_path, outcome.next_plan)
     ledger.record_optimization(next_validation.plan_sha256, next_validation.round)
     payload = {
         "ok": True,
@@ -571,7 +594,10 @@ def command_status(args: argparse.Namespace) -> tuple[int, str]:
         payload = job_ledger.load_ledger(Path(args.job))
     except job_ledger.LedgerCorruptError as error:
         return EXIT_FAILURE, _emit({"ok": False, "error": str(error)}, args.json)
-    counts = {name: 0 for name in ("generated", "failed", "pending", "unknown")}
+    counts = {
+        name: 0
+        for name in ("attempting", "failed", "generated", "pending", "skipped", "unknown")
+    }
     for row in payload["items"]:
         key = row["state"].lower()
         if key in counts:
