@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -93,6 +94,25 @@ class CliFixture:
             "--destination",
             str(self.destination),
         ]
+
+    def run_approved_batch(self) -> dict:
+        code, output = self.run_cli(
+            "run", "--plan", str(self.plan_path), "--job", str(self.job_path),
+            "--codex-bin", str(SHIM), *self.base_args(), "--approve", "--json",
+        )
+        if code != cli.EXIT_OK:
+            raise AssertionError(output)
+        return json.loads(output)
+
+    def evaluate_without_labels(self) -> tuple[int, dict]:
+        code, output = self.run_cli(
+            "evaluate", "--plan", str(self.plan_path), "--job", str(self.job_path),
+            "--scores", str(self.base / "scores.json"), *self.base_args(), "--json",
+        )
+        return code, json.loads(output)
+
+    def read_job(self) -> dict:
+        return json.loads(self.job_path.read_text(encoding="utf-8"))
 
     def cleanup(self) -> None:
         if self._previous_env is None:
@@ -434,6 +454,17 @@ class StatusCommandTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertEqual(json.loads(output)["state"], "Completed")
 
+    def test_status_reports_summaries_without_sensitive_content(self) -> None:
+        self.fixture.run_approved_batch()
+        code, output = self.fixture.run_cli("status", "--job", str(self.fixture.job_path), "--json")
+        self.assertEqual(code, 0, output)
+        payload = json.loads(output)
+        self.assertEqual(payload["batch"]["round"], 1)
+        self.assertEqual(payload["approval"]["history_count"], 1)
+        self.assertEqual(payload["counts"]["generated"], 2)
+        self.assertNotIn("items", payload)
+        self.assertNotIn("history", payload["approval"])
+
     def test_status_on_a_missing_ledger_is_an_error(self) -> None:
         code, _output = self.fixture.run_cli(
             "status", "--job", str(self.fixture.base / "absent.json"), "--json"
@@ -461,6 +492,24 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
             "--json",
         )
 
+    def persist_failing_evaluation(self) -> None:
+        failing = {
+            "schema_version": "1.0.0", "batch_id": "portrait-study", "round": 1,
+            "pass_threshold": 0.8,
+            "deterministic_gates": {
+                "all_passed": False,
+                "per_item": [
+                    {"item_id": "item-01", "passed": False, "failures": ["not_a_png"]},
+                    {"item_id": "item-02", "passed": True, "failures": []},
+                ],
+            },
+            "advisory": {"enabled": False, "items": []},
+            "human_labels": [], "decision": "fail",
+        }
+        cli.atomic_json.write_json_atomic(self.scores_path, failing)
+        ledger = cli.job_ledger.JobLedger(self.fixture.job_path)
+        ledger.record_evaluation(hashlib.sha256(self.scores_path.read_bytes()).hexdigest(), "fail")
+
     def test_evaluate_writes_a_scores_document(self) -> None:
         code, output = self.fixture.run_cli(
             "evaluate",
@@ -475,10 +524,69 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
         )
         self.assertEqual(code, 0, output)
         scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
-        self.assertEqual(scores["decision"], "pass")
+        self.assertEqual(scores["decision"], "pending_approval")
         self.assertTrue(scores["deterministic_gates"]["all_passed"])
+        ledger = self.fixture.read_job()
+        self.assertEqual(ledger["state"], "PendingApproval")
+        self.assertEqual(ledger["evaluation"]["scores_sha256"], hashlib.sha256(self.scores_path.read_bytes()).hexdigest())
 
-    def test_optimize_reports_completion_when_everything_passed(self) -> None:
+    def test_required_human_labels_cannot_pass_unlabeled(self) -> None:
+        code, payload = self.fixture.evaluate_without_labels()
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["decision"], "pending_approval")
+        self.assertEqual(self.fixture.read_job()["state"], "PendingApproval")
+
+    def test_failed_scores_write_preserves_the_previous_file_and_job_state(self) -> None:
+        self.scores_path.write_text('{"previous": true}\n', encoding="utf-8")
+        before = self.scores_path.read_bytes()
+        with patch("atomic_json.json.dump", side_effect=OSError("injected write failure")):
+            code, output = self.fixture.run_cli(
+                "evaluate", "--plan", str(self.fixture.plan_path),
+                "--job", str(self.fixture.job_path), "--scores", str(self.scores_path),
+                *self.fixture.base_args(), "--json",
+            )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(self.scores_path.read_bytes(), before)
+        self.assertEqual(self.fixture.read_job()["state"], "Completed")
+        self.assertEqual(list(self.fixture.base.glob(".atomic-*.tmp")), [])
+
+    def test_whole_batch_approval_accepts_the_job(self) -> None:
+        labels = self.fixture.base / "labels.json"
+        labels.write_text(json.dumps({"item-01": "approved", "item-02": "approved"}), encoding="utf-8")
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(self.scores_path), "--labels", str(labels), *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, 0, output)
+        self.assertEqual(json.loads(output)["decision"], "pass")
+        self.assertEqual(self.fixture.read_job()["state"], "Accepted")
+
+    def test_partial_labels_remain_pending(self) -> None:
+        labels = self.fixture.base / "labels.json"
+        labels.write_text(json.dumps({"item-01": "approved"}), encoding="utf-8")
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(self.scores_path), "--labels", str(labels), *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, 0, output)
+        self.assertEqual(json.loads(output)["decision"], "pending_approval")
+        self.assertEqual(self.fixture.read_job()["state"], "PendingApproval")
+
+    def test_rejection_fails_despite_perfect_advisory_score(self) -> None:
+        labels = self.fixture.base / "labels.json"
+        advisory = self.fixture.base / "advisory.json"
+        labels.write_text(json.dumps({"item-01": "rejected", "item-02": "approved"}), encoding="utf-8")
+        advisory.write_text(json.dumps({"item-01": [1.0, "perfect"], "item-02": [1.0, "perfect"]}), encoding="utf-8")
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(self.scores_path), "--labels", str(labels), "--advisory", str(advisory),
+            *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(json.loads(output)["decision"], "fail")
+        self.assertEqual(self.fixture.read_job()["state"], "Evaluated")
+
+    def test_optimize_requires_job_argument(self) -> None:
         self.fixture.run_cli(
             "evaluate",
             "--plan",
@@ -501,33 +609,15 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
             str(next_plan),
             "--json",
         )
-        self.assertEqual(code, 0, output)
-        self.assertTrue(json.loads(output)["complete"])
+        self.assertEqual(code, cli.EXIT_USAGE, output)
         self.assertFalse(next_plan.exists())
 
     def test_optimize_requires_an_instruction_for_each_item_needing_rework(self) -> None:
-        scores = json.loads(
-            (ROOT / "schemas/scores.schema.json").read_text(encoding="utf-8")
-        )  # shape reference only; build a failing document below
-        failing = {
-            "schema_version": "1.0.0",
-            "batch_id": "portrait-study",
-            "round": 1,
-            "pass_threshold": 0.8,
-            "deterministic_gates": {
-                "all_passed": False,
-                "per_item": [
-                    {"item_id": "item-01", "passed": False, "failures": ["not_a_png"]},
-                    {"item_id": "item-02", "passed": True, "failures": []},
-                ],
-            },
-            "advisory": {"enabled": False, "items": []},
-            "human_labels": [],
-            "decision": "fail",
-        }
-        self.scores_path.write_text(json.dumps(failing), encoding="utf-8")
+        self.persist_failing_evaluation()
         code, output = self.fixture.run_cli(
             "optimize",
+            "--job",
+            str(self.fixture.job_path),
             "--plan",
             str(self.fixture.plan_path),
             "--scores",
@@ -538,31 +628,16 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
         )
         self.assertEqual(code, cli.EXIT_FAILURE, output)
         self.assertEqual(json.loads(output)["errors"][0]["code"], "optimizer_missing_instruction")
-        self.assertTrue(scores["required"])
 
     def test_optimize_with_a_rewrite_writes_the_next_round(self) -> None:
-        failing = {
-            "schema_version": "1.0.0",
-            "batch_id": "portrait-study",
-            "round": 1,
-            "pass_threshold": 0.8,
-            "deterministic_gates": {
-                "all_passed": False,
-                "per_item": [
-                    {"item_id": "item-01", "passed": False, "failures": ["not_a_png"]},
-                    {"item_id": "item-02", "passed": True, "failures": []},
-                ],
-            },
-            "advisory": {"enabled": False, "items": []},
-            "human_labels": [],
-            "decision": "fail",
-        }
-        self.scores_path.write_text(json.dumps(failing), encoding="utf-8")
+        self.persist_failing_evaluation()
         rewrites = self.fixture.base / "rewrites.json"
         rewrites.write_text(json.dumps({"item-01": "a calmer portrait"}), encoding="utf-8")
         next_plan = self.fixture.base / "next.json"
         code, output = self.fixture.run_cli(
             "optimize",
+            "--job",
+            str(self.fixture.job_path),
             "--plan",
             str(self.fixture.plan_path),
             "--scores",
@@ -577,6 +652,58 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
         document = json.loads(next_plan.read_text(encoding="utf-8"))
         self.assertEqual(document["round"], 2)
         self.assertEqual(document["items"], [{"id": "item-01", "prompt": "a calmer portrait"}])
+        ledger = self.fixture.read_job()
+        self.assertEqual(ledger["state"], "Optimized")
+        self.assertEqual(ledger["optimization"]["next_plan_sha256"], cli.plan_validator.validate_plan(document, base_dir=next_plan.parent).plan_sha256)
+        self.assertIsNone(ledger["approval"]["current"])
+
+    def test_optimize_uses_the_exact_job_lock(self) -> None:
+        with job_lock.JobLock(self.fixture.job_path):
+            code, output = self.fixture.run_cli(
+                "optimize", "--job", str(self.fixture.job_path), "--plan", str(self.fixture.plan_path),
+                "--scores", str(self.scores_path), "--out", str(self.fixture.base / "next.json"), "--json",
+            )
+        self.assertEqual(code, cli.EXIT_JOB_LOCKED, output)
+        self.assertEqual(json.loads(output)["error_category"], "job_already_running")
+
+    def test_optimize_refuses_a_scores_file_that_changed_after_evaluation(self) -> None:
+        self.persist_failing_evaluation()
+        self.scores_path.write_text(self.scores_path.read_text(encoding="utf-8") + " ", encoding="utf-8")
+        next_plan = self.fixture.base / "next.json"
+        code, output = self.fixture.run_cli(
+            "optimize", "--job", str(self.fixture.job_path), "--plan", str(self.fixture.plan_path),
+            "--scores", str(self.scores_path), "--out", str(next_plan), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("scores file does not match", json.loads(output)["error"])
+        self.assertFalse(next_plan.exists())
+
+    def test_optimize_refuses_a_plan_that_does_not_match_the_job(self) -> None:
+        self.persist_failing_evaluation()
+        changed = valid_plan()
+        changed["items"][0]["prompt"] = "changed after evaluation"
+        self.fixture.write_plan(changed)
+        code, output = self.fixture.run_cli(
+            "optimize", "--job", str(self.fixture.job_path), "--plan", str(self.fixture.plan_path),
+            "--scores", str(self.scores_path), "--out", str(self.fixture.base / "next.json"), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("plan does not match", json.loads(output)["error"])
+
+    def test_optimize_refuses_scores_for_a_different_round(self) -> None:
+        self.persist_failing_evaluation()
+        scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
+        scores["round"] = 2
+        cli.atomic_json.write_json_atomic(self.scores_path, scores)
+        ledger = self.fixture.read_job()
+        ledger["evaluation"]["scores_sha256"] = hashlib.sha256(self.scores_path.read_bytes()).hexdigest()
+        cli.job_ledger.write_ledger(self.fixture.job_path, ledger)
+        code, output = self.fixture.run_cli(
+            "optimize", "--job", str(self.fixture.job_path), "--plan", str(self.fixture.plan_path),
+            "--scores", str(self.scores_path), "--out", str(self.fixture.base / "next.json"), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("batch and round", json.loads(output)["error"])
 
 
 class NoCertificateFilesTests(unittest.TestCase):

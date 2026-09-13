@@ -317,6 +317,45 @@ class JobLedger:
         self._persist_mutation(payload)
         return payload
 
+    def record_evaluation(self, scores_sha256: str, decision: str) -> dict:
+        if not isinstance(scores_sha256, str) or not json_pattern_match(
+            scores_sha256, SHA256_PATTERN
+        ):
+            raise ValueError("scores_sha256 must be 64 lowercase hexadecimal characters")
+        if decision not in ("pass", "fail", "pending_approval"):
+            raise ValueError("unknown evaluation decision")
+        return self.transition(
+            JobState.EVALUATED,
+            evaluation={
+                "scores_sha256": scores_sha256,
+                "decision": decision,
+                "evaluated_at": _timestamp(),
+            },
+        )
+
+    def record_optimization(self, plan_sha256: str, round_number: int) -> dict:
+        if not isinstance(plan_sha256, str) or not json_pattern_match(
+            plan_sha256, SHA256_PATTERN
+        ):
+            raise ValueError("plan_sha256 must be 64 lowercase hexadecimal characters")
+        if (
+            not isinstance(round_number, int)
+            or isinstance(round_number, bool)
+            or round_number < 2
+        ):
+            raise ValueError("round_number must be an integer of at least 2")
+        approval = self.read()["approval"]
+        approval["current"] = None
+        return self.transition(
+            JobState.OPTIMIZED,
+            approval=approval,
+            optimization={
+                "next_plan_sha256": plan_sha256,
+                "next_round": round_number,
+                "created_at": _timestamp(),
+            },
+        )
+
     def approval_matches(self, plan_sha256: str, round_number: int, image_count: int) -> bool:
         payload = self.read()
         current = payload["approval"]["current"]

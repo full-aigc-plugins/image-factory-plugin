@@ -475,6 +475,31 @@ class ApprovalTests(unittest.TestCase):
         self.assertFalse(self.ledger.approval_matches("a" * 64, 1, 3))
 
 
+class EvaluationAndOptimizationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = LedgerFixture()
+        self.addCleanup(self.fixture.cleanup)
+        self.ledger = self.fixture.ledger()
+        self.ledger.write(job_ledger.new_job("portrait-study"))
+        self.ledger.bind_plan("a" * 64, 1, 2)
+        for state in (job_ledger.JobState.PLAN_VALIDATED, job_ledger.JobState.APPROVED,
+                      job_ledger.JobState.RUNNING, job_ledger.JobState.COMPLETED):
+            self.ledger.transition(state)
+
+    def test_evaluation_evidence_is_recorded(self) -> None:
+        payload = self.ledger.record_evaluation("b" * 64, "fail")
+        self.assertEqual(payload["state"], "Evaluated")
+        self.assertEqual(payload["evaluation"]["scores_sha256"], "b" * 64)
+        self.assertRegex(payload["evaluation"]["evaluated_at"], ISO)
+
+    def test_optimization_records_next_plan_and_clears_current_approval(self) -> None:
+        self.ledger.record_evaluation("b" * 64, "fail")
+        payload = self.ledger.record_optimization("c" * 64, 2)
+        self.assertEqual(payload["state"], "Optimized")
+        self.assertEqual(payload["optimization"]["next_plan_sha256"], "c" * 64)
+        self.assertIsNone(payload["approval"]["current"])
+
+
 class UsageLimitTests(unittest.TestCase):
     def setUp(self) -> None:
         self.fixture = LedgerFixture()

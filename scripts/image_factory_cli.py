@@ -17,13 +17,16 @@ unattended bill.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import uuid
 from pathlib import Path
 
 import artifact_collector
+import atomic_json
 import capability_probe
+import contract_migrations
 import evaluator
 import generation_runner
 import job_lock
@@ -411,6 +414,26 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
     if not result.ok:
         return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)
 
+    ledger = job_ledger.JobLedger(Path(args.job))
+    current = ledger.read()
+    expected = {
+        "batch_id": result.batch_id,
+        "round": result.round,
+        "plan_sha256": result.plan_sha256,
+        "image_count": len(result.items),
+    }
+    if current["batch"] != expected:
+        raise ValueError("evaluation plan does not match the job batch")
+    state = job_ledger.JobState(current["state"])
+    if state not in (
+        job_ledger.JobState.COMPLETED,
+        job_ledger.JobState.PARTIAL,
+        job_ledger.JobState.PENDING_APPROVAL,
+    ):
+        raise ValueError(f"job state {state.value} cannot be evaluated")
+    if state is job_ledger.JobState.PARTIAL and ledger.pending_items(result.items):
+        raise ValueError("a partial job with pending calls cannot be evaluated")
+
     verified = receipt_store.load_verified_receipts(Path(args.job), Path(args.destination))
     receipts = {receipt["item_id"]: receipt for receipt in verified.values()}
 
@@ -430,12 +453,20 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
         reject_duplicates=result.reject_duplicates,
         pass_threshold=result.pass_threshold,
         advisory_enabled=result.advisory_enabled,
-        require_human_labels=False,
+        require_human_labels=result.require_human_labels,
         advisory=advisory,
         human_labels=labels,
     )
     scores_path = Path(args.scores)
-    scores_path.write_text(evaluator.render_scores(evaluation) + "\n", encoding="utf-8")
+    atomic_json.write_json_atomic(scores_path, evaluation.scores)
+    scores_sha256 = hashlib.sha256(scores_path.read_bytes()).hexdigest()
+    ledger.record_evaluation(scores_sha256, evaluation.scores["decision"])
+    target = {
+        "pass": job_ledger.JobState.ACCEPTED,
+        "pending_approval": job_ledger.JobState.PENDING_APPROVAL,
+    }.get(evaluation.scores["decision"])
+    if target is not None:
+        ledger.transition(target)
 
     payload = {
         "ok": evaluation.ok,
@@ -451,8 +482,41 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
 
 
 def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
-    plan = _load_json(Path(args.plan))
-    scores = _load_json(Path(args.scores))
+    plan_path = Path(args.plan)
+    plan = _load_json(plan_path)
+    validation = plan_validator.validate_plan(plan, base_dir=plan_path.parent)
+    if not validation.ok:
+        return EXIT_USAGE, _emit(_plan_error_payload(validation), args.json)
+    migration = contract_migrations.migrate_image_batch(plan)
+    plan = migration.document
+    scores_path = Path(args.scores)
+    scores = _load_json(scores_path)
+    ledger = job_ledger.JobLedger(Path(args.job))
+    current = ledger.read()
+    if current["state"] != job_ledger.JobState.EVALUATED.value:
+        raise ValueError("optimization requires an Evaluated job")
+    expected = {
+        "batch_id": validation.batch_id,
+        "round": validation.round,
+        "plan_sha256": validation.plan_sha256,
+        "image_count": len(validation.items),
+    }
+    if current["batch"] != expected:
+        raise ValueError("optimization plan does not match the job batch")
+    evaluation_record = current["evaluation"]
+    if evaluation_record is None:
+        raise ValueError("job has no persisted evaluation")
+    if (
+        hashlib.sha256(scores_path.read_bytes()).hexdigest()
+        != evaluation_record["scores_sha256"]
+    ):
+        raise ValueError("scores file does not match the persisted evaluation")
+    if (
+        not isinstance(scores, dict)
+        or scores.get("batch_id") != validation.batch_id
+        or scores.get("round") != validation.round
+    ):
+        raise ValueError("scores batch and round must match the current plan")
     rewrites = _load_json(Path(args.rewrites)) if args.rewrites else {}
     if not isinstance(rewrites, dict):
         return EXIT_USAGE, _emit({"ok": False, "error": "rewrites must be a JSON object"}, args.json)
@@ -478,9 +542,16 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
         return EXIT_OK, _emit(payload, args.json)
 
     assert outcome.next_plan is not None
-    Path(args.out).write_text(
-        json.dumps(outcome.next_plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    out_path = Path(args.out)
+    atomic_json.write_json_atomic(out_path, outcome.next_plan)
+    next_validation = plan_validator.validate_plan(outcome.next_plan, base_dir=out_path.parent)
+    if not next_validation.ok:
+        out_path.unlink(missing_ok=True)
+        return EXIT_FAILURE, _emit(_plan_error_payload(next_validation), args.json)
+    if next_validation.batch_id != validation.batch_id or next_validation.round != validation.round + 1:
+        out_path.unlink(missing_ok=True)
+        raise ValueError("optimized plan must preserve batch id and advance exactly one round")
+    ledger.record_optimization(next_validation.plan_sha256, next_validation.round)
     payload = {
         "ok": True,
         "complete": False,
@@ -500,14 +571,38 @@ def command_status(args: argparse.Namespace) -> tuple[int, str]:
         payload = job_ledger.load_ledger(Path(args.job))
     except job_ledger.LedgerCorruptError as error:
         return EXIT_FAILURE, _emit({"ok": False, "error": str(error)}, args.json)
+    counts = {name: 0 for name in ("generated", "failed", "pending", "unknown")}
+    for row in payload["items"]:
+        key = row["state"].lower()
+        if key in counts:
+            counts[key] += 1
+    bound_count = payload["batch"]["image_count"] if payload["batch"] else 0
+    counts["pending"] += max(0, bound_count - len(payload["items"]))
+    current_approval = payload["approval"]["current"]
+    approval = {
+        "current": (
+            None
+            if current_approval is None
+            else {
+                "round": current_approval["round"],
+                "image_count": current_approval["image_count"],
+                "plan_sha256": current_approval["plan_sha256"],
+            }
+        ),
+        "history_count": len(payload["approval"]["history"]),
+    }
     report = {
         "ok": True,
         "job_id": payload["job_id"],
         "state": payload["state"],
         "revision": payload["revision"],
+        "batch": payload["batch"],
+        "approval": approval,
+        "counts": counts,
+        "evaluation": payload["evaluation"],
+        "optimization": payload["optimization"],
+        "limit": payload["usage_limit"],
         "error_category": payload["error_category"],
-        "usage_limit": payload["usage_limit"],
-        "items": payload["items"],
     }
     return EXIT_OK, _emit(report, args.json)
 
@@ -555,6 +650,7 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--labels", default=None)
 
     optimize = subparsers.add_parser("optimize", parents=[shared])
+    optimize.add_argument("--job", required=True)
     optimize.add_argument("--plan", required=True)
     optimize.add_argument("--scores", required=True)
     optimize.add_argument("--out", required=True)
