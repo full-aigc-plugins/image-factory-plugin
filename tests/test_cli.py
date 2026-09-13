@@ -245,6 +245,12 @@ class RunCommandTests(unittest.TestCase):
             [receipt["item_id"] for receipt in prior] + ["item-03"],
         )
 
+        before = len(list(self.fixture.generation_dir.rglob("*.png")))
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, 0, output)
+        self.assertEqual(json.loads(output)["receipts"], [])
+        self.assertEqual(before, len(list(self.fixture.generation_dir.rglob("*.png"))))
+
     def test_changed_completed_job_is_refused_without_generation(self) -> None:
         code, output = self.run_batch("--approve")
         self.assertEqual(code, 0, output)

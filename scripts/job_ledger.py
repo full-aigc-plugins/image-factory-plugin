@@ -301,9 +301,9 @@ class JobLedger:
             "batch_id": self._job_id or payload["job_id"],
             "round": round_number,
             "plan_sha256": plan_sha256,
-            "image_count": image_count,
         }
-        if payload["batch"] != expected_binding:
+        bound = payload["batch"]
+        if bound is None or any(bound[key] != value for key, value in expected_binding.items()):
             raise ValueError("approval must exactly match the bound batch")
         record = {
             "plan_sha256": plan_sha256,
@@ -324,9 +324,12 @@ class JobLedger:
             "batch_id": self._job_id or payload["job_id"],
             "round": round_number,
             "plan_sha256": plan_sha256,
-            "image_count": image_count,
         }
-        return payload["batch"] == expected_binding and current is not None and all(
+        bound = payload["batch"]
+        binding_matches = bound is not None and all(
+            bound[key] == value for key, value in expected_binding.items()
+        )
+        return binding_matches and current is not None and all(
             (
                 current["plan_sha256"] == plan_sha256,
                 current["round"] == round_number,

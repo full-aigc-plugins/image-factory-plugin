@@ -466,6 +466,14 @@ class ApprovalTests(unittest.TestCase):
         self.assertFalse(self.ledger.approval_matches("b" * 64, 1, 2))
         self.assertEqual(self.ledger.read()["approval"]["history"], [])
 
+    def test_approval_count_is_remaining_calls_not_bound_plan_total(self) -> None:
+        self.ledger.bind_plan("a" * 64, 1, 3)
+        payload = self.ledger.record_approval("a" * 64, 1, 1, "run_approve_flag")
+        self.assertEqual(payload["batch"]["image_count"], 3)
+        self.assertEqual(payload["approval"]["current"]["image_count"], 1)
+        self.assertTrue(self.ledger.approval_matches("a" * 64, 1, 1))
+        self.assertFalse(self.ledger.approval_matches("a" * 64, 1, 3))
+
 
 class UsageLimitTests(unittest.TestCase):
     def setUp(self) -> None:

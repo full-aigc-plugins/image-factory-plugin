@@ -280,7 +280,7 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         }
         return EXIT_FAILURE, _emit(payload, args.json)
 
-    ledger.bind_plan(result.plan_sha256, result.round, len(pending))
+    ledger.bind_plan(result.plan_sha256, result.round, len(result.items))
     ledger.record_approval(
         result.plan_sha256,
         result.round,
