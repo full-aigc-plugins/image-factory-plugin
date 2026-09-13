@@ -210,6 +210,20 @@ class BodyTests(unittest.TestCase):
             with self.subTest(state=state):
                 self.assertIn(state, body)
 
+    def test_recover_skill_reconciles_before_recommending_a_next_action(self) -> None:
+        body = self.body("codex-image-factory-recover").lower()
+        self.assertIn("bin/image-factory recover", body)
+        self.assertIn("completed", body)
+        self.assertIn("failed", body)
+        self.assertIn("pending", body)
+        self.assertIn("unknown", body)
+        self.assertNotIn("resume with `run`", body)
+
+    def test_run_skill_requires_a_fresh_approval_for_partial_resume(self) -> None:
+        body = self.body("codex-image-factory-run").lower()
+        self.assertIn("remaining generation", body)
+        self.assertIn("fresh approval", body)
+
     def test_no_skill_instructs_an_install_or_a_retry(self) -> None:
         for name in EXPECTED:
             body = self.body(name).lower()

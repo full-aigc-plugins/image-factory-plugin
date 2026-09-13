@@ -36,14 +36,24 @@ counts, remaining generation-call count, and one legal next action in plain lang
    bin/image-factory validate-plan plan.json --json
    ```
 
-3Step 3. **Map the state to the single legal next step.** Do not improvise beyond it.
+3Step 3. **Reconcile durable evidence under the job lock.** This command validates
+   every per-item receipt against the artifact on disk, marks stale attempts
+   without a matching receipt `Unknown`, and rebuilds the receipt manifest. It
+   makes zero generation calls.
+
+   ```bash
+   bin/image-factory recover --plan plan.json --job job.json --destination out/ --json
+   ```
+
+4Step 4. **Map the reconciled state to the single legal next step.** Do not
+   improvise beyond it.
 
    | State | Meaning | Next step |
    | --- | --- | --- |
    | `Draft` | The job exists and nothing was validated | Validate the plan, then run |
    | `PlanValidated` | The plan passed validation and was not approved | Obtain approval, then run |
    | `Approved` | Approved and not yet started | Run |
-   | `Running` | A run was in progress and did not finish | Read the item states, then resume with `run`; finished items are skipped |
+   | `Running` | A run was in progress and did not finish | Reconcile receipts; unresolved attempts become `Unknown` |
    | `Evaluated` | A verdict was reached | Judge the outcome or optimize the failing items |
    | `Optimized` | A next round exists | Run the next round, then evaluate it |
    | `Completed` | Every item produced a verified artifact | Evaluate the batch |
@@ -51,11 +61,16 @@ counts, remaining generation-call count, and one legal next action in plain lang
    | `Failed` | The job cannot proceed and is terminal | Report why, and start a new job if the user wants to try again |
    | `Unknown` | An interruption left the outcome unresolved | Query the state; do not re-run to find out |
 
-4Step 4. **Report the failure categories and the usage limit if one is present.** A
+5Step 5. **Report the completed, failed, pending, and unknown counts**, then give
+   exactly one legal next action. If any item is `Unknown`, explain that its
+   external outcome is ambiguous and stop; never suggest a retry as a diagnostic
+   action.
+
+6Step 6. **Report the failure categories and the usage limit if one is present.** A
    ledger carrying `quota_exceeded` holds the reset time for the image
    allowance. Report it and wait.
 
-5Step 5. **Tell the user what continuing would cost** before resuming: how many items
+7Step 7. **Tell the user what continuing would cost** before resuming: how many items
    are still pending, and therefore how many generation calls the resume would
    make. Only the items with no recorded attempt are pending.
 
@@ -86,7 +101,7 @@ result, that is a new round with a rewritten prompt, not a recovery.
 ## Gotchas
 
 - An unreadable ledger is not an empty one. Overwriting it discards the only record of what was already spent.
-- `Running` does not mean the batch is progressing; it means a run did not finish. Read the item states before resuming.
+- `Running` does not mean the batch is progressing; it means a run did not finish. Reconcile it before naming a next action.
 - `Partial` is a normal outcome, not corruption. Items that failed are not pending, so a resume will not touch them.
 - A usage limit is not a failure of the batch. Report the reset time instead of resuming.
 - Finished items are skipped on resume by design. Reporting "nothing happened" when the ledger shows zero pending items is misleading.

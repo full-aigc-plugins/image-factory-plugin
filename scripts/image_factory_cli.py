@@ -21,6 +21,7 @@ import hashlib
 import json
 import sys
 import uuid
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import artifact_collector
@@ -195,6 +196,17 @@ class ApprovalRequiredError(RuntimeError):
 
 class RunStateError(RuntimeError):
     """The durable job state cannot safely enter an ordinary generation run."""
+
+
+@dataclass(frozen=True)
+class RecoveryReport:
+    """Result of reconciling durable job evidence without generating images."""
+
+    state: str
+    reconciled: tuple[str, ...]
+    unknown: tuple[str, ...]
+    pending_count: int
+    remaining_generation_calls: int
 
 
 def require_runnable_state(payload: dict, pending: list[plan_validator.PlanItem]) -> None:
@@ -396,6 +408,116 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         "ledger": str(job_path),
     }
     code = EXIT_OK if failed == 0 else EXIT_FAILURE
+    return code, _emit(payload, args.json)
+
+
+# --------------------------------------------------------------------- recovery
+
+
+def command_recover(args: argparse.Namespace) -> tuple[int, str]:
+    """Reconcile verified receipts into the ledger without invoking Codex."""
+    result, _plan_path = _validated_plan(args)
+    if not result.ok:
+        return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)
+
+    job_path = Path(args.job)
+    destination = Path(args.destination)
+    ledger = job_ledger.JobLedger(job_path)
+    current = ledger.read()
+    expected = {
+        "batch_id": result.batch_id,
+        "round": result.round,
+        "plan_sha256": result.plan_sha256,
+        "image_count": len(result.items),
+    }
+    if current["batch"] != expected:
+        raise ValueError("recovery plan does not match the job batch")
+    source_state = job_ledger.JobState(current["state"])
+    if source_state not in (
+        job_ledger.JobState.RUNNING,
+        job_ledger.JobState.UNKNOWN,
+        job_ledger.JobState.PARTIAL,
+        job_ledger.JobState.COMPLETED,
+    ):
+        raise ValueError(f"job state {source_state.value} does not require recovery")
+
+    # Verification is deliberately completed before the ledger is mutated.
+    verified = receipt_store.load_verified_receipts(job_path, destination)
+    plan_by_key = {item.idempotency_key: item for item in result.items}
+    applicable: dict[str, dict] = {}
+    for key, receipt in verified.items():
+        # The aggregate manifest is only a compatibility projection. Recovery
+        # authority comes from the deterministic per-item receipt file.
+        if not receipt_store.receipt_path(job_path, key).is_file():
+            continue
+        item = plan_by_key.get(key)
+        if item is None or (
+            receipt["batch_id"] != result.batch_id
+            or receipt["round"] != result.round
+            or receipt["item_id"] != item.id
+        ):
+            raise ValueError("verified receipt does not match the recovery plan")
+        applicable[key] = receipt
+
+    reconciled: list[str] = []
+    unknown: list[str] = []
+    for row in current["items"]:
+        if row["state"] not in ("Attempting", "Unknown"):
+            continue
+        receipt = applicable.get(row["idempotency_key"])
+        if receipt is not None and receipt["item_id"] == row["item_id"]:
+            row["state"] = "Generated"
+            row["receipt_id"] = receipt["artifact_id"]
+            row["error_category"] = None
+            reconciled.append(row["item_id"])
+        else:
+            row["state"] = "Unknown"
+            row["receipt_id"] = None
+            row["error_category"] = "unknown"
+            unknown.append(row["item_id"])
+
+    recorded_keys = {
+        row["idempotency_key"] for row in current["items"] if row["idempotency_key"]
+    }
+    pending_count = sum(item.idempotency_key not in recorded_keys for item in result.items)
+    generated_count = sum(row["state"] == "Generated" for row in current["items"])
+    failed_count = sum(row["state"] == "Failed" for row in current["items"])
+    unknown_count = sum(row["state"] == "Unknown" for row in current["items"])
+    if unknown_count:
+        target = job_ledger.JobState.UNKNOWN
+    elif generated_count == len(result.items):
+        target = job_ledger.JobState.COMPLETED
+    else:
+        target = job_ledger.JobState.PARTIAL
+
+    if source_state is not target:
+        current["history"].append(
+            {
+                "from_state": source_state.value,
+                "to_state": target.value,
+                "at": job_ledger._timestamp(),
+                "note": "reconciled verified per-item receipts",
+            }
+        )
+    current["state"] = target.value
+    ledger._persist_mutation(current)
+    receipt_store.rebuild_manifest(job_path, applicable)
+
+    report = RecoveryReport(
+        state=target.value,
+        reconciled=tuple(reconciled),
+        unknown=tuple(unknown),
+        pending_count=pending_count,
+        remaining_generation_calls=pending_count,
+    )
+    payload = {
+        "ok": not unknown_count,
+        **asdict(report),
+        "completed_count": generated_count,
+        "failed_count": failed_count,
+        "unknown_count": unknown_count,
+    }
+    code = EXIT_RECOVERY_REQUIRED if unknown_count else EXIT_OK
     return code, _emit(payload, args.json)
 
 
@@ -668,6 +790,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--approve", action="store_true")
     run.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
 
+    recover = subparsers.add_parser("recover", parents=[shared])
+    recover.add_argument("--plan", required=True)
+    recover.add_argument("--job", required=True)
+
     evaluate = subparsers.add_parser("evaluate", parents=[shared])
     evaluate.add_argument("--plan", required=True)
     evaluate.add_argument("--job", required=True)
@@ -695,6 +821,7 @@ HANDLERS = {
     "validate-plan": command_validate_plan,
     "quote": command_quote,
     "run": command_run,
+    "recover": command_recover,
     "evaluate": command_evaluate,
     "optimize": command_optimize,
     "status": command_status,

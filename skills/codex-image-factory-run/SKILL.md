@@ -51,6 +51,8 @@ For an already approved plan, preserve its prompts and proceed directly.
    card and quote first. Run only when the user has agreed to generate these
    images. If the plan sets `require_approval_before_run`, the command refuses to
    start without `--approve`. Approval from an earlier round does not apply.
+   For a safe `Partial` resume, quote the exact remaining generation-call count
+   and obtain fresh approval for those pending items before continuing.
 
 4Step 4. **Run it.**
 
