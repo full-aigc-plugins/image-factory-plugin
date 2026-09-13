@@ -2,8 +2,11 @@ import json
 import struct
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+
+from scripts import validate_distribution
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +33,30 @@ def png_shape(relative: str) -> tuple[int, int, int]:
 
 
 class DistributionTests(unittest.TestCase):
+    def validator_errors_for_workflow(self, workflow: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".codex-plugin").mkdir()
+            (root / ".agents/plugins").mkdir(parents=True)
+            (root / ".github/workflows").mkdir(parents=True)
+            (root / ".codex-plugin/plugin.json").write_text(
+                json.dumps(
+                    {
+                        "name": PLUGIN_ID,
+                        "version": RELEASE_VERSION,
+                        "repository": REPOSITORY,
+                        "skills": "./skills/",
+                        "interface": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / ".agents/plugins/marketplace.json").write_text(
+                json.dumps({"plugins": []}), encoding="utf-8"
+            )
+            (root / ".github/workflows/ci.yml").write_text(workflow, encoding="utf-8")
+            return validate_distribution.validate(root)
+
     def test_ci_runs_the_offline_gates_on_the_supported_matrix(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         for operating_system in ("ubuntu-latest", "macos-latest", "windows-latest"):
@@ -44,6 +71,33 @@ class DistributionTests(unittest.TestCase):
         ):
             self.assertIn(command, workflow)
         self.assertNotIn("pip install", workflow)
+
+    def test_validator_rejects_extra_ci_matrix_axes_and_values(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        workflow = workflow.replace(
+            'python-version: ["3.11", "3.13"]',
+            'python-version: ["3.11", "3.12", "3.13"]\n        architecture: [x64]',
+        )
+        errors = self.validator_errors_for_workflow(workflow)
+        self.assertIn(
+            "CI matrix must contain exactly os and python-version with the supported values",
+            errors,
+        )
+
+    def test_validator_rejects_dependency_installer_variants(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        for command in (
+            "pip install package",
+            "python -m pip install package",
+            "uv sync",
+            "poetry install",
+            "pipx install package",
+            "conda install package",
+        ):
+            with self.subTest(command=command):
+                candidate = workflow + f"\n      - run: {command}\n"
+                errors = self.validator_errors_for_workflow(candidate)
+                self.assertIn("CI workflow must not install dependencies", errors)
 
     def test_validator_accepts_distribution(self) -> None:
         result = subprocess.run(

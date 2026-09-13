@@ -1,6 +1,6 @@
 # Codex Image Factory 0.1.2 Production Hardening Design Specification
 
-> Status: approved for implementation planning; not implemented. 2026-09-14.
+> Status: implemented as a locally verified 0.1.2 release candidate; external publication, remote CI, parity, clean-install, fresh-session, and paid-canary gates remain pending. Not production-ready. 2026-09-14.
 
 ## Goal
 

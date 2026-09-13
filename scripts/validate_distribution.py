@@ -14,6 +14,15 @@ SECRET_PATTERNS = (
     re.compile(rb"AIza[0-9A-Za-z_-]{20,}"),
     re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 )
+CI_MATRIX_PATTERN = re.compile(r"(?m)^ {6}matrix:\s*\n((?: {8}[^\n]+\n?)+)")
+CI_DEPENDENCY_INSTALLER_PATTERN = re.compile(
+    r"(?i)\b(?:"
+    r"(?:python(?:3)?\s+-m\s+)?pip(?:3)?\s+install|"
+    r"pipx\s+install|uv\s+(?:sync|add)|poetry\s+(?:install|add)|"
+    r"(?:conda|mamba)\s+install|npm\s+(?:install|ci)|"
+    r"(?:yarn|pnpm|bun)\s+(?:install|add)"
+    r")\b"
+)
 REQUIRED_FILES = (
     ".github/workflows/ci.yml",
     "README.md",
@@ -106,6 +115,33 @@ def validate(root: Path) -> list[str]:
         ):
             if required not in workflow:
                 errors.append(f"CI workflow missing required contract: {required}")
+        matrix_match = CI_MATRIX_PATTERN.search(workflow)
+        matrix: dict[str, list[str]] = {}
+        if matrix_match is not None:
+            for line in matrix_match.group(1).splitlines():
+                key, separator, raw_values = line.strip().partition(":")
+                if (
+                    not separator
+                    or not raw_values.strip().startswith("[")
+                    or not raw_values.strip().endswith("]")
+                ):
+                    matrix = {}
+                    break
+                matrix[key] = [
+                    value.strip().strip('"\'')
+                    for value in raw_values.strip()[1:-1].split(",")
+                    if value.strip()
+                ]
+        expected_matrix = {
+            "os": ["ubuntu-latest", "macos-latest", "windows-latest"],
+            "python-version": ["3.11", "3.13"],
+        }
+        if matrix != expected_matrix:
+            errors.append(
+                "CI matrix must contain exactly os and python-version with the supported values"
+            )
+        if CI_DEPENDENCY_INSTALLER_PATTERN.search(workflow):
+            errors.append("CI workflow must not install dependencies")
 
     runtime_evidence_path = root / "docs" / "verification" / "runtime.md"
     if runtime_evidence_path.is_file():
