@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sys
 import uuid
 from dataclasses import asdict, dataclass
@@ -209,13 +210,19 @@ class RecoveryReport:
     remaining_generation_calls: int
 
 
-def require_runnable_state(payload: dict, pending: list[plan_validator.PlanItem]) -> None:
+def require_runnable_state(
+    payload: dict,
+    pending: list[plan_validator.PlanItem],
+    plan_items: tuple[plan_validator.PlanItem, ...],
+) -> None:
     state = job_ledger.JobState(payload["state"])
     if state is job_ledger.JobState.COMPLETED and not pending:
         return
     if state is job_ledger.JobState.PARTIAL:
+        current_keys = {item.idempotency_key for item in plan_items}
         if pending and payload["usage_limit"] is None and not any(
-            row["state"] == "Unknown" for row in payload["items"]
+            row["state"] == "Unknown" and row["idempotency_key"] in current_keys
+            for row in payload["items"]
         ):
             return
         raise RunStateError("this partial job is not eligible for an automatic generation resume")
@@ -235,7 +242,7 @@ def prepare_run(
 ) -> list[plan_validator.PlanItem]:
     pending = ledger.pending_items(plan.items)
     payload = ledger.read()
-    require_runnable_state(payload, pending)
+    require_runnable_state(payload, pending, plan.items)
     if job_ledger.JobState(payload["state"]) is job_ledger.JobState.COMPLETED:
         expected = {
             "batch_id": plan.batch_id,
@@ -245,7 +252,12 @@ def prepare_run(
         }
         if payload["batch"] != expected:
             raise RunStateError("a changed completed job cannot be resumed as a generation run")
-    ledger.bind_plan(plan.plan_sha256, plan.round, len(plan.items))
+    ledger.bind_plan(
+        plan.plan_sha256,
+        plan.round,
+        len(plan.items),
+        (item.idempotency_key for item in plan.items),
+    )
     if pending and not approved:
         raise ApprovalRequiredError(len(pending))
     if pending:
@@ -442,9 +454,12 @@ def command_recover(args: argparse.Namespace) -> tuple[int, str]:
         raise ValueError(f"job state {source_state.value} does not require recovery")
 
     plan_by_id = {item.id: item for item in result.items}
+    current_keys = {item.idempotency_key for item in result.items}
     rows_by_id: dict[str, dict] = {}
     keys_seen: set[str] = set()
     for row in current["items"]:
+        if row["idempotency_key"] not in current_keys:
+            continue
         item = plan_by_id.get(row["item_id"])
         if item is None or row["idempotency_key"] != item.idempotency_key:
             raise ValueError("ledger item does not match the current plan")
@@ -454,7 +469,7 @@ def command_recover(args: argparse.Namespace) -> tuple[int, str]:
         keys_seen.add(row["idempotency_key"])
 
     # Verification and all consistency checks complete before ledger mutation.
-    verified = receipt_store.load_verified_receipts(job_path, destination)
+    verified = receipt_store.load_verified_receipts(job_path, destination, current_keys)
     plan_by_key = {item.idempotency_key: item for item in result.items}
     applicable: dict[str, dict] = {}
     for key, receipt in verified.items():
@@ -584,8 +599,34 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
     if state is job_ledger.JobState.PARTIAL and ledger.pending_items(result.items):
         raise ValueError("a partial job with pending calls cannot be evaluated")
 
-    verified = receipt_store.load_verified_receipts(Path(args.job), Path(args.destination))
-    receipts = {receipt["item_id"]: receipt for receipt in verified.values()}
+    current_keys = {item.idempotency_key for item in result.items}
+    verified = receipt_store.load_verified_receipts(
+        Path(args.job), Path(args.destination), current_keys
+    )
+    current_rows = {
+        row["idempotency_key"]: row
+        for row in current["items"]
+        if row["idempotency_key"] in current_keys
+    }
+    receipts: dict[str, dict] = {}
+    for item in result.items:
+        row = current_rows.get(item.idempotency_key)
+        receipt = verified.get(item.idempotency_key)
+        expected_prompt = hashlib.sha256(item.prompt.encode("utf-8")).hexdigest()
+        if (
+            row is None
+            or row["state"] != "Generated"
+            or receipt is None
+            or receipt["batch_id"] != result.batch_id
+            or receipt["round"] != result.round
+            or receipt["item_id"] != item.id
+            or receipt["prompt_sha256"] != expected_prompt
+            or row["receipt_id"] != receipt["artifact_id"]
+        ):
+            raise ValueError(
+                f"current receipt and ledger evidence do not match plan item {item.id!r}"
+            )
+        receipts[item.id] = receipt
 
     try:
         advisory = _advisory_from_file(args.advisory)
@@ -746,12 +787,23 @@ def command_status(args: argparse.Namespace) -> tuple[int, str]:
         name: 0
         for name in ("attempting", "failed", "generated", "pending", "skipped", "unknown")
     }
-    for row in payload["items"]:
+    current_keys = set(payload.get("current_item_keys") or ())
+    current_rows = [
+        row
+        for row in payload["items"]
+        if not current_keys or row.get("idempotency_key") in current_keys
+    ]
+    current_row_keys = [row.get("idempotency_key") for row in current_rows]
+    if len(current_row_keys) != len(set(current_row_keys)):
+        return EXIT_FAILURE, _emit(
+            {"ok": False, "error": "duplicate current-round ledger rows"}, args.json
+        )
+    for row in current_rows:
         key = row["state"].lower()
         if key in counts:
             counts[key] += 1
     bound_count = payload["batch"]["image_count"] if payload["batch"] else 0
-    counts["pending"] += max(0, bound_count - len(payload["items"]))
+    counts["pending"] += max(0, bound_count - len(current_rows))
     current_approval = payload["approval"]["current"]
     approval = {
         "current": (
@@ -784,6 +836,13 @@ def command_status(args: argparse.Namespace) -> tuple[int, str]:
 # ------------------------------------------------------------------------ wiring
 
 
+def _positive_finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("timeout must be a positive finite number")
+    return parsed
+
+
 def command_prompt_search(args: argparse.Namespace) -> tuple[int, str]:
     return EXIT_OK, _emit(prompt_library.search(args.query, args.limit), args.json)
 
@@ -814,7 +873,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--plan", required=True)
     run.add_argument("--job", required=True)
     run.add_argument("--approve", action="store_true")
-    run.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    run.add_argument("--timeout", type=_positive_finite_float, default=DEFAULT_TIMEOUT_SECONDS)
 
     recover = subparsers.add_parser("recover", parents=[shared])
     recover.add_argument("--plan", required=True)

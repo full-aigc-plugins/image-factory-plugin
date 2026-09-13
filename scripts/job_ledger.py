@@ -146,6 +146,7 @@ def new_job(job_id: str) -> dict:
         "updated_at": stamp,
         "batch": None,
         "rounds": [],
+        "current_item_keys": [],
         "items": [],
         "approval": {"current": None, "history": []},
         "evaluation": None,
@@ -271,7 +272,13 @@ class JobLedger:
         self.write(payload)
         return payload
 
-    def bind_plan(self, plan_sha256: str, round_number: int, image_count: int) -> dict:
+    def bind_plan(
+        self,
+        plan_sha256: str,
+        round_number: int,
+        image_count: int,
+        item_keys: object | None = None,
+    ) -> dict:
         self._validate_plan_binding(plan_sha256, round_number, image_count)
         payload = self.read()
         binding = {
@@ -280,8 +287,22 @@ class JobLedger:
             "plan_sha256": plan_sha256,
             "image_count": image_count,
         }
-        if payload["batch"] != binding:
+        keys = None if item_keys is None else list(item_keys)
+        if keys is not None and (
+            len(keys) != image_count
+            or len(set(keys)) != image_count
+            or any(
+                not isinstance(key, str) or not json_pattern_match(key, SHA256_PATTERN)
+                for key in keys
+            )
+        ):
+            raise ValueError("item_keys must contain one unique idempotency key per image")
+        if payload["batch"] != binding or (
+            keys is not None and payload.get("current_item_keys") != keys
+        ):
             payload["batch"] = binding
+            if keys is not None:
+                payload["current_item_keys"] = keys
             payload["approval"]["current"] = None
             self._persist_mutation(payload)
         return payload
@@ -469,7 +490,11 @@ class JobLedger:
         self._validate_attempt_id(attempt_id)
         payload = self.read()
         entry = next(
-            (row for row in payload["items"] if row["item_id"] == item_id),
+            (
+                row
+                for row in payload["items"]
+                if row["item_id"] == item_id and row["attempt_id"] == attempt_id
+            ),
             None,
         )
         if entry is None or entry["state"] != "Attempting" or entry["attempt_id"] != attempt_id:

@@ -70,7 +70,11 @@ def _verify_artifact(receipt: dict, source: Path, destination_dir: Path) -> None
         )
 
 
-def _load_legacy_manifest(job_path: Path, destination_dir: Path) -> dict[str, dict]:
+def _load_legacy_manifest(
+    job_path: Path,
+    destination_dir: Path,
+    idempotency_keys: set[str] | None = None,
+) -> dict[str, dict]:
     source = manifest_path(job_path)
     if not source.exists():
         return {}
@@ -85,6 +89,8 @@ def _load_legacy_manifest(job_path: Path, destination_dir: Path) -> dict[str, di
     for index, candidate in enumerate(decoded):
         receipt = _validate(candidate, Path(f"{source}[{index}]"))
         key = receipt["idempotency_key"]
+        if idempotency_keys is not None and key not in idempotency_keys:
+            continue
         if key in loaded:
             raise ReceiptStoreError(f"duplicate idempotency key {key!r} in {source}")
         _verify_artifact(receipt, source, destination_dir)
@@ -92,8 +98,12 @@ def _load_legacy_manifest(job_path: Path, destination_dir: Path) -> dict[str, di
     return loaded
 
 
-def load_verified_receipts(job_path: Path, destination_dir: Path) -> dict[str, dict]:
-    loaded = _load_legacy_manifest(job_path, destination_dir)
+def load_verified_receipts(
+    job_path: Path,
+    destination_dir: Path,
+    idempotency_keys: set[str] | None = None,
+) -> dict[str, dict]:
+    loaded = _load_legacy_manifest(job_path, destination_dir, idempotency_keys)
     directory = receipt_directory(job_path)
     if not directory.exists():
         return loaded
@@ -101,6 +111,8 @@ def load_verified_receipts(job_path: Path, destination_dir: Path) -> dict[str, d
         raise ReceiptStoreError(f"receipt store is not a directory: {directory}")
 
     for source in sorted(directory.glob("*.json")):
+        if idempotency_keys is not None and source.stem not in idempotency_keys:
+            continue
         try:
             decoded = json.loads(source.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:

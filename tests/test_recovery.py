@@ -142,18 +142,16 @@ class RecoveryCommandTests(unittest.TestCase):
         self.assertIn("item-01", report["unknown"])
         self.assertEqual(self.fixture.read_job()["items"][0]["state"], "Unknown")
 
-    def test_foreign_ledger_row_is_refused_without_mutation(self) -> None:
+    def test_historical_ledger_row_is_ignored_and_preserved(self) -> None:
         ledger = self.fixture.read_job()
         ledger["state"] = "Running"
         foreign = dict(ledger["items"][0])
         foreign.update(item_id="foreign", idempotency_key="d" * 64)
         ledger["items"].append(foreign)
         self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
-        before = self.fixture.job_path.read_bytes()
         code, report = self.recover()
-        self.assertEqual(code, cli.EXIT_FAILURE, report)
-        self.assertIn("current plan", report["error"])
-        self.assertEqual(self.fixture.job_path.read_bytes(), before)
+        self.assertEqual(code, cli.EXIT_OK, report)
+        self.assertEqual(len(self.fixture.read_job()["items"]), 3)
 
     def test_duplicate_ledger_rows_are_refused_without_mutation(self) -> None:
         ledger = self.fixture.read_job()

@@ -251,6 +251,18 @@ class RunCommandTests(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_APPROVAL_REQUIRED, output)
         ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
         self.assertEqual(ledger["error_category"], "approval_required")
+
+    def test_run_rejects_non_positive_and_non_finite_timeouts_before_writing_a_job(self) -> None:
+        for value in ("0", "-1", "nan", "inf", "-inf"):
+            with self.subTest(timeout=value):
+                job_path = self.fixture.base / f"job-{value}.json"
+                code, output = self.fixture.run_cli(
+                    "run", "--plan", str(self.fixture.plan_path), "--job", str(job_path),
+                    "--codex-bin", str(SHIM), *self.fixture.base_args(), "--approve",
+                    f"--timeout={value}", "--json",
+                )
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertFalse(job_path.exists())
         self.assertEqual(len(list(self.fixture.generation_dir.rglob("*.png"))), 0)
         self.assertFalse((self.fixture.base / "fake-codex-argv.json").exists())
 
@@ -517,6 +529,7 @@ class StatusCommandTests(unittest.TestCase):
                 error_category="unknown" if state == "Unknown" else None,
             )
             ledger["items"].append(row)
+        ledger["current_item_keys"] = [row["idempotency_key"] for row in ledger["items"]]
         ledger["batch"]["image_count"] = len(states)
         cli.job_ledger.write_ledger(self.fixture.job_path, ledger)
 
@@ -536,6 +549,17 @@ class StatusCommandTests(unittest.TestCase):
             "status", "--job", str(self.fixture.base / "absent.json"), "--json"
         )
         self.assertEqual(code, cli.EXIT_FAILURE)
+
+    def test_status_refuses_duplicate_current_round_rows_instead_of_overcounting(self) -> None:
+        self.fixture.run_approved_batch()
+        ledger = self.fixture.read_job()
+        ledger["items"].append(dict(ledger["items"][0]))
+        cli.job_ledger.write_ledger(self.fixture.job_path, ledger)
+
+        code, output = self.fixture.run_cli("status", "--job", str(self.fixture.job_path), "--json")
+
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("duplicate current-round", json.loads(output)["error"])
 
 
 class EvaluateAndOptimizeCommandTests(unittest.TestCase):
