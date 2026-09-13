@@ -1,8 +1,10 @@
 import hashlib
 import json
+import struct
 import sys
 import tempfile
 import unittest
+import zlib
 from pathlib import Path
 
 
@@ -36,6 +38,54 @@ def minimal_plan(**overrides) -> dict:
     }
     plan.update(overrides)
     return plan
+
+
+def _valid_png(red: int) -> bytes:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    header = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    pixels = zlib.compress(bytes((0, red, 0, 0)))
+    return header + chunk(b"IHDR", ihdr) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
+
+
+def valid_plan_1_1() -> dict:
+    return minimal_plan()
+
+
+def plan_with_reference(reference: Path) -> dict:
+    return minimal_plan(
+        items=[{"id": "item-01", "prompt": "p", "reference_images": [str(reference)]}]
+    )
+
+
+def second_png() -> bytes:
+    return _valid_png(2)
+
+
+def plan_a() -> dict:
+    return minimal_plan()
+
+
+def same_plan_with_different_key_order() -> dict:
+    return {
+        "items": [{"prompt": "A calm portrait on rice paper", "id": "item-01"}],
+        "judge_policy": {
+            "require_human_labels": True,
+            "pass_threshold": 0.8,
+            "reject_duplicates": True,
+            "min_dimension": 256,
+        },
+        "limits": {
+            "require_approval_before_run": True,
+            "max_rounds": 3,
+            "max_images": 20,
+        },
+        "round": 1,
+        "batch_id": "portrait-study",
+        "schema_version": "1.1.0",
+    }
 
 
 class PlanFixture:
@@ -201,6 +251,33 @@ class PlanValidatorTests(unittest.TestCase):
         self.assertTrue(result.ok, result.errors)
         expected = hashlib.sha256(b"known-bytes").hexdigest()
         self.assertEqual(result.items[0].reference_sha256, (expected,))
+
+    def test_human_label_policy_reaches_plan_result(self) -> None:
+        result = self.fixture.validate(valid_plan_1_1())
+        self.assertTrue(result.require_human_labels)
+
+    def test_plan_hash_changes_when_reference_bytes_change(self) -> None:
+        reference = self.fixture.reference("ref.png", _valid_png(1))
+        plan = plan_with_reference(reference)
+        first = self.fixture.validate(plan)
+        reference.write_bytes(second_png())
+        second = self.fixture.validate(plan)
+        self.assertNotEqual(first.plan_sha256, second.plan_sha256)
+
+    def test_semantically_identical_json_has_the_same_plan_hash(self) -> None:
+        first = self.fixture.validate(plan_a())
+        second = self.fixture.validate(same_plan_with_different_key_order())
+        self.assertEqual(first.plan_sha256, second.plan_sha256)
+
+    def test_legacy_plan_reports_migration_note(self) -> None:
+        legacy = {
+            "schema_version": "1.0.0",
+            "batch_id": "portrait-study",
+            "round": 1,
+            "items": [{"id": "item-01", "prompt": "legacy portrait"}],
+        }
+        result = self.fixture.validate(legacy)
+        self.assertEqual(result.migration_notes, ("migrated image batch 1.0.0 to 1.1.0",))
 
 
 if __name__ == "__main__":
