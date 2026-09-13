@@ -61,7 +61,9 @@ counts, remaining generation-call count, and one legal next action in plain lang
    | `Approved` | Approved and not yet started | Run |
    | `Running` | A run was in progress and did not finish | Reconcile receipts; unresolved attempts become `Unknown` |
    | `Evaluated` | A verdict was reached | Judge the outcome or optimize the failing items |
+   | `PendingApproval` | Deterministic evaluation passed but required human labels are missing | Return to judge and ask only for the missing labels |
    | `Optimized` | A next round exists | Run the next round, then evaluate it |
+   | `Accepted` | Every required result was explicitly accepted | Terminal; do not run, recover, or optimize |
    | `Completed` | Every item produced a verified artifact | Evaluate the batch |
    | `Partial` | The run finished with at least one failed item | Read the failure categories, then decide |
    | `Failed` | The job cannot proceed and is terminal | Report why, and start a new job if the user wants to try again |

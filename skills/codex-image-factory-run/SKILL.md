@@ -24,7 +24,12 @@ details in the background unless the user asks for them.
 When a user describes a batch but has no plan yet, read
 [prompt preparation](references/prompt-preparation.md). Use the bundled
 template search to prepare prompts and a valid batch plan before validation.
-For an already approved plan, preserve its prompts and proceed directly.
+When an approval record already exists, preserve the prompts but do not treat
+the record alone as permission to proceed. Verify that it still matches the
+exact currently displayed plan, round, and remaining generation-call count.
+If it does not, show the current card and require fresh approval. In normal user
+copy, say which visible plan detail changed without exposing hashes or ledger
+internals.
 
 1Step 1. **Validate the plan before anything else.**
 

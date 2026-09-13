@@ -6,6 +6,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import job_ledger  # noqa: E402
 
 EXPECTED = (
     "codex-image-factory-use",
@@ -195,20 +198,16 @@ class BodyTests(unittest.TestCase):
 
     def test_recover_skill_maps_every_ledger_state(self) -> None:
         body = self.body("codex-image-factory-recover")
-        for state in (
-            "Draft",
-            "PlanValidated",
-            "Approved",
-            "Running",
-            "Evaluated",
-            "Optimized",
-            "Completed",
-            "Partial",
-            "Failed",
-            "Unknown",
-        ):
+        for state in job_ledger.JobState:
             with self.subTest(state=state):
-                self.assertIn(state, body)
+                self.assertIn(f"`{state.value}`", body)
+
+    def test_run_skill_never_treats_stale_approval_as_permission_to_proceed(self) -> None:
+        body = self.body("codex-image-factory-run")
+        self.assertNotIn("already approved plan", body.lower())
+        self.assertIn("verify", body.lower())
+        self.assertIn("displayed plan", body.lower())
+        self.assertIn("remaining generation-call", body.lower())
 
     def test_recover_skill_reconciles_before_recommending_a_next_action(self) -> None:
         body = self.body("codex-image-factory-recover").lower()
