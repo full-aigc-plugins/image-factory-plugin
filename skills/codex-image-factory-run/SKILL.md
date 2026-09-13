@@ -53,6 +53,9 @@ For an already approved plan, preserve its prompts and proceed directly.
    start without `--approve`. Approval from an earlier round does not apply.
    For a safe `Partial` resume, quote the exact remaining generation-call count
    and obtain fresh approval for those pending items before continuing.
+   Bind that approval to the exact plan, round, and remaining generation-call
+   count shown on the card. If a prompt, reference image, item, policy, round, or
+   count changes, the approval is invalid and a new card and approval are required.
 
 4Step 4. **Run it.**
 
@@ -98,8 +101,10 @@ State these to the user rather than working around them:
   guidance instead of retrying.
 - `quota_exceeded` — the account's image allowance is exhausted. Report the reset
   time and stop.
-- `artifact_missing`, `timeout`, `generation_failed` — recorded per item. The
-  batch continues with the remaining items.
+- `artifact_missing`, `timeout`, `generation_failed` — recorded per item. A
+  timeout or success without durable artifact evidence is ambiguous `Unknown`;
+  stop later calls and recover without generating. Definite failures are
+  recorded as `Failed` and are not silently retried.
 
 ## Gotchas
 

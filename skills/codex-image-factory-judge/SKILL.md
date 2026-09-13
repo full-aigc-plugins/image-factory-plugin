@@ -63,6 +63,10 @@ for a rewrite.
    or `全部换一种风格`. Map visible numbers back to item ids. Unmentioned items
    remain unlabeled; never infer approval from silence.
 
+   When required labels remain missing, describe `PendingApproval` as waiting
+   for the user's decision, not as failure. Only a fully approved passing batch
+   becomes `Accepted`.
+
 5Step 5. **Turn the failures into the next round.** Decide what to change for each item
    that needs rework, then hand those decisions to the optimizer:
 
@@ -88,7 +92,9 @@ for a rewrite.
 
    Then report the decision and the carried-forward items. An item that already
    passed is not regenerated, so the next round is smaller than the last.
-   Quote that round and obtain a new approval before generation.
+   Optimization changes the plan and invalidates the prior approval. Show a new
+   confirmation card, quote the exact remaining calls for that round, and obtain
+   a new approval before generation.
 
 ## Platform boundaries
 

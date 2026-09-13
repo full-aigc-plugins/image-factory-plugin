@@ -19,6 +19,9 @@ document.
 The conversation is the product surface. Read and follow
 [the conversation workflow](references/conversation-workflow.md) so goal capture,
 choices, generation approval, result labels, and later rounds use one contract.
+Treat approval as transactional: it applies only to the displayed plan, round,
+and remaining generation-call count. Any change invalidates it and requires a
+new confirmation card and explicit approval.
 
 For a new goal without a plan, the first user-facing response must advance the
 work instead of returning only questions. Infer a sensible default and show:
@@ -69,5 +72,7 @@ continues the same conversation; the user never has to re-enter confirmed choice
 - Never install, upgrade, or modify another plugin.
 - Never approve a run on the user's behalf, and never run the CLI with
   `--approve` unless the user asked for this batch to be generated.
+- Never map an approval to an undisplayed plan or carry it across a changed
+  round, prompt, reference set, item set, policy, or remaining call count.
 - Never continue past an ambiguous state: route to `codex-image-factory-recover`
   and read the ledger first.

@@ -226,6 +226,19 @@ class BodyTests(unittest.TestCase):
         self.assertIn("remaining generation", body)
         self.assertIn("fresh approval", body)
 
+    def test_all_skills_apply_the_transactional_conversation_contract(self) -> None:
+        required = {
+            "codex-image-factory-use": ("displayed plan", "round", "remaining generation-call"),
+            "codex-image-factory-run": ("exact plan", "round", "remaining generation-call"),
+            "codex-image-factory-judge": ("PendingApproval", "Accepted", "new approval"),
+            "codex-image-factory-recover": ("Unknown", "zero generation calls", "do not re-run"),
+        }
+        for name, phrases in required.items():
+            body = self.body(name)
+            for phrase in phrases:
+                with self.subTest(skill=name, phrase=phrase):
+                    self.assertIn(phrase.lower(), body.lower())
+
     def test_no_skill_instructs_an_install_or_a_retry(self) -> None:
         for name in EXPECTED:
             body = self.body(name).lower()

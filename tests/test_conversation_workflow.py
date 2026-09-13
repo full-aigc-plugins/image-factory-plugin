@@ -55,6 +55,54 @@ class ConversationWorkflowTests(unittest.TestCase):
         self.assertIn("用户明确同意", contract)
         self.assertIn("不得把上一轮批准沿用到下一轮", contract)
 
+    def test_approval_is_bound_to_the_displayed_transaction(self) -> None:
+        contract = (
+            SKILLS
+            / "codex-image-factory-use"
+            / "references"
+            / "conversation-workflow.md"
+        ).read_text(encoding="utf-8")
+        for observable in (
+            "当前轮次",
+            "剩余生成调用数",
+            "只对这张确认卡",
+            "计划发生变化",
+            "批准立即失效",
+        ):
+            with self.subTest(observable=observable):
+                self.assertIn(observable, contract)
+
+    def test_conversation_names_transactional_result_and_recovery_states(self) -> None:
+        contract = (
+            SKILLS
+            / "codex-image-factory-use"
+            / "references"
+            / "conversation-workflow.md"
+        ).read_text(encoding="utf-8")
+        for state in ("PendingApproval", "Accepted", "Unknown"):
+            with self.subTest(state=state):
+                self.assertIn(state, contract)
+        self.assertIn("恢复本身产生 0 次生成调用", contract)
+        self.assertIn("不得为了判断结果而重新生成", contract)
+
+    def test_examples_cover_partial_rewrite_invalidation_and_unknown_recovery(self) -> None:
+        examples = (
+            SKILLS
+            / "codex-image-factory-use"
+            / "references"
+            / "conversation-examples.md"
+        ).read_text(encoding="utf-8")
+        for observable in (
+            "第 1 轮",
+            "整组批准",
+            "第 3 张改成更温暖",
+            "原批准立即失效",
+            "Unknown",
+            "恢复本身产生 0 次生成调用",
+        ):
+            with self.subTest(observable=observable):
+                self.assertIn(observable, examples)
+
     def test_conversation_is_the_product_surface(self) -> None:
         text = self.body("codex-image-factory-use")
         self.assertIn("conversation is the product surface", text.lower())

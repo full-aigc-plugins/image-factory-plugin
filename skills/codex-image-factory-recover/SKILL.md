@@ -44,7 +44,8 @@ counts, remaining generation-call count, and one legal next action in plain lang
    The command validates
    every per-item receipt against the artifact on disk, marks stale attempts
    without a matching receipt `Unknown`, and rebuilds the receipt manifest. It
-   makes zero generation calls.
+   makes zero generation calls. Recovery is evidence reconciliation, never a
+   diagnostic generation attempt.
 
    ```bash
    bin/image-factory recover --plan plan.json --job job.json --destination out/ --json
@@ -70,6 +71,10 @@ counts, remaining generation-call count, and one legal next action in plain lang
    exactly one legal next action. If any item is `Unknown`, explain that its
    external outcome is ambiguous and stop; never suggest a retry as a diagnostic
    action.
+
+   If the recovery report still contains `Unknown`, say that the external call
+   may have happened and its outcome cannot be proved. Do not re-run it to find
+   out, and do not offer a new generation while the ambiguity remains.
 
 6Step 6. **Report the failure categories and the usage limit if one is present.** A
    ledger carrying `quota_exceeded` holds the reset time for the image
