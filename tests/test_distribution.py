@@ -11,6 +11,7 @@ PLUGIN_ID = "codex-image-factory"
 DISPLAY_NAME = "Codex Image Factory"
 REPOSITORY = "https://github.com/partme-ai/codex-image-factory-plugin"
 BRAND_COLOR = "#10B981"
+RELEASE_VERSION = "0.1.2"
 
 
 def load_json(relative: str) -> dict:
@@ -51,7 +52,10 @@ class DistributionTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn(f"validated {PLUGIN_ID}", result.stdout)
+        self.assertIn(
+            f"validated {PLUGIN_ID} compatibility foundation {RELEASE_VERSION}",
+            result.stdout,
+        )
 
     def test_validator_accepts_relative_root(self) -> None:
         result = subprocess.run(
@@ -65,7 +69,7 @@ class DistributionTests(unittest.TestCase):
     def test_manifest_and_marketplace(self) -> None:
         manifest = load_json(".codex-plugin/plugin.json")
         self.assertEqual(manifest["name"], PLUGIN_ID)
-        self.assertEqual(manifest["version"], "0.1.1")
+        self.assertEqual(manifest["version"], RELEASE_VERSION)
         self.assertEqual(manifest["repository"], REPOSITORY)
         self.assertEqual(manifest["license"], "Apache-2.0")
         self.assertEqual(manifest["skills"], "./skills/")

@@ -7,6 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ID = "codex-image-factory"
 DISPLAY_NAME = "Codex Image Factory"
+RELEASE_VERSION = "0.1.2"
+PRIOR_RELEASE_SHA = "fff20c9aad9a9cd7893644306c752b2f7231071d"
 
 EXPECTED_SKILLS = (
     "codex-image-factory-use",
@@ -78,6 +80,25 @@ class SkillInventoryTests(unittest.TestCase):
 
 
 class DocumentationTests(unittest.TestCase):
+    def test_release_documents_align_with_the_manifest_version(self) -> None:
+        manifest = json.loads(
+            (ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["version"], RELEASE_VERSION)
+        for relative in (
+            "CHANGELOG.md",
+            "README.md",
+            "README.zh-CN.md",
+            "docs/Codex-Image-Factory-Plugin-Architecture.md",
+            "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
+            "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
+            "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
+            "docs/verification/runtime.md",
+        ):
+            with self.subTest(document=relative):
+                text = (ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn(RELEASE_VERSION, text)
+
     def test_bilingual_pairs_exist(self) -> None:
         for english, chinese in BILINGUAL_PAIRS:
             with self.subTest(pair=english):
@@ -140,7 +161,7 @@ class DocumentationTests(unittest.TestCase):
                 status = line.split("|")[2].strip().strip("`")
                 self.assertIn(status, {"PASS", "FAIL", "NOT_RUN"})
 
-        self.assertNotIn("fff20c9aad9a9cd7893644306c752b2f7231071d", text)
+        self.assertNotIn(PRIOR_RELEASE_SHA, text)
         self.assertNotIn("version `0.1.0`", text)
 
 

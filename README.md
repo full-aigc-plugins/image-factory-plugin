@@ -8,6 +8,8 @@
 
 ## Status
 
+Version 0.1.2 is a locally verified release candidate. Remote CI, source/remote/tag parity, a fresh Marketplace install, a fresh-session no-spend smoke, and the separately authorized paid canary remain external release gates and are not yet run.
+
 The current source retains the verified Image Factory runtime, attributed offline prompt discovery, pinned upstream Skill snapshots, a shared conversational confirmation workflow, and a 68-case image-only Chinese documentation library. The Codex conversation is the product surface; workbench UI, project management, and video composition are outside this repository.
 
 ## Purpose

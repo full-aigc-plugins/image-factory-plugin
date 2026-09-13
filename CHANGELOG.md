@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 — 2026-09-14
+
+### Added
+
+- Bound every allowance-spending run to an explicit approval for the exact validated plan hash, round, and remaining image count, with append-only approval history.
+- Added cross-process job locking, pre-call `Attempting` lifecycle records, unique attempt identifiers, and refusal of ambiguous automatic retries.
+- Made atomic per-item receipts the recovery source of truth and added deterministic reconciliation and aggregate-manifest rebuilding.
+- Enforced required human labels before acceptance, with governed evaluation, pending-approval, optimization, and terminal state transitions.
+- Added deterministic 1.0.0-to-1.1.0 plan and job schema migration.
+- Added a dependency-free CI matrix for Linux, macOS, and Windows on Python 3.11 and 3.13, plus distribution and release-evidence gates.
 
 ### Changed
 

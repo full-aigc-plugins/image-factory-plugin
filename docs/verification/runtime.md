@@ -37,3 +37,10 @@ Allowed status values are `PASS`, `FAIL`, and `NOT_RUN`.
 The current verdict is **release candidate, not production-ready**. No official
 `codex plugin validate` command is claimed: the currently available Codex CLI
 does not provide one.
+
+## Local release-candidate preparation
+
+The 0.1.2 manifest, changelog, bilingual README files, architecture documents,
+runtime evidence, distribution tests, and validator output are version-aligned.
+This local preparation is not remote publication, installation evidence, or a
+paid acceptance result; the external gate table above remains authoritative.

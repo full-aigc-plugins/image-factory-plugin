@@ -1,6 +1,6 @@
 {
   "name": "codex-image-factory",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Batch image production for Codex with attributed prompt discovery, verified receipts, evaluation, and prompt optimization.",
   "author": {"name": "Full Stack Skills / PartMe.AI", "url": "https://github.com/partme-ai"},
   "homepage": "https://github.com/partme-ai/codex-image-factory-plugin",
