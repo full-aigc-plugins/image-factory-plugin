@@ -16,6 +16,23 @@ document.
 
 ## Workflow
 
+The conversation is the product surface. Read and follow
+[the conversation workflow](references/conversation-workflow.md) so goal capture,
+choices, generation approval, result labels, and later rounds use one contract.
+
+For a new goal without a plan, the first user-facing response must advance the
+work instead of returning only questions. Infer a sensible default and show:
+
+```text
+推荐方案：温柔母婴科普，6 张系列知识卡，人物与配色保持一致
+可选方向：1. 温柔插画（推荐）  2. 专业信息图  3. 极简生活方式
+回复“按推荐继续”，或直接修改方向、张数、文字、参考图。
+```
+
+Match the user's language and topic. Show at most three directions. 不能只回复问题；
+when a missing fact materially changes the result, give the recommended default
+first and ask one focused follow-up.
+
 Step 1. Establish whether a batch plan already exists. Look for a plan file the
 user named, or for a job ledger left by an earlier round.
 
@@ -27,7 +44,8 @@ Step 2. Classify the request into exactly one of three situations:
 - **The state is unclear, a run was interrupted, or the user is asking what
   happened.** Delegate to `codex-image-factory-recover`.
 
-Step 3. State which situation you detected and why, then delegate and stop.
+Step 3. State which situation you detected and why, then delegate. The delegate
+continues the same conversation; the user never has to re-enter confirmed choices.
 
 ## Routing table
 

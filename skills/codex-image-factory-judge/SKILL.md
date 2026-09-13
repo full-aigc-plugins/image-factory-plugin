@@ -15,6 +15,12 @@ Do not use it to generate images. It never spends the account's allowance.
 
 ## Workflow
 
+Read and follow
+[the shared conversation workflow](../codex-image-factory-use/references/conversation-workflow.md)
+when presenting numbered results and interpreting whole-batch, partial, or
+single-image decisions. Preserve the user's exact adjustment words as the reason
+for a rewrite.
+
 1Step 1. **Look at the results yourself before scoring them.** Read the generated
    images and compare them with what the plan asked for. This is the part Codex
    is genuinely needed for: judging whether a picture matches the intent.
@@ -53,6 +59,10 @@ Do not use it to generate images. It never spends the account's allowance.
    labels are the calibration data for the advisory signal, so record them even
    when they contradict your own assessment.
 
+   Accept natural language such as `整组批准`, `批准 1、2、4`, `第 3 张改成更温暖`,
+   or `全部换一种风格`. Map visible numbers back to item ids. Unmentioned items
+   remain unlabeled; never infer approval from silence.
+
 5Step 5. **Turn the failures into the next round.** Decide what to change for each item
    that needs rework, then hand those decisions to the optimizer:
 
@@ -78,6 +88,7 @@ Do not use it to generate images. It never spends the account's allowance.
 
    Then report the decision and the carried-forward items. An item that already
    passed is not regenerated, so the next round is smaller than the last.
+   Quote that round and obtain a new approval before generation.
 
 ## Platform boundaries
 

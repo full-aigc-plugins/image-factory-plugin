@@ -8,7 +8,7 @@
 
 ## 当前状态
 
-版本 0.1.1 新增带来源的离线提示词检索、固定上游 Skill 快照、Creative Studio 架构和 72 个中文使用案例。图片生产内核已通过运行验证；当前与历史证据均记录在 `docs/verification/` 下。
+当前源码只保留已验证的 Image Factory 图片生产内核、带来源的离线提示词检索、固定上游 Skill 快照、共享对话确认流程和 68 个纯图片中文案例。Codex 对话就是产品界面；工作台界面、项目管理和视频合成不属于本仓库。
 
 ## 项目定位
 
@@ -37,6 +37,7 @@ Codex -> 校验后的批次清单 -> 内置图像工具 -> 产物采集 + 回执
 
 ## 工厂补齐的部分
 
+- **对话确认** —— 用户自然描述目标、选择推荐方向、确认创作卡和报价，再用编号批准或调整结果。
 - **批次清单校验** —— 封闭 schema、幂等键、花费前先设硬上限。
 - **可核验回执** —— 哈希、大小、尺寸全部从磁盘文件独立重算，并做二次复核以发现验证窗口内被改写的文件。
 - **持久台账** —— 原子写、受约束的状态机、密钥清洗，中断后是恢复而不是重复生成。
@@ -59,10 +60,7 @@ Codex -> 校验后的批次清单 -> 内置图像工具 -> 产物采集 + 回执
 - [便携清单迁移说明](docs/portable-migration.md)
 - [运行期验证](docs/verification/runtime.md)
 - [上游 Skill 能力分析](docs/upstream-skill-capability-analysis.md)
-- [Creative Studio 设计规格](docs/superpowers/specs/2026-09-13-codex-creative-studio-design.md)
-- [Creative Studio 实施计划](docs/superpowers/plans/2026-09-13-codex-creative-studio-implementation.md)
-- [Creative Studio 用户手册](docs/guides/creative-studio-user-guide.zh-CN.md)
-- [72 个使用案例](docs/use-cases/README.zh-CN.md)
+- [68 个图片使用案例](docs/use-cases/README.zh-CN.md)
 - [当前版本 CLI 实操手册](docs/guides/current-cli-recipes.zh-CN.md)
 - [原始上游快照](vendor/upstream/README.md)
 - [上游快照验证记录](docs/verification/upstream-snapshots.md)

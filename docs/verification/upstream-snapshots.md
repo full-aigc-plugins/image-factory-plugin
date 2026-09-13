@@ -1,6 +1,6 @@
 # Upstream snapshot verification
 
-Recorded 2026-09-13 for the Creative Studio design baseline.
+Recorded 2026-09-13 for the Image Factory prompt-discovery baseline.
 
 ## Result
 
@@ -34,12 +34,11 @@ tool instruction was executed during import.
 
 ```text
 python3 -m unittest discover -s tests -v
-Ran 238 tests — OK
+Ran 241 tests — OK
 
 python3 scripts/validate_distribution.py .
 validated codex-image-factory compatibility foundation 0.1.1
 ```
 
 This proves snapshot identity, current plugin regression behavior and
-distribution structure. It does not prove that the future Creative Studio,
-adapted Skills, responsive UI or video pipeline has been implemented.
+distribution structure. It does not prove the visual quality of a future image run.

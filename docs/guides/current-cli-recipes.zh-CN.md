@@ -1,7 +1,9 @@
 # 当前版本 CLI 实操手册
 
-> 适用于当前 0.1.1 图片内核和提示词检索。Creative Studio 图形界面、
-> 参考图视觉 DNA 和本地故事视频仍按实施计划推进。
+> 适用于当前 0.1.1 图片内核和提示词检索。本手册只描述 Image Factory 能力。
+
+普通用户通过 Codex 对话描述目标、选择方向、确认创作卡与报价、查看并批准结果。
+本手册列出的 JSON 和命令是后台执行与审计接口，无须用户手工操作。
 
 ## 1. 查找提示词方向
 
@@ -173,10 +175,7 @@ bin/image-factory quote plan-round-2.json --json
 ## 10. 当前边界
 
 - 当前没有图形化条件选择界面。
-- 当前不会自动从一句目标生成完整计划。
+- CLI 单独运行不会理解一句自然语言目标；Image Factory Skills 会在对话中补全条件并准备计划。
 - 当前图片生成尺寸由 Codex 内置工具决定。
-- 当前没有本地视频渲染命令。
+- 当前不处理视频渲染或项目工作台。
 - 当前不调用外部生图 API，也不读取 API Key。
-
-目标体验和实施顺序见[Creative Studio 设计规格](../superpowers/specs/2026-09-13-codex-creative-studio-design.md)
-和[实施计划](../superpowers/plans/2026-09-13-codex-creative-studio-implementation.md)。

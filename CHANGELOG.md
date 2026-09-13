@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Added one shared conversational confirmation contract across the use, run, judge and recover Skills; Codex conversation is the product surface.
+- Added compact creation cards, direction choices, per-round generation approval, numbered result labels and plain-language recovery behavior.
+- Corrected repository ownership: workbench UI, project state, review experience and video composition belong to PartMe Studio, not Codex Image Factory.
+- Retained 68 image generation, editing and review cases; moved the four local-video cases to the PartMe Studio product specification.
+
+### Removed
+
+- Removed the workbench design, workbench implementation plan and workbench user guide from this plugin repository.
+- Removed the local-video roadmap from Image Factory documentation.
+
 ## 0.1.1 — 2026-09-13
 
 ### Added

@@ -31,7 +31,8 @@ images itself.
 
 ```mermaid
 flowchart LR
-  U[User or Skill] --> C[image-factory CLI]
+  U[User conversation] --> K[Image Factory Skills]
+  K --> C[image-factory CLI]
   C --> L[Job ledger and receipts]
   C --> X[Codex exec, one call per item]
   X --> T[Built-in image tool]
@@ -41,6 +42,11 @@ flowchart LR
   E --> R[Next round plan]
   R --> U
 ```
+
+The Codex conversation is the product surface. Skills present direction choices,
+a compact creation confirmation card, the exact call count, numbered results,
+and the next decision. Plans, idempotency keys, receipts, and paths remain on
+disk for audit instead of becoming a form the user has to operate.
 
 The trust boundary is worth stating plainly. The plugin trusts Codex to perform
 generation and to report what it did, but it does not trust Codex's report as
@@ -184,11 +190,9 @@ library only.
 
 ## 9. Evolution
 
-The target Creative Studio architecture, guided UI, upstream Skill isolation,
-parent project state machine and local video pipeline are specified in
-[`2026-09-13-codex-creative-studio-design.md`](superpowers/specs/2026-09-13-codex-creative-studio-design.md).
-This document continues to describe the implemented 0.1.1 image core and prompt-discovery layer; target
-architecture is not presented as shipped behavior.
+This document describes only the implemented 0.1.1 image core and prompt-discovery layer.
+Workbench UI, parent project state, and non-image media pipelines are separate product
+responsibilities and are not implemented or planned in this plugin repository.
 
 The design leaves three clean seams:
 
@@ -198,5 +202,5 @@ The design leaves three clean seams:
 - **Calibrated advisory scores.** Human labels are already recorded next to
   advisory scores in every `scores.json`. Once enough exist, the advisory signal
   can be measured against real decisions rather than trusted.
-- **More artifact kinds.** Recipes, fixtures, and scoring are shaped around
-  images today. Video would add a pipeline, not a second ledger.
+- **Image-specific derived artifacts.** Recipes, fixtures, receipts, and scoring
+  remain shaped around images; non-image media belongs to its owning product.

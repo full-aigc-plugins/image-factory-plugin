@@ -47,7 +47,7 @@ scripts/
 skills/                            four Agent Skills
 data/                              attributed templates and source indexes
 vendor/upstream/                   inactive pinned upstream snapshots
-tests/                             238 tests, stdlib unittest
+tests/                             241 tests, stdlib unittest
 docs/                              this document and its pair
 ```
 

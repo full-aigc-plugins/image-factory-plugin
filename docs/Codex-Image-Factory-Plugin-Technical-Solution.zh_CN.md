@@ -38,7 +38,7 @@ scripts/
 skills/                            四个 Agent Skill
 data/                              带来源的模板与分类索引
 vendor/upstream/                   非活跃固定上游快照
-tests/                             238 个测试，标准库 unittest
+tests/                             241 个测试，标准库 unittest
 docs/                              本文档及其配对版本
 ```
 

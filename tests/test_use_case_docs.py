@@ -11,7 +11,7 @@ CASE_FILES = {
     "commercial-content.zh-CN.md": ("C", 16),
     "knowledge-design.zh-CN.md": ("K", 14),
     "character-ui-game.zh-CN.md": ("D", 16),
-    "edit-review-video.zh-CN.md": ("E", 12),
+    "edit-review.zh-CN.md": ("E", 8),
 }
 CASE_HEADING = re.compile(r"^## ([SCKDE]\d{2}) .+$", re.MULTILINE)
 
@@ -25,11 +25,11 @@ class UseCaseDocumentationTests(unittest.TestCase):
             with self.subTest(file=filename):
                 self.assertEqual(ids, [f"{prefix}{index:02d}" for index in range(1, count + 1)])
             all_ids.extend(ids)
-        self.assertEqual(len(all_ids), 72)
-        self.assertEqual(len(set(all_ids)), 72)
+        self.assertEqual(len(all_ids), 68)
+        self.assertEqual(len(set(all_ids)), 68)
 
     def test_every_case_has_an_actionable_contract(self) -> None:
-        required = ("用户输入", "界面条件", "自动处理", "交付", "验收", "参考能力")
+        required = ("用户输入", "批次条件", "自动处理", "交付", "验收", "参考能力")
         for filename in CASE_FILES:
             text = (DOCS / filename).read_text(encoding="utf-8")
             headings = list(CASE_HEADING.finditer(text))

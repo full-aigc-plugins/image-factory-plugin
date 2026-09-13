@@ -15,6 +15,11 @@ Do not use it to generate anything, and do not use it to evaluate results.
 
 ## Workflow
 
+Read and follow
+[the shared conversation workflow](../codex-image-factory-use/references/conversation-workflow.md)
+for the user-facing recovery message. Summarize the state, completed/failed/pending
+counts, remaining generation-call count, and one legal next action in plain language.
+
 1Step 1. **Read the ledger before doing anything else.**
 
    ```bash

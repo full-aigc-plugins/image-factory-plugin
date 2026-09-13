@@ -8,7 +8,7 @@
 
 ## Status
 
-Version 0.1.1 adds attributed offline prompt discovery, pinned upstream Skill snapshots, Creative Studio architecture, and a 72-case Chinese documentation library. The image production core remains runtime-verified; current and historical evidence is recorded under `docs/verification/`.
+The current source retains the verified Image Factory runtime, attributed offline prompt discovery, pinned upstream Skill snapshots, a shared conversational confirmation workflow, and a 68-case image-only Chinese documentation library. The Codex conversation is the product surface; workbench UI, project management, and video composition are outside this repository.
 
 ## Purpose
 
@@ -37,6 +37,7 @@ Because generation is not parameterised, features that require explicit size or 
 
 ## What the factory adds
 
+- **Conversational confirmation** — describe the goal naturally, choose a suggested direction, approve a compact creation card and quote, then accept or revise numbered results.
 - **Batch plan validation** — closed schemas, idempotency keys, and hard caps before anything is spent.
 - **Verified receipts** — every hash, size, and dimension is recomputed from the file on disk, with a second check to catch a file rewritten mid-validation.
 - **Durable ledger** — atomic writes, a governed state machine, and secret scrubbing, so an interrupted run resumes instead of regenerating.
@@ -59,9 +60,6 @@ case indexes, source attribution and the limits of this integration.
 - [Portable manifest migration](docs/portable-migration.md)
 - [Runtime verification](docs/verification/runtime.md)
 - [Upstream Skill capability analysis](docs/upstream-skill-capability-analysis.md)
-- [Creative Studio design](docs/superpowers/specs/2026-09-13-codex-creative-studio-design.md)
-- [Creative Studio implementation plan](docs/superpowers/plans/2026-09-13-codex-creative-studio-implementation.md)
-- [Creative Studio Chinese user guide](docs/guides/creative-studio-user-guide.zh-CN.md)
 - [Chinese use-case library](docs/use-cases/README.zh-CN.md)
 - [Current CLI recipes in Chinese](docs/guides/current-cli-recipes.zh-CN.md)
 - [Original upstream snapshots](vendor/upstream/README.md)

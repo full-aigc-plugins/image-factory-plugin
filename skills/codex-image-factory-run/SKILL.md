@@ -15,6 +15,12 @@ to decide whether the results are good.
 
 ## Workflow
 
+For a goal expressed in conversation, read and follow
+[the shared conversation workflow](../codex-image-factory-use/references/conversation-workflow.md).
+Keep the visible interaction to direction choices, a compact creation confirmation
+card, the exact generation-call count, and the approval request. Keep JSON and CLI
+details in the background unless the user asks for them.
+
 When a user describes a batch but has no plan yet, read
 [prompt preparation](references/prompt-preparation.md). Use the bundled
 template search to prepare prompts and a valid batch plan before validation.
@@ -41,9 +47,10 @@ For an already approved plan, preserve its prompts and proceed directly.
    Report the image count and make clear that each item costs one generation call
    against the Codex account's image allowance. Quoting itself spends nothing.
 
-3Step 3. **Obtain approval.** Run the batch only when the user has agreed to generate
-   these images. If the plan sets `require_approval_before_run`, the command
-   refuses to start without `--approve`.
+3Step 3. **Obtain approval for this exact round.** Show the creation confirmation
+   card and quote first. Run only when the user has agreed to generate these
+   images. If the plan sets `require_approval_before_run`, the command refuses to
+   start without `--approve`. Approval from an earlier round does not apply.
 
 4Step 4. **Run it.**
 
