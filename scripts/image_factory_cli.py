@@ -25,6 +25,7 @@ import artifact_collector
 import capability_probe
 import evaluator
 import generation_runner
+import job_lock
 import job_ledger
 import optimizer
 import plan_validator
@@ -36,6 +37,8 @@ EXIT_FAILURE = 1
 EXIT_USAGE = 2
 EXIT_APPROVAL_REQUIRED = 3
 EXIT_CAPABILITY_UNAVAILABLE = 4
+EXIT_JOB_LOCKED = 5
+EXIT_RECOVERY_REQUIRED = 6
 
 DEFAULT_TIMEOUT_SECONDS = generation_runner.DEFAULT_TIMEOUT_SECONDS
 
@@ -508,7 +511,18 @@ def run_cli(argv: list[str]) -> tuple[int, str]:
         return EXIT_USAGE, f"invalid arguments ({error.code})"
     handler = HANDLERS[args.command]
     try:
+        if args.command in {"run", "evaluate", "optimize", "recover"}:
+            job_path = Path(args.job) if hasattr(args, "job") else Path(args.plan)
+            with job_lock.JobLock(job_path):
+                return handler(args)
         return handler(args)
+    except job_lock.JobAlreadyRunningError as error:
+        payload = {
+            "ok": False,
+            "error_category": "job_already_running",
+            "error": str(error),
+        }
+        return EXIT_JOB_LOCKED, _emit(payload, args.json)
     except (OSError, ValueError, KeyError) as error:
         return EXIT_FAILURE, _emit({"ok": False, "error": str(error)}, args.json)
 

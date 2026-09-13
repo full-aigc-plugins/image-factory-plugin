@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import image_factory_cli as cli  # noqa: E402
+import job_lock  # noqa: E402
 
 
 FAKE = ROOT / "tests" / "fakes" / "fake_codex.py"
@@ -291,6 +292,14 @@ class RunCommandTests(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_USAGE, output)
         self.assertFalse(self.fixture.job_path.exists())
 
+    def test_run_refuses_an_active_job_without_spending_a_call(self) -> None:
+        with job_lock.JobLock(self.fixture.job_path):
+            code, output = self.run_batch("--approve")
+
+        self.assertEqual(code, 5, output)
+        self.assertEqual(json.loads(output)["error_category"], "job_already_running")
+        self.assertEqual(len(list(self.fixture.generation_dir.rglob("*.png"))), 0)
+
 
 class StatusCommandTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -470,8 +479,10 @@ class NoCertificateFilesTests(unittest.TestCase):
                 cli.EXIT_USAGE,
                 cli.EXIT_APPROVAL_REQUIRED,
                 cli.EXIT_CAPABILITY_UNAVAILABLE,
+                cli.EXIT_JOB_LOCKED,
+                cli.EXIT_RECOVERY_REQUIRED,
             ),
-            (0, 1, 2, 3, 4),
+            (0, 1, 2, 3, 4, 5, 6),
         )
 
 
