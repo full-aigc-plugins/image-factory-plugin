@@ -98,6 +98,8 @@ def build_argv(
     ]
     for reference in reference_images:
         argv.extend(["-i", str(reference)])
+    if reference_images:
+        argv.append("--")
     argv.append(build_prompt(prompt))
     return argv
 

@@ -153,6 +153,17 @@ class ArgvTests(unittest.TestCase):
         self.assertEqual(argv.count("-i"), 2)
         self.assertEqual(argv[argv.index("-i") + 1], "a.png")
 
+    def test_reference_image_values_cannot_consume_the_prompt(self) -> None:
+        argv = runner.build_argv(
+            binary="codex",
+            prompt="draw the next story scene",
+            reference_images=("style.png",),
+            workdir=Path("/tmp/work"),
+            last_message_path=Path("/tmp/out/last.txt"),
+        )
+        self.assertEqual(argv[-2], "--")
+        self.assertEqual(argv[-1], runner.build_prompt("draw the next story scene"))
+
     def test_prompt_is_a_single_argument(self) -> None:
         argv = runner.build_argv(
             binary="codex",
