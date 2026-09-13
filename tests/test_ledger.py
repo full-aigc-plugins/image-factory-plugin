@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -148,6 +149,16 @@ class PersistenceTests(unittest.TestCase):
         leftovers = [entry.name for entry in self.fixture.base.iterdir() if entry.name != "job.json"]
         self.assertEqual(leftovers, [])
         self.assertTrue(self.fixture.path.is_file())
+
+    def test_failed_shared_atomic_write_preserves_previous_ledger(self) -> None:
+        ledger = self.fixture.ledger()
+        ledger.write(job_ledger.new_job("portrait-study"))
+        before = self.fixture.path.read_bytes()
+        with mock.patch("atomic_json.json.dump", side_effect=OSError("injected write failure")):
+            with self.assertRaises(OSError):
+                ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
+        self.assertEqual(self.fixture.path.read_bytes(), before)
+        self.assertEqual(list(self.fixture.base.glob(".atomic-*.tmp")), [])
 
     def test_written_ledger_validates_against_the_schema(self) -> None:
         ledger = self.fixture.ledger()
