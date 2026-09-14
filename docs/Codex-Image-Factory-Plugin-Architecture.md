@@ -1,6 +1,6 @@
 # Codex Image Factory Plugin Architecture
 
-> **Status:** image core implemented and runtime-verified; prompt discovery implemented and offline-verified. **Version:** 0.1.1. **Updated:** 2026-09-13.
+> **Status:** image core and prompt discovery implemented and offline-verified. Runtime evidence for the 1.1.0 contracts is not yet observed; see `docs/verification/runtime.md`. **Version:** 0.1.1. **Updated:** 2026-09-13.
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 
@@ -188,9 +188,52 @@ executing anything.
 Python 3.11 or later is required for `tomllib`. All scripts use the standard
 library only.
 
-## 9. Evolution
+## 9. Transaction model
 
-This document describes only the implemented 0.1.1 image core and prompt-discovery layer.
+Version 1.1.0 makes spending a transaction rather than a loop, and that shape is
+the most important thing to understand before changing any of this code.
+
+- **One writer per job.** Every mutating command takes an exclusive advisory lock
+  on `<job>.lock` before it reads the ledger, so a second `run` cannot decide the
+  same item is pending. Contention is reported as `job_already_running` and spends
+  nothing.
+- **Approval is bound, not boolean.** An approval records the plan hash, the round,
+  and the number of calls still outstanding. Any change to the plan — a rewritten
+  prompt, an added image, a different reference, a new round — invalidates the
+  current approval while keeping the history as an audit trail.
+- **Attempts are reserved before the call.** An item enters `Attempting` and its
+  attempt counter increments before the external call, so an interruption cannot
+  lead to a second call for work that may already have run. Only an item with no
+  recorded attempt is pending.
+- **Receipts are the source of truth.** Each artifact's receipt is its own file,
+  written atomically under its idempotency key; the aggregate manifest is derived
+  by reading those receipts back and verifying them against the files they name.
+- **Unresolved means stop.** A timeout or a vanished artifact leaves the item
+  `Unknown` and halts the batch, because spending on later items while an earlier
+  outcome is unresolved is how one interruption becomes a double charge.
+- **Recovery cannot spend.** `recover` settles interrupted items from receipts
+  already on disk, rebuilds the manifest, and refuses to guess: an item with no
+  evidence stays `Unknown`, and the command reports `recovery_required`.
+- **Human labels are mandatory.** A 1.1.0 plan requires human result labels, so an
+  unlabeled batch reaches `pending_approval` rather than passing on its own.
+
+Historical 1.0.0 plans and ledgers are upgraded in memory by
+`scripts/contract_migrations.py`. Migration may tighten a document — both human
+gates become mandatory — but it may never invent approval that was not observed,
+and a 1.0.0 job that already carries approval evidence is refused rather than
+migrated.
+
+## 10. Continuous integration
+
+`.github/workflows/ci.yml` runs the full suite on Ubuntu, macOS, and Windows with
+Python 3.11 and 3.13. Each job compiles every script and test, runs the whole
+offline suite, validates the distribution, and checks whitespace. No job installs
+anything, on purpose: a job that installed a package would stop being evidence
+that the plugin needs none.
+
+## 11. Evolution
+
+This document describes only the implemented image core and prompt-discovery layer.
 Workbench UI, parent project state, and non-image media pipelines are separate product
 responsibilities and are not implemented or planned in this plugin repository.
 

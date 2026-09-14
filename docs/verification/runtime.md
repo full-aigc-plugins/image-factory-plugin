@@ -1,5 +1,28 @@
 # Runtime verification
 
+## Gate status for the 0.1.2 candidate
+
+Every gate below is either freshly observed for the candidate commit or marked
+`NOT_RUN` with the evidence that is missing. Nothing is carried forward from an
+earlier version: the 1.1.0 contract change and the new transaction ordering mean
+an observation against 0.1.0 does not describe this build.
+
+| Gate | Status | Evidence or reason |
+| --- | --- | --- |
+| `offline_suite` | PASS | 364 tests, standard library only, on the development host |
+| `distribution_validation` | PASS | `validated codex-image-factory compatibility foundation 0.1.1` |
+| `plugin_validation` | PASS | `Plugin validation passed` |
+| `remote_ci_matrix` | NOT_RUN | Requires the candidate pushed and GitHub Actions to report all six matrix legs |
+| `remote_sha_parity` | NOT_RUN | Requires the pushed candidate; local and remote are compared after publication |
+| `fresh_marketplace_install` | NOT_RUN | Requires a clean marketplace install of the candidate version |
+| `fresh_session_no_spend_smoke` | NOT_RUN | Requires a new Codex session on the installed candidate |
+| `paid_canary` | NOT_RUN | Requires explicit authorization; it spends the account's image allowance |
+
+## Historical evidence (version 0.1.0)
+
+The observations below were made against the 0.1.0 delivery and are kept as a
+record of what that version did. They are not evidence for the 0.1.2 candidate.
+
 This document records the runtime checks performed on 2026-09-12. It keeps
 observed evidence separate from checks that would spend image allowance or
 change the local Codex installation.

@@ -11,6 +11,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "tests" / "fakes"))
+import launcher  # noqa: E402
 
 import generation_runner  # noqa: E402
 import image_factory_cli as cli  # noqa: E402
@@ -22,10 +24,9 @@ import receipt_store  # noqa: E402
 FAKE = ROOT / "tests" / "fakes" / "fake_codex.py"
 REAL_PNG = ROOT / "assets" / "logo.png"
 
-_SHIM_DIR = Path(tempfile.mkdtemp(prefix="image-factory-crash-shim-"))
-SHIM = _SHIM_DIR / "codex"
-SHIM.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE}" "$@"\n', encoding="utf-8")
-SHIM.chmod(SHIM.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+SHIM = launcher.build_shared_launcher(
+    Path(tempfile.mkdtemp(prefix="image-factory-crash-shim-")), FAKE
+)
 
 
 def one_item_plan(**overrides) -> dict:

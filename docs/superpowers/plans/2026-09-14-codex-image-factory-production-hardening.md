@@ -989,11 +989,11 @@ git commit -m "docs: bind image conversations to approved rounds"
 - Produces: version-specific runtime evidence with no stale SHA or release number
 - Preserves: standard-library-only runtime and pinned upstream snapshot checks
 
-- [ ] **Step 1: Make the fake Codex launcher portable**
+- [x] **Step 1: Make the fake Codex launcher portable**
 
 Update `build_shim` to create a shell launcher on Unix and a `.cmd` launcher on Windows. Add a test asserting the selected launcher suffix and executable invocation for the active platform.
 
-- [ ] **Step 2: Add the CI workflow**
+- [x] **Step 2: Add the CI workflow**
 
 Use this matrix:
 
@@ -1007,15 +1007,15 @@ strategy:
 
 Each job checks out the repository, configures Python, runs `python -m compileall -q scripts tests`, runs `python -m unittest discover -s tests -v`, runs `python scripts/validate_distribution.py .`, and runs `git diff --check`. No job installs runtime dependencies.
 
-- [ ] **Step 3: Add CI/distribution contract tests**
+- [x] **Step 3: Add CI/distribution contract tests**
 
 Assert the workflow contains all three operating systems, both Python versions, the full suite, distribution validation, and compile check. Assert runtime evidence names version 0.1.2 and has explicit `PASS`, `FAIL`, or `NOT_RUN` for each external gate.
 
-- [ ] **Step 4: Refresh architecture and verification documents**
+- [x] **Step 4: Refresh architecture and verification documents**
 
 Document the lock, attempt states, per-item receipt source of truth, approval hash, recovery refusal, schema migration, human label enforcement, and CI matrix. Replace old remote SHA/version evidence only with freshly observed results; otherwise mark the gate `NOT_RUN`.
 
-- [ ] **Step 5: Run all offline gates**
+- [x] **Step 5: Run all offline gates**
 
 ```bash
 python3 -m compileall -q scripts tests
@@ -1026,7 +1026,7 @@ git diff --check
 
 Expected: all commands exit zero.
 
-- [ ] **Step 6: Commit CI and evidence structure**
+- [x] **Step 6: Commit CI and evidence structure**
 
 ```bash
 git add .github/workflows/ci.yml tests/test_cli.py tests/test_distribution.py tests/test_distribution_extended.py scripts/validate_distribution.py docs/verification docs/Codex-Image-Factory-Plugin-Architecture.md docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md docs/Codex-Image-Factory-Plugin-Technical-Solution.md docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md

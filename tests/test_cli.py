@@ -10,6 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "tests" / "fakes"))
+import launcher  # noqa: E402
 
 import image_factory_cli as cli  # noqa: E402
 import job_lock  # noqa: E402
@@ -19,17 +21,10 @@ FAKE = ROOT / "tests" / "fakes" / "fake_codex.py"
 REAL_PNG = ROOT / "assets" / "logo.png"
 
 
-def fast_python() -> str:
-    candidate = Path(sys.base_prefix) / "bin" / "python3"
-    return str(candidate) if candidate.is_file() else sys.executable
-
-
 def build_shim() -> Path:
-    directory = Path(tempfile.mkdtemp(prefix="image-factory-cli-shim-"))
-    shim = directory / "codex"
-    shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
-    shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    return shim
+    return launcher.build_shared_launcher(
+        Path(tempfile.mkdtemp(prefix="image-factory-cli-shim-")), FAKE
+    )
 
 
 SHIM = build_shim()
@@ -657,6 +652,17 @@ class ApprovalBindingCliTests(unittest.TestCase):
         self.assertNotIn("a calm portrait", stored)
         self.assertNotIn(str(self.reference), stored)
         self.assertNotIn(str(self.fixture.base), stored)
+
+
+    def test_the_fake_launcher_matches_the_active_platform(self) -> None:
+        """A Unix-only launcher would make the Windows CI leg skip every subprocess test."""
+        self.assertEqual(SHIM.suffix, launcher.launcher_suffix())
+        text = SHIM.read_text(encoding="utf-8")
+        if os.name == "nt":
+            self.assertTrue(text.startswith("@echo off"))
+        else:
+            self.assertTrue(text.startswith("#!/bin/sh"))
+            self.assertTrue(os.access(SHIM, os.X_OK))
 
 
 if __name__ == "__main__":

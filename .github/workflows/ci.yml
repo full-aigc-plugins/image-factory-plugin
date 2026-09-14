@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: ${{ matrix.os }} / python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # The plugin's runtime uses the standard library only, so no dependency
+      # step exists on purpose: a job that installed anything would no longer be
+      # evidence that the plugin runs without installed packages.
+      - name: Compile every script and test
+        run: python -m compileall -q scripts tests
+
+      - name: Run the full offline suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Validate the distribution
+        run: python scripts/validate_distribution.py .
+
+      - name: Check for whitespace errors
+        run: git diff --check
+        if: runner.os != 'Windows'
+
+      - name: Check for whitespace errors (Windows)
+        run: git diff --check
+        shell: bash
+        if: runner.os == 'Windows'

@@ -156,3 +156,47 @@ source code, no private endpoints, and no credentials, and it does not inspect o
 reimplement Codex's internal image pipeline. Interoperability rests entirely on
 the documented `codex exec` command line and on files Codex writes to the
 user's own disk.
+
+## 9. Transaction ordering
+
+`run` performs one item at a time in a fixed order, and the order is the design:
+
+```text
+lock the job
+  -> prepare: pending items, runnable state, bind plan, record approval, enter Running
+  -> for each pending item:
+       start_attempt(item, attempt_id)          # reserve before the call
+       outcome = run_item(...)                  # the single external call
+       on success:
+         collect_artifact(...)
+         write_receipt(...)                     # receipt first
+         complete_attempt(..., receipt_id)      # ledger second
+       on timeout or missing artifact:
+         mark_attempt_unknown(...)              # then stop the batch
+       on any other failure:
+         fail_attempt(..., category)
+  -> rebuild the manifest from verified receipts
+  -> settle to Completed, Partial, or Unknown
+unlock the job
+```
+
+Receipt before ledger, not the other way round: a receipt without a ledger entry is
+recoverable, while a ledger entry naming a receipt that was never persisted is not.
+
+`recover` is the counterpart for everything this ordering cannot finish. It takes
+the same lock, reads the receipts that already verify, settles each interrupted item
+to `Generated` or leaves it `Unknown`, rebuilds the manifest, and never calls the
+generator. If anything remains unknown it exits with the recovery-required code and
+offers no automatic repeat.
+
+## 10. Trust boundaries of the evidence
+
+- The lock is advisory, so it excludes cooperating processes rather than hostile
+  ones; it is a correctness tool for concurrent runs, not a security control.
+- A receipt is verified on read, not trusted on write: its hash, byte count, and
+  dimensions are recomputed from the file it names, and a tampered artifact is
+  reported through the unverified channel instead of being silently dropped.
+- The scores file is hashed when it is written and that hash is recorded, so
+  optimizing against a substituted document is refused.
+- The ledger refuses credential-like keys on read and write, which keeps it safe
+  to share as evidence.
