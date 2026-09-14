@@ -805,6 +805,136 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
             arguments.extend(("--rewrites", str(rewrites)))
         return self.fixture.run_cli(*arguments)
 
+    def make_item_terminal_without_receipt(self, state: str) -> dict:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Partial"
+        row = ledger["items"][1]
+        before = dict(row)
+        row["state"] = state
+        row["receipt_id"] = None
+        row["error_category"] = "producer_rejected" if state == "Failed" else "operator_skipped"
+        cli.job_ledger.write_ledger(self.fixture.job_path, ledger)
+        receipts = cli.receipt_store.load_verified_receipts(
+            self.fixture.job_path, self.fixture.destination
+        )
+        receipts.pop(row["idempotency_key"])
+        cli.receipt_store.rebuild_manifest(self.fixture.job_path, receipts)
+        cli.receipt_store.receipt_path(
+            self.fixture.job_path, row["idempotency_key"]
+        ).unlink()
+        return before
+
+    def test_definite_failed_item_evaluates_as_missing_artifact(self) -> None:
+        before = self.make_item_terminal_without_receipt("Failed")
+
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(self.scores_path), *self.fixture.base_args(), "--json",
+        )
+
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
+        failed = next(row for row in scores["deterministic_gates"]["per_item"] if row["item_id"] == "item-02")
+        self.assertEqual(failed["failures"], ["missing_artifact"])
+        after = self.fixture.read_job()
+        self.assertEqual(after["state"], "Evaluated")
+        failed_row = after["items"][1]
+        self.assertEqual(failed_row["attempts"], before["attempts"])
+        self.assertEqual(failed_row["idempotency_key"], before["idempotency_key"])
+        self.assertEqual(failed_row["error_category"], "producer_rejected")
+
+    def test_skipped_item_evaluates_as_missing_artifact(self) -> None:
+        self.make_item_terminal_without_receipt("Skipped")
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(self.scores_path), *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
+        failed = next(row for row in scores["deterministic_gates"]["per_item"] if row["item_id"] == "item-02")
+        self.assertEqual(failed["failures"], ["missing_artifact"])
+        self.assertEqual(self.fixture.read_job()["state"], "Evaluated")
+
+    def test_failed_item_with_a_receipt_is_rejected_as_contradictory(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Partial"
+        ledger["items"][1].update(
+            state="Failed", receipt_id=None, error_category="producer_rejected"
+        )
+        cli.job_ledger.write_ledger(self.fixture.job_path, ledger)
+        self.scores_path.write_bytes(b'{"previous": true}\n')
+        job_before = self.fixture.job_path.read_bytes()
+        scores_before = self.scores_path.read_bytes()
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(self.scores_path), *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("contradictory receipt evidence", json.loads(output)["error"])
+        self.assertEqual(self.fixture.job_path.read_bytes(), job_before)
+        self.assertEqual(self.scores_path.read_bytes(), scores_before)
+
+    def test_nonterminal_item_states_refuse_evaluation_without_mutation(self) -> None:
+        for state in ("Pending", "Attempting", "Unknown"):
+            with self.subTest(state=state):
+                fixture = CliFixture()
+                self.addCleanup(fixture.cleanup)
+                fixture.write_plan()
+                fixture.control()
+                fixture.run_approved_batch()
+                ledger = fixture.read_job()
+                row = ledger["items"][1]
+                row.update(state=state, receipt_id=None, error_category=None)
+                cli.job_ledger.write_ledger(fixture.job_path, ledger)
+                cli.receipt_store.receipt_path(fixture.job_path, row["idempotency_key"]).unlink()
+                scores_path = fixture.base / "scores.json"
+                scores_path.write_bytes(b'{"previous": true}\n')
+                job_before = fixture.job_path.read_bytes()
+                scores_before = scores_path.read_bytes()
+                code, output = fixture.run_cli(
+                    "evaluate", "--plan", str(fixture.plan_path), "--job", str(fixture.job_path),
+                    "--scores", str(scores_path), *fixture.base_args(), "--json",
+                )
+                self.assertEqual(code, cli.EXIT_FAILURE, output)
+                self.assertIn("cannot be evaluated", json.loads(output)["error"])
+                self.assertEqual(fixture.job_path.read_bytes(), job_before)
+                self.assertEqual(scores_path.read_bytes(), scores_before)
+
+    def test_failed_item_requires_explicit_rewrite_before_new_round(self) -> None:
+        self.make_item_terminal_without_receipt("Failed")
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(self.scores_path), *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        code, output = self.optimize()
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(json.loads(output)["errors"][0]["code"], "optimizer_missing_instruction")
+
+        rewrites = self.fixture.base / "rewrites.json"
+        rewrites.write_text(json.dumps({"item-02": "a second portrait with softer light"}), encoding="utf-8")
+        next_plan = self.fixture.base / "next.json"
+        invocation_before = (self.fixture.base / "fake-codex-calls").read_bytes()
+        code, output = self.optimize(next_plan, rewrites)
+        self.assertEqual(code, cli.EXIT_OK, output)
+        plan = json.loads(next_plan.read_text(encoding="utf-8"))
+        self.assertEqual(plan["round"], 2)
+        self.assertEqual([item["id"] for item in plan["items"]], ["item-02"])
+        self.assertEqual(self.fixture.read_job()["state"], "Optimized")
+        self.assertEqual((self.fixture.base / "fake-codex-calls").read_bytes(), invocation_before)
+        code, output = self.fixture.run_cli("validate-plan", str(next_plan), "--json")
+        self.assertEqual(code, cli.EXIT_OK, output)
+        code, output = self.fixture.run_cli("quote", str(next_plan), "--json")
+        self.assertEqual(code, cli.EXIT_OK, output)
+        self.assertEqual(json.loads(output)["image_count"], 1)
+        code, output = self.fixture.run_cli(
+            "run", "--plan", str(next_plan), "--job", str(self.fixture.job_path),
+            "--codex-bin", str(SHIM), *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_APPROVAL_REQUIRED, output)
+        self.assertEqual(self.fixture.read_job()["state"], "Optimized")
+        self.assertEqual((self.fixture.base / "fake-codex-calls").read_bytes(), invocation_before)
+
     def test_evaluate_refuses_every_participating_path_collision_before_mutation(self) -> None:
         for alias_name in ("job", "plan", "labels", "advisory", "destination"):
             with self.subTest(alias=alias_name):

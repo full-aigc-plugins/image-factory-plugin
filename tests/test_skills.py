@@ -196,6 +196,21 @@ class BodyTests(unittest.TestCase):
         self.assertIn("approve", body)
         self.assertIn("reject", body)
 
+    def test_judge_skill_distinguishes_definite_failure_from_unknown(self) -> None:
+        body = self.body("codex-image-factory-judge").lower()
+        self.assertIn("failed` and `skipped", body)
+        self.assertIn("missing_artifact", body)
+        self.assertIn("unknown", body)
+        self.assertIn("explicit rewrite", body)
+        self.assertIn("retry-unchanged", body)
+
+    def test_recover_skill_routes_terminal_partial_items_to_evaluation(self) -> None:
+        body = self.body("codex-image-factory-recover").lower()
+        self.assertIn("no pending", body)
+        self.assertIn("definite failures", body)
+        self.assertIn("evaluate", body)
+        self.assertIn("explicit rewrite", body)
+
     def test_recover_skill_maps_every_ledger_state(self) -> None:
         body = self.body("codex-image-factory-recover")
         for state in job_ledger.JobState:

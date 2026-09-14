@@ -753,11 +753,21 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
     for item in result.items:
         row = current_rows.get(item.idempotency_key)
         receipt = verified.get(item.idempotency_key)
+        if row is None or row["state"] in ("Pending", "Attempting", "Unknown"):
+            raise ValueError(
+                f"plan item {item.id!r} is not terminal and cannot be evaluated"
+            )
+        if row["state"] in ("Failed", "Skipped"):
+            if receipt is not None:
+                raise ValueError(
+                    f"failed plan item {item.id!r} has contradictory receipt evidence"
+                )
+            continue
+        if row["state"] != "Generated":
+            raise ValueError(f"unsupported ledger state for plan item {item.id!r}")
         expected_prompt = hashlib.sha256(item.prompt.encode("utf-8")).hexdigest()
         if (
-            row is None
-            or row["state"] != "Generated"
-            or receipt is None
+            receipt is None
             or receipt["batch_id"] != result.batch_id
             or receipt["round"] != result.round
             or receipt["item_id"] != item.id

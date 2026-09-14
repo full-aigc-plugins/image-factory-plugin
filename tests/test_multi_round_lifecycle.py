@@ -163,6 +163,18 @@ class MultiRoundLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
         self.assertEqual(json.loads(output)["unknown_count"], 1)
+        round_two_scores = self.fixture.base / "round-two-unknown-scores.json"
+        round_two_scores.write_bytes(b'{"previous": true}\n')
+        job_before = self.fixture.job_path.read_bytes()
+        scores_before = round_two_scores.read_bytes()
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.round_two_plan), "--job", str(self.fixture.job_path),
+            "--scores", str(round_two_scores), *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("cannot be evaluated", json.loads(output)["error"])
+        self.assertEqual(self.fixture.job_path.read_bytes(), job_before)
+        self.assertEqual(round_two_scores.read_bytes(), scores_before)
 
     def test_round_two_crash_after_publication_before_receipt_recovers_as_unknown(self) -> None:
         with patch.object(cli.receipt_store, "write_receipt", side_effect=KeyboardInterrupt):

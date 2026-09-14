@@ -65,7 +65,7 @@ counts, remaining generation-call count, and one legal next action in plain lang
    | `Optimized` | A next round exists | Run the next round, then evaluate it |
    | `Accepted` | Every required result was explicitly accepted | Terminal; do not run, recover, or optimize |
    | `Completed` | Every item produced a verified artifact | Evaluate the batch |
-   | `Partial` | The run finished with at least one failed item | Read the failure categories, then decide |
+   | `Partial` | The run finished without completing every item | If pending items remain, quote them and seek fresh approval; with no pending items and only definite failures, evaluate them and then request an explicit rewrite or retry-unchanged; if any item is unknown, reconcile and stop if unresolved |
    | `Failed` | The job cannot proceed and is terminal | Report why, and start a new job if the user wants to try again |
    | `Unknown` | An interruption left the outcome unresolved | Query the state; do not re-run to find out |
 
@@ -77,6 +77,11 @@ counts, remaining generation-call count, and one legal next action in plain lang
    If the recovery report still contains `Unknown`, say that the external call
    may have happened and its outcome cannot be proved. Do not re-run it to find
    out, and do not offer a new generation while the ambiguity remains.
+
+   When `Partial` has no pending or unknown item, `Failed` and `Skipped` are
+   definite failures rather than ambiguous calls. Evaluate them as
+   `missing_artifact`; after the job becomes `Evaluated`, ask for an explicit
+   rewrite or explicit retry-unchanged decision. Do not run them automatically.
 
 6Step 6. **Report the failure categories and the usage limit if one is present.** A
    ledger carrying `quota_exceeded` holds the reset time for the image

@@ -1465,7 +1465,7 @@ Important findings.
   recovery path
 - Preserves: `Pending/Attempting/Unknown` refusal and no automatic retry
 
-- [ ] **Step 1: Write a failing definite-failure evaluation test**
+- [x] **Step 1: Write a failing definite-failure evaluation test**
 
 Run a real two-item fake batch where one item is generated and one receives a
 definite producer failure. Ensure no item remains pending, then invoke evaluate
@@ -1484,14 +1484,14 @@ self.assertEqual(self.fixture.read_job()["state"], "Evaluated")
 Assert the failed ledger row retains its error category, attempt count, and
 idempotency key.
 
-- [ ] **Step 2: Write failing eligibility-boundary tests**
+- [x] **Step 2: Write failing eligibility-boundary tests**
 
 Parameterize current states `Pending`, `Attempting`, and `Unknown`. Evaluate must
 return structured failure, preserve scores/job bytes, and never enter
 `Evaluated`. Add a `Skipped` case that follows the same deterministic fail path
 as `Failed`.
 
-- [ ] **Step 3: Write the failing end-to-end optimization test**
+- [x] **Step 3: Write the failing end-to-end optimization test**
 
 Starting from the evaluated definite failure:
 
@@ -1505,7 +1505,7 @@ Starting from the evaluated definite failure:
 
 This proves the legal next step without silently retrying the failed item.
 
-- [ ] **Step 4: Run focused tests and verify RED**
+- [x] **Step 4: Run focused tests and verify RED**
 
 ```bash
 python3 -m unittest \
@@ -1518,7 +1518,7 @@ Expected: evaluation rejects `Failed/Skipped` rows because it currently requires
 every row to be `Generated` with a receipt, leaving the job stranded in
 `Partial`.
 
-- [ ] **Step 5: Implement terminal-row evaluation**
+- [x] **Step 5: Implement terminal-row evaluation**
 
 Before calling the evaluator:
 
@@ -1540,7 +1540,7 @@ Do not mutate failed rows. Passing an absent receipt to the existing evaluator
 must yield `missing_artifact` and decision `fail`. Finalize once through
 `record_evaluation_final`.
 
-- [ ] **Step 6: Align Skills with the legal failed-item path**
+- [x] **Step 6: Align Skills with the legal failed-item path**
 
 The judge Skill must explain that definite failures can be evaluated and then
 rewritten, while ambiguous `Unknown` cannot. The recovery Skill's `Partial` row
@@ -1552,7 +1552,7 @@ must distinguish:
 
 Neither Skill may say or imply that failed work is automatically retried.
 
-- [ ] **Step 7: Run focused and complete verification**
+- [x] **Step 7: Run focused and complete verification**
 
 ```bash
 python3 -m unittest tests.test_cli tests.test_multi_round_lifecycle tests.test_skills -v
@@ -1565,7 +1565,7 @@ git diff --check
 Expected: all commands exit zero. Update `docs/verification/offline.md` with the
 observed full-suite count only after the final run.
 
-- [ ] **Step 8: Commit Task 14**
+- [x] **Step 8: Commit Task 14**
 
 ```bash
 git add scripts/image_factory_cli.py tests/test_cli.py tests/test_multi_round_lifecycle.py skills/codex-image-factory-judge/SKILL.md skills/codex-image-factory-recover/SKILL.md tests/test_skills.py docs/verification/offline.md docs/superpowers/specs/2026-09-14-codex-image-factory-production-hardening-design.md docs/superpowers/plans/2026-09-14-codex-image-factory-production-hardening.md

@@ -246,6 +246,9 @@ Recovery follows this evidence order:
   terminal row and no current item is `Pending`, `Attempting`, or `Unknown`.
 - `Generated` rows require the exact verified current-plan receipt already
   defined by the evaluation contract.
+- Terminal-row eligibility and contradictory-receipt checks happen before the
+  scores file or job ledger can be mutated, so refusals preserve both byte for
+  byte.
 - `Failed` and `Skipped` rows are evaluated without a receipt and therefore
   produce the deterministic `missing_artifact` gate failure. Their original
   ledger error category and attempt history remain unchanged.

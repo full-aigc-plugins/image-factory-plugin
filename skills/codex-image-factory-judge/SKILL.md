@@ -7,7 +7,8 @@ description: Use when a batch has been generated and its results need a verdict,
 
 ## When to use
 
-Use this skill after a batch has receipts. Its job is to answer two separate
+Use this skill after a batch has generated receipts or definite terminal
+failures. Its job is to answer two separate
 questions and keep them separate: whether the artifacts are sound, and whether
 they are what the user wanted.
 
@@ -35,6 +36,12 @@ for a rewrite.
    These gates have exactly one true answer each: a file exists, it is a PNG, it
    meets the minimum dimension, its hash matches the receipt, and the same image
    is not standing in for two different items. A failure here is a real failure.
+
+   Current rows in `Failed` and `Skipped` are definite outcomes. They may be
+   evaluated without receipts and receive the deterministic `missing_artifact`
+   failure. A current `Unknown`, `Pending`, or `Attempting` row is not evaluable:
+   reconcile ambiguity first and stop if `Unknown` remains. Receipt evidence on
+   a `Failed` or `Skipped` row is contradictory and must be rejected.
 
 3Step 3. **Record your own assessment as advisory, and say that it is advisory.**
 
@@ -71,7 +78,7 @@ for a rewrite.
    that needs rework, then hand those decisions to the optimizer:
 
    ```bash
-   bin/image-factory optimize --plan plan.json --scores scores.json \
+   bin/image-factory optimize --job job.json --plan plan.json --scores scores.json \
      --rewrites rewrites.json --out next-round.json --json
    ```
 
@@ -79,6 +86,10 @@ for a rewrite.
    `--retry-unchanged item-id` for an item whose prompt was fine and whose
    failure was environmental. Every item that needs rework must be given one or
    the other: an instruction cannot be left implicit.
+
+   A definite failed item is never retried merely because evaluation found it.
+   After the job enters `Evaluated`, require either an explicit rewrite or an
+   explicit `--retry-unchanged` decision before creating the next round.
 
    Write rewrites that name the difference you observed, not a general
    instruction to do better. If the palette came out too saturated, say which
@@ -144,4 +155,5 @@ never write a prompt whose intent depends on those settings.
   round number links a result back to the instruction that produced it.
 - Never invent a rewrite for an item you did not look at.
 - Never regenerate an item that already passed.
+- Never turn a definite failure into an implicit retry.
 - Never treat reaching the round ceiling as a success.

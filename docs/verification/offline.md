@@ -24,7 +24,7 @@ operating systems.
 | Approval and execution | Approval binds the current plan hash, round, and remaining count; every external attempt is reserved first. |
 | Concurrency and crashes | The cross-process job lock prevents a second writer; crash cases preserve `Attempting`/`Unknown` evidence without retry. |
 | Receipt durability | Atomic per-item receipts are authoritative; the aggregate manifest is rebuildable. |
-| Evaluation | A required missing human label prevents `pass`; model assessment remains advisory. |
+| Evaluation | A required missing human label prevents `pass`; definite `Failed`/`Skipped` rows deterministically fail as `missing_artifact`; ambiguous rows are refused byte-identically; model assessment remains advisory. |
 | Recovery | Valid receipts reconcile state; ambiguous or tampered evidence is refused without invoking Codex. |
 | Distribution | Manifest, marketplace, assets, pinned upstream snapshots, docs, CI contract, and secret scan are checked locally. |
 
@@ -33,7 +33,7 @@ operating systems.
 | Gate | Status | Evidence |
 | --- | --- | --- |
 | `compileall` | `PASS` | `python3 -m compileall -q scripts tests` exited 0 on 2026-09-14. |
-| `full_source_tests` | `PASS` | 379 tests ran successfully on 2026-09-14. |
+| `full_source_tests` | `PASS` | 386 tests ran successfully on 2026-09-14. |
 | `distribution_validation` | `PASS` | Validator reported compatibility foundation 0.1.2 and exited 0. |
 | `git_diff_check` | `PASS` | `git diff --check` exited 0 on 2026-09-14. |
 
