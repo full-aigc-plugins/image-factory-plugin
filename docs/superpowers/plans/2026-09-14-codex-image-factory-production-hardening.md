@@ -30,6 +30,25 @@ recorded as gates rather than ticks:
 Task 11's steps are the exception and are ticked below, because that release work was
 performed and verified step by step as part of this pass.
 
+### Audit of every task's declared deliverables (2026-09-14, `0de8c45`)
+
+Rather than tick boxes that assert a procedure was followed, each task was checked
+against what it said it would produce. Both counts are complete:
+
+| Check | Result |
+| --- | --- |
+| Files declared in every task's `**Files:**` block | 89 of 89 exist |
+| Public interfaces declared in `Produces` / `Extends` / `Preserves` | 45 of 45 implemented |
+| Offline suite | 401 tests pass |
+| Distribution validator | `validated codex-image-factory compatibility foundation 0.1.2` |
+| Plugin validator | `Plugin validation passed` |
+| CI matrix | six of six legs green on `98fc6e3`, `e0e3fae`, `0de8c45` |
+
+Tasks 12-15 are included: their declared remediation files and interfaces are present
+and the suite that exercises them passes. `usage_limit_evidence` remains `NOT_RUN` by
+design; every other external gate is recorded as observed in
+`docs/verification/runtime.md`.
+
 ## Global Constraints
 
 - Preserve all existing uncommitted user changes; do not restore, delete, or overwrite unrelated files.
