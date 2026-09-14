@@ -574,6 +574,18 @@ def _advisory_from_file(path: str | None) -> dict:
     return {key: tuple(value) if isinstance(value, list) else value for key, value in raw.items()}
 
 
+def current_rows_by_key(payload: dict, current_keys: set[str]) -> dict[str, dict]:
+    rows: dict[str, dict] = {}
+    for row in payload["items"]:
+        key = row.get("idempotency_key")
+        if key not in current_keys:
+            continue
+        if key in rows:
+            raise ValueError("duplicate current-round ledger rows")
+        rows[key] = row
+    return rows
+
+
 def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
     result, _plan_path = _validated_plan(args)
     if not result.ok:
@@ -600,14 +612,10 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
         raise ValueError("a partial job with pending calls cannot be evaluated")
 
     current_keys = {item.idempotency_key for item in result.items}
+    current_rows = current_rows_by_key(current, current_keys)
     verified = receipt_store.load_verified_receipts(
         Path(args.job), Path(args.destination), current_keys
     )
-    current_rows = {
-        row["idempotency_key"]: row
-        for row in current["items"]
-        if row["idempotency_key"] in current_keys
-    }
     receipts: dict[str, dict] = {}
     for item in result.items:
         row = current_rows.get(item.idempotency_key)
@@ -788,15 +796,13 @@ def command_status(args: argparse.Namespace) -> tuple[int, str]:
         for name in ("attempting", "failed", "generated", "pending", "skipped", "unknown")
     }
     current_keys = set(payload.get("current_item_keys") or ())
-    current_rows = [
-        row
-        for row in payload["items"]
-        if not current_keys or row.get("idempotency_key") in current_keys
-    ]
-    current_row_keys = [row.get("idempotency_key") for row in current_rows]
-    if len(current_row_keys) != len(set(current_row_keys)):
+    if not current_keys:
+        current_keys = {row.get("idempotency_key") for row in payload["items"]}
+    try:
+        current_rows = list(current_rows_by_key(payload, current_keys).values())
+    except ValueError as error:
         return EXIT_FAILURE, _emit(
-            {"ok": False, "error": "duplicate current-round ledger rows"}, args.json
+            {"ok": False, "error": str(error)}, args.json
         )
     for row in current_rows:
         key = row["state"].lower()

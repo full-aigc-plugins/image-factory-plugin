@@ -671,6 +671,28 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
         self.assertEqual(json.loads(output)["decision"], "pass")
         self.assertEqual(self.fixture.read_job()["state"], "Accepted")
 
+    def test_evaluate_refuses_duplicate_current_round_ledger_rows(self) -> None:
+        ledger = self.fixture.read_job()
+        historical = dict(ledger["items"][0])
+        historical["idempotency_key"] = "f" * 64
+        duplicate = dict(ledger["items"][0])
+        duplicate.update(state="Unknown", receipt_id=None, error_category="unknown")
+        ledger["items"].extend((historical, duplicate))
+        cli.job_ledger.write_ledger(self.fixture.job_path, ledger)
+        self.scores_path.write_bytes(b'{"previous": true}\n')
+        ledger_before = self.fixture.job_path.read_bytes()
+        scores_before = self.scores_path.read_bytes()
+
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(self.scores_path), *self.fixture.base_args(), "--json",
+        )
+
+        self.assertEqual(code, cli.EXIT_FAILURE)
+        self.assertIn("duplicate current-round ledger rows", json.loads(output)["error"])
+        self.assertEqual(self.fixture.job_path.read_bytes(), ledger_before)
+        self.assertEqual(self.scores_path.read_bytes(), scores_before)
+
     def test_partial_labels_remain_pending(self) -> None:
         labels = self.fixture.base / "labels.json"
         labels.write_text(json.dumps({"item-01": "approved"}), encoding="utf-8")

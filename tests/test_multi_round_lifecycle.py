@@ -41,6 +41,41 @@ class MultiRoundLifecycleTests(unittest.TestCase):
             "--codex-bin", str(SHIM), *self.fixture.base_args(), "--approve", "--json",
         )
 
+    def assert_recovered_round_two_evaluates_to_accepted(self) -> None:
+        current = cli.plan_validator.validate_plan(
+            json.loads(self.round_two_plan.read_text(encoding="utf-8")),
+            base_dir=self.round_two_plan.parent,
+        ).items[0]
+        ledger = self.fixture.read_job()
+        historical_receipt_ids = {
+            row["receipt_id"]
+            for row in ledger["items"]
+            if row["idempotency_key"] != current.idempotency_key and row["receipt_id"] is not None
+        }
+        current_row = next(
+            row for row in ledger["items"] if row["idempotency_key"] == current.idempotency_key
+        )
+        current_receipt = receipt_store.load_verified_receipts(
+            self.fixture.job_path, self.fixture.destination, {current.idempotency_key}
+        )[current.idempotency_key]
+        self.assertEqual(current_row["receipt_id"], current_receipt["artifact_id"])
+        self.assertNotIn(current_receipt["artifact_id"], historical_receipt_ids)
+
+        labels = self.fixture.base / "round-two-labels.json"
+        labels.write_text(json.dumps({"item-01": "approved"}), encoding="utf-8")
+        round_two_scores = self.fixture.base / "round-two-scores.json"
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.round_two_plan), "--job", str(self.fixture.job_path),
+            "--scores", str(round_two_scores), "--labels", str(labels),
+            *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_OK, output)
+        self.assertEqual(json.loads(output)["decision"], "pass")
+        scores = json.loads(round_two_scores.read_text(encoding="utf-8"))
+        self.assertEqual(scores["round"], 2)
+        self.assertEqual(scores["decision"], "pass")
+        self.assertEqual(self.fixture.read_job()["state"], "Accepted")
+
     def test_round_two_generation_evaluation_and_status_ignore_round_one_history(self) -> None:
         code, output = self.run_round_two()
         self.assertEqual(code, cli.EXIT_OK, output)
@@ -88,7 +123,7 @@ class MultiRoundLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(code, cli.EXIT_FAILURE, output)
 
-    def test_round_two_crash_after_receipt_recovers_without_rejecting_history(self) -> None:
+    def test_round_two_crash_after_receipt_recovers_and_evaluates(self) -> None:
         with patch.object(cli.job_ledger.JobLedger, "complete_attempt", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
                 self.run_round_two()
@@ -102,6 +137,7 @@ class MultiRoundLifecycleTests(unittest.TestCase):
         self.assertEqual(report["completed_count"], 1)
         self.assertEqual(report["pending_count"], 0)
         self.assertEqual(report["unknown_count"], 0)
+        self.assert_recovered_round_two_evaluates_to_accepted()
 
     def test_round_two_crash_before_attempt_leaves_current_item_pending(self) -> None:
         with patch.object(cli.job_ledger.JobLedger, "start_attempt", side_effect=KeyboardInterrupt):
@@ -139,7 +175,7 @@ class MultiRoundLifecycleTests(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
         self.assertEqual(json.loads(output)["unknown_count"], 1)
 
-    def test_round_two_crash_after_completion_rebuilds_manifest_from_current_receipt(self) -> None:
+    def test_round_two_crash_after_completion_recovers_and_evaluates(self) -> None:
         with patch.object(cli.receipt_store, "rebuild_manifest", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
                 self.run_round_two()
@@ -151,6 +187,7 @@ class MultiRoundLifecycleTests(unittest.TestCase):
         manifest = json.loads(receipt_store.manifest_path(self.fixture.job_path).read_text(encoding="utf-8"))
         self.assertEqual(len(manifest), 1)
         self.assertEqual(manifest[0]["round"], 2)
+        self.assert_recovered_round_two_evaluates_to_accepted()
 
 
 if __name__ == "__main__":
