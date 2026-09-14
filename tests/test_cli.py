@@ -479,6 +479,46 @@ class RunCommandTests(unittest.TestCase):
         self.assertIn("reference", json.loads(output)["error"])
         self.assertFalse(self.fixture.job_path.exists())
 
+    def test_run_preserves_pre_existing_empty_snapshot_root_after_reference_mismatch(self) -> None:
+        reference = self.fixture.base / "reference.png"
+        reference.write_bytes(REAL_PNG.read_bytes())
+        self.fixture.write_plan(valid_plan(items=[{
+            "id": "item-01", "prompt": "a calm portrait",
+            "reference_images": [str(reference)],
+        }]))
+        ledger = cli.job_ledger.JobLedger(self.fixture.job_path)
+        ledger.write(cli.job_ledger.new_job("portrait-study"))
+        job_before = self.fixture.read_job()
+        snapshot_root = Path(str(self.fixture.job_path) + ".reference-snapshots")
+        snapshot_root.mkdir()
+        created_attempts: list[Path] = []
+        original_copy = shutil.copyfile
+
+        def copy_then_mutate(source, destination):
+            created_attempts.append(Path(destination).parent)
+            result = original_copy(source, destination)
+            Path(source).write_bytes(b"changed after preflight")
+            return result
+
+        def invocation_count() -> int:
+            counter = self.fixture.base / "fake-codex-calls"
+            return int(counter.read_text(encoding="utf-8")) if counter.exists() else 0
+
+        with patch.object(cli.shutil, "copyfile", side_effect=copy_then_mutate), patch.object(
+            cli.generation_runner,
+            "run_item",
+            side_effect=AssertionError("changed references must spend zero calls"),
+        ):
+            code, output = self.run_batch("--approve")
+
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
+        self.assertTrue(snapshot_root.is_dir())
+        self.assertEqual(list(snapshot_root.iterdir()), [])
+        self.assertEqual(len(created_attempts), 1)
+        self.assertFalse(created_attempts[0].exists())
+        self.assertEqual(self.fixture.read_job(), job_before)
+        self.assertEqual(invocation_count(), 0)
+
     def test_run_invokes_only_hash_verified_reference_snapshots(self) -> None:
         reference = self.fixture.base / "reference.png"
         reference.write_bytes(REAL_PNG.read_bytes())

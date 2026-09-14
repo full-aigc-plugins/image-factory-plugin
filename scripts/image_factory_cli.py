@@ -214,6 +214,7 @@ def snapshot_plan_references(
 ) -> tuple[plan_validator.PlanResult, dict[str, str]]:
     """Copy and verify references before any attempt is recorded or invoked."""
     snapshot_root = Path(str(job_path) + ".reference-snapshots")
+    snapshot_root_existed = snapshot_root.exists()
     created_directories: list[Path] = []
     snapshot_items: list[plan_validator.PlanItem] = []
     attempt_ids: dict[str, str] = {}
@@ -248,7 +249,11 @@ def snapshot_plan_references(
     except BaseException:
         for directory in reversed(created_directories):
             shutil.rmtree(directory, ignore_errors=True)
-        if snapshot_root.is_dir() and not any(snapshot_root.iterdir()):
+        if (
+            not snapshot_root_existed
+            and snapshot_root.is_dir()
+            and not any(snapshot_root.iterdir())
+        ):
             snapshot_root.rmdir()
         raise
     return replace(result, items=tuple(snapshot_items)), attempt_ids
