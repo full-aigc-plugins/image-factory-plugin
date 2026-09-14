@@ -554,7 +554,7 @@ git commit -m "feat: serialize Image Factory jobs"
 - Produces: `mark_attempt_unknown(item_id: str, attempt_id: str) -> dict`
 - Preserves: `pending_items(items: object) -> list`, narrowed to never-recorded keys
 
-- [ ] **Step 1: Write failing approval and attempt tests**
+- [x] **Step 1: Write failing approval and attempt tests**
 
 ```python
 def test_attempt_is_counted_once_when_it_starts(self) -> None:
@@ -577,11 +577,11 @@ def test_approval_is_bound_to_exact_plan_and_count(self) -> None:
     self.assertFalse(self.ledger.approval_matches("a" * 64, 1, 1))
 ```
 
-- [ ] **Step 2: Write failing state-machine tests**
+- [x] **Step 2: Write failing state-machine tests**
 
 Assert `PlanValidated -> Running`, `Unknown -> Running`, and `Completed -> Running` are illegal. Assert `Evaluated -> PendingApproval`, `Evaluated -> Accepted`, and `Evaluated -> Optimized` are legal. Assert `Accepted` and `Failed` are terminal.
 
-- [ ] **Step 3: Run ledger tests and verify RED**
+- [x] **Step 3: Run ledger tests and verify RED**
 
 ```bash
 python3 -m unittest tests.test_ledger -v
@@ -589,7 +589,7 @@ python3 -m unittest tests.test_ledger -v
 
 Expected: new methods and states are absent and current unsafe transitions are accepted.
 
-- [ ] **Step 4: Implement plan binding and approval history**
+- [x] **Step 4: Implement plan binding and approval history**
 
 `bind_plan` stores only `batch_id`, round, plan hash, and image count; it stores
 no prompts or local paths. `record_approval` appends the specification's record
@@ -597,15 +597,15 @@ and sets `approval.current`. It accepts only `run_approve_flag` as source, which
 records the fact the CLI can prove. Binding a different plan clears only current
 approval and preserves history.
 
-- [ ] **Step 5: Implement attempt lifecycle methods**
+- [x] **Step 5: Implement attempt lifecycle methods**
 
 `start_attempt` creates or updates one item by idempotency key, increments attempts exactly once, records an RFC 3339 start time, and refuses a key already in `Attempting`, `Generated`, `Failed`, `Skipped`, or `Unknown`. Completion and failure require the same active attempt id and never increment attempts.
 
-- [ ] **Step 6: Replace the state transition table**
+- [x] **Step 6: Replace the state transition table**
 
 Encode the specification's state diagram. Keep partial-job conditions in CLI orchestration, while the base table rejects every direct transition that can turn `Unknown`, `Completed`, or `Evaluated` into `Running`.
 
-- [ ] **Step 7: Run focused and full tests**
+- [x] **Step 7: Run focused and full tests**
 
 ```bash
 python3 -m unittest tests.test_ledger tests.test_contracts -v
@@ -614,7 +614,7 @@ python3 -m unittest discover -s tests -v
 
 Expected: every persisted ledger validates as 1.1.0 and all tests pass.
 
-- [ ] **Step 8: Commit the ledger transaction model**
+- [x] **Step 8: Commit the ledger transaction model**
 
 ```bash
 git add scripts/job_ledger.py schemas/factory_job.schema.json tests/test_ledger.py tests/test_contracts.py

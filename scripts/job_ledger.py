@@ -19,6 +19,7 @@ Two deliberate restrictions:
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -86,23 +87,35 @@ ITEM_STATES = ("Pending", "Attempting", "Generated", "Failed", "Skipped", "Unkno
 # Every state that means a call may have reached the generator. An item in one of
 # these states is never attempted again automatically.
 ATTEMPTED_ITEM_STATES = ("Attempting", "Generated", "Failed", "Skipped", "Unknown")
+# An item in one of these states has an unresolved external call, so starting it
+# again could spend a second time for work that may already have happened.
+BLOCKING_ATTEMPT_STATES = ("Attempting", "Generated", "Failed", "Skipped", "Unknown")
+
+# The only approval source the CLI can actually prove. A caller cannot assert
+# that a human agreed; it can only record that the explicit flag was present.
+APPROVAL_SOURCES = ("run_approve_flag",)
 
 ALLOWED_TRANSITIONS: dict[JobState, frozenset[JobState]] = {
     JobState.DRAFT: frozenset({JobState.PLAN_VALIDATED, JobState.FAILED}),
     JobState.PLAN_VALIDATED: frozenset(
-        {JobState.PENDING_APPROVAL, JobState.APPROVED, JobState.RUNNING, JobState.FAILED}
+        {JobState.PENDING_APPROVAL, JobState.APPROVED, JobState.FAILED}
     ),
     JobState.PENDING_APPROVAL: frozenset({JobState.APPROVED, JobState.FAILED}),
     JobState.APPROVED: frozenset({JobState.RUNNING, JobState.FAILED}),
     JobState.RUNNING: frozenset(
         {JobState.COMPLETED, JobState.PARTIAL, JobState.UNKNOWN, JobState.FAILED}
     ),
-    JobState.COMPLETED: frozenset({JobState.EVALUATED, JobState.RUNNING, JobState.FAILED}),
-    JobState.PARTIAL: frozenset({JobState.EVALUATED, JobState.RUNNING, JobState.FAILED}),
+    JobState.COMPLETED: frozenset({JobState.EVALUATED, JobState.FAILED}),
+    # A partial run may resume its remaining items, but only through a fresh
+    # approval bound to the reduced call count.
+    JobState.PARTIAL: frozenset(
+        {JobState.EVALUATED, JobState.PENDING_APPROVAL, JobState.FAILED}
+    ),
     JobState.EVALUATED: frozenset(
         {
             JobState.OPTIMIZED,
             JobState.ACCEPTED,
+            JobState.PENDING_APPROVAL,
             JobState.COMPLETED,
             JobState.PARTIAL,
             JobState.FAILED,
@@ -110,18 +123,15 @@ ALLOWED_TRANSITIONS: dict[JobState, frozenset[JobState]] = {
     ),
     JobState.OPTIMIZED: frozenset(
         {
-            JobState.PLAN_VALIDATED,
             JobState.PENDING_APPROVAL,
-            JobState.RUNNING,
+            JobState.PLAN_VALIDATED,
             JobState.ACCEPTED,
             JobState.COMPLETED,
             JobState.FAILED,
         }
     ),
-    JobState.ACCEPTED: frozenset({JobState.RUNNING, JobState.FAILED}),
-    JobState.UNKNOWN: frozenset(
-        {JobState.RUNNING, JobState.COMPLETED, JobState.PARTIAL, JobState.FAILED}
-    ),
+    JobState.ACCEPTED: frozenset(),
+    JobState.UNKNOWN: frozenset({JobState.COMPLETED, JobState.PARTIAL, JobState.FAILED}),
     JobState.FAILED: frozenset(),
 }
 
@@ -150,6 +160,47 @@ class InvalidTransitionError(Exception):
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _require_sha256(value: object) -> None:
+    if not isinstance(value, str) or re.fullmatch(SHA256_PATTERN, value) is None:
+        raise ValueError(f"expected a 64-character lowercase hex digest, got {value!r}")
+
+
+def _require_positive_int(value: object, label: str) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError(f"{label} must be a positive integer, got {value!r}")
+
+
+def _approval_covers(
+    record: object, plan_sha256: str, round_number: int, image_count: int
+) -> bool:
+    """An approval covers exactly one plan, one round, and one call count."""
+    if not isinstance(record, dict):
+        return False
+    return (
+        record.get("plan_hash") == plan_sha256
+        and record.get("round") == round_number
+        and record.get("remaining_count") == image_count
+    )
+
+
+def _entry_for(payload: dict, item_id: str) -> dict:
+    entry = next((row for row in payload["items"] if row["item_id"] == item_id), None)
+    if entry is None:
+        entry = {"item_id": item_id, "state": "Pending", "attempts": 0}
+        payload["items"].append(entry)
+    for key, default in (
+        ("state", "Pending"),
+        ("attempts", 0),
+        ("attempt_id", None),
+        ("attempt_started_at", None),
+        ("receipt_id", None),
+        ("idempotency_key", None),
+        ("error_category", None),
+    ):
+        entry.setdefault(key, default)
+    return entry
 
 
 def new_job(job_id: str) -> dict:
@@ -361,6 +412,130 @@ class JobLedger:
             raise ValueError(f"unknown error category {category!r}")
         payload = self.read()
         payload["error_category"] = category
+        payload["revision"] = payload["revision"] + 1
+        payload["updated_at"] = _timestamp()
+        self.write(payload)
+        return payload
+
+    # ---------------------------------------------------------- plan and approval
+
+    def bind_plan(self, plan_sha256: str, round_number: int, image_count: int) -> dict:
+        """Record the identity of the plan this job is about to execute.
+
+        Only identity and count are stored: no prompts, no local paths. Binding a
+        different plan clears the *current* approval because an approval for other
+        work authorizes nothing here, while the history is kept as an audit trail.
+        """
+        _require_sha256(plan_sha256)
+        _require_positive_int(round_number, "round")
+        _require_positive_int(image_count, "image_count")
+        payload = self.read()
+        payload["batch"] = {
+            "batch_id": payload["job_id"],
+            "round": round_number,
+            "plan_hash": plan_sha256,
+            "image_count": image_count,
+        }
+        approvals = payload.setdefault("approval", {"current": None, "history": []})
+        current = approvals.get("current")
+        if current is not None and not _approval_covers(
+            current, plan_sha256, round_number, image_count
+        ):
+            approvals["current"] = None
+        payload["revision"] = payload["revision"] + 1
+        payload["updated_at"] = _timestamp()
+        self.write(payload)
+        return payload
+
+    def record_approval(
+        self, plan_sha256: str, round_number: int, image_count: int, source: str
+    ) -> dict:
+        if source not in APPROVAL_SOURCES:
+            raise ValueError(f"approval source must be one of {APPROVAL_SOURCES}, got {source!r}")
+        _require_sha256(plan_sha256)
+        _require_positive_int(round_number, "round")
+        _require_positive_int(image_count, "image_count")
+        payload = self.read()
+        approvals = payload.setdefault("approval", {"current": None, "history": []})
+        record = {
+            "plan_hash": plan_sha256,
+            "round": round_number,
+            "remaining_count": image_count,
+            "approved_at": _timestamp(),
+            "note": f"approved via {source}",
+        }
+        approvals["history"].append(record)
+        approvals["current"] = record
+        payload["revision"] = payload["revision"] + 1
+        payload["updated_at"] = _timestamp()
+        self.write(payload)
+        return payload
+
+    def approval_matches(self, plan_sha256: str, round_number: int, image_count: int) -> bool:
+        payload = self.read()
+        approvals = payload.get("approval") or {}
+        return _approval_covers(approvals.get("current"), plan_sha256, round_number, image_count)
+
+    # ------------------------------------------------------------ attempt lifecycle
+
+    def start_attempt(self, item: object, attempt_id: str) -> dict:
+        """Reserve an item before the external call, incrementing attempts exactly once."""
+        if not isinstance(attempt_id, str) or not attempt_id:
+            raise ValueError("attempt_id must be a non-empty string")
+        payload = self.read()
+        entry = _entry_for(payload, getattr(item, "id"))
+        if entry["state"] in BLOCKING_ATTEMPT_STATES:
+            raise InvalidTransitionError(
+                f"item {entry['item_id']} is {entry['state']}; it must not be started again"
+            )
+        entry["state"] = "Attempting"
+        entry["attempts"] = entry["attempts"] + 1
+        entry["attempt_id"] = attempt_id
+        entry["attempt_started_at"] = _timestamp()
+        entry["idempotency_key"] = getattr(item, "idempotency_key")
+        entry["receipt_id"] = None
+        entry["error_category"] = None
+        payload["revision"] = payload["revision"] + 1
+        payload["updated_at"] = _timestamp()
+        self.write(payload)
+        return payload
+
+    def complete_attempt(self, item: object, attempt_id: str, receipt_id: str) -> dict:
+        if not isinstance(receipt_id, str) or not receipt_id:
+            raise ValueError("receipt_id must be a non-empty string")
+        return self._close_attempt(
+            getattr(item, "id"), attempt_id, state="Generated", receipt_id=receipt_id
+        )
+
+    def fail_attempt(self, item: object, attempt_id: str, error_category: str) -> dict:
+        if error_category not in ERROR_CATEGORIES:
+            raise ValueError(f"unknown error category {error_category!r}")
+        return self._close_attempt(
+            getattr(item, "id"), attempt_id, state="Failed", error_category=error_category
+        )
+
+    def mark_attempt_unknown(self, item_id: str, attempt_id: str) -> dict:
+        """Record that an interrupted call may or may not have reached the generator."""
+        return self._close_attempt(item_id, attempt_id, state="Unknown")
+
+    def _close_attempt(
+        self,
+        item_id: str,
+        attempt_id: str,
+        *,
+        state: str,
+        receipt_id: str | None = None,
+        error_category: str | None = None,
+    ) -> dict:
+        payload = self.read()
+        entry = _entry_for(payload, item_id)
+        if entry["state"] != "Attempting" or entry["attempt_id"] != attempt_id:
+            raise InvalidTransitionError(
+                f"item {item_id} has no active attempt {attempt_id!r}"
+            )
+        entry["state"] = state
+        entry["receipt_id"] = receipt_id
+        entry["error_category"] = error_category
         payload["revision"] = payload["revision"] + 1
         payload["updated_at"] = _timestamp()
         self.write(payload)

@@ -194,24 +194,56 @@ def command_quote(args: argparse.Namespace) -> tuple[int, str]:
 # ------------------------------------------------------------------------- run
 
 
-def _drive_to_running(ledger: job_ledger.JobLedger, approved: bool) -> job_ledger.JobState:
+def _prepare_run(
+    ledger: job_ledger.JobLedger,
+    *,
+    approved: bool,
+    result: plan_validator.PlanResult,
+) -> tuple[job_ledger.JobState | None, str | None]:
+    """Walk the job to Running, or report why it cannot proceed.
+
+    Every path to Running goes through a fresh approval bound to this plan hash,
+    this round, and this call count. That is the only way the ledger permits
+    spending, so an interrupted or completed job cannot quietly resume spending
+    its original allowance.
+    """
     state = job_ledger.JobState(ledger.read()["state"])
     if state in (job_ledger.JobState.DRAFT, job_ledger.JobState.OPTIMIZED):
         ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
         state = job_ledger.JobState.PLAN_VALIDATED
-    if state is job_ledger.JobState.PLAN_VALIDATED and approved:
+
+    if state in (
+        job_ledger.JobState.PLAN_VALIDATED,
+        job_ledger.JobState.EVALUATED,
+        job_ledger.JobState.PARTIAL,
+    ):
+        ledger.bind_plan(result.plan_sha256, result.round, len(result.items))
+        ledger.transition(job_ledger.JobState.PENDING_APPROVAL)
+        state = job_ledger.JobState.PENDING_APPROVAL
+
+    if state is job_ledger.JobState.PENDING_APPROVAL:
+        if not approved:
+            ledger.set_error_category("approval_required")
+            return None, "approval_required"
+        ledger.record_approval(
+            result.plan_sha256, result.round, len(result.items), "run_approve_flag"
+        )
         ledger.transition(job_ledger.JobState.APPROVED)
         state = job_ledger.JobState.APPROVED
-    if state in (
-        job_ledger.JobState.APPROVED,
-        job_ledger.JobState.COMPLETED,
-        job_ledger.JobState.PARTIAL,
-        job_ledger.JobState.EVALUATED,
-        job_ledger.JobState.UNKNOWN,
-    ):
+
+    if state is job_ledger.JobState.APPROVED:
         ledger.transition(job_ledger.JobState.RUNNING)
-        return job_ledger.JobState.RUNNING
-    return state
+        return job_ledger.JobState.RUNNING, None
+
+    if state is job_ledger.JobState.RUNNING:
+        # Resuming an interrupted run in place. The attempt lifecycle already
+        # prevents a second call for any item whose outcome is uncertain.
+        return job_ledger.JobState.RUNNING, None
+
+    if state is job_ledger.JobState.UNKNOWN:
+        return None, "recovery_required"
+
+    return state, None
 
 
 def command_run(args: argparse.Namespace) -> tuple[int, str]:
@@ -257,11 +289,25 @@ def _run_locked(
     else:
         ledger.write(job_ledger.new_job(result.batch_id))
 
-    if result.require_approval_before_run and not args.approve:
+    pending = ledger.pending_items(result.items)
+    if not pending:
+        # Nothing left to generate. Do not enter Running and do not ask for an
+        # approval the run would not use.
         state = job_ledger.JobState(ledger.read()["state"])
-        if state is job_ledger.JobState.DRAFT:
-            ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
-        ledger.set_error_category("approval_required")
+        payload = {
+            "ok": True,
+            "batch_id": result.batch_id,
+            "round": result.round,
+            "state": state.value,
+            "attempted": 0,
+            "failed": 0,
+            "receipts": [],
+            "ledger": str(job_path),
+        }
+        return EXIT_OK, _emit(payload, args.json)
+
+    state, refusal = _prepare_run(ledger, approved=bool(args.approve), result=result)
+    if refusal == "approval_required":
         payload = {
             "ok": False,
             "stage": "approval",
@@ -270,10 +316,19 @@ def _run_locked(
             "message": "this plan requires approval; rerun with --approve to spend the allowance",
         }
         return EXIT_APPROVAL_REQUIRED, _emit(payload, args.json)
+    if refusal == "recovery_required":
+        payload = {
+            "ok": False,
+            "stage": "recovery",
+            "error_category": "recovery_required",
+            "image_count": len(result.items),
+            "message": (
+                "an earlier call may or may not have completed; reconcile the job "
+                "before spending again"
+            ),
+        }
+        return EXIT_RECOVERY_REQUIRED, _emit(payload, args.json)
 
-    _drive_to_running(ledger, approved=True)
-
-    pending = ledger.pending_items(result.items)
     receipts: list[dict] = []
     failed = 0
 
