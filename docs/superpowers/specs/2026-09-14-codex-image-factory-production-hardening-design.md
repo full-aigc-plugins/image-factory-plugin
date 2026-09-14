@@ -208,6 +208,23 @@ Recovery follows this evidence order:
 7. Rebuild the aggregate manifest from verified receipts.
 8. Derive `Completed`, `Partial`, or `Unknown` without making a generation call.
 
+## Path and evaluation commit safety
+
+- Every mutating command canonicalizes its participating input and output paths
+  before the first write. A file output may not alias the job ledger, plan,
+  scores input, labels, advisory input, rewrite input, or destination directory
+  used by that command.
+- Alias checks use absolute resolved paths with `strict=False`, so `..`,
+  symlinked parents, and alternative relative spellings cannot bypass them.
+- Refusal happens before any participating file or ledger byte changes.
+- Evaluation writes the scores document atomically, then records the evaluation
+  evidence and its final batch state in one atomic ledger mutation.
+- The single evaluation ledger mutation maps `fail` to `Evaluated`, `pass` to
+  `Accepted`, and `pending_approval` to `PendingApproval`.
+- If execution stops after scores publication but before the ledger mutation,
+  the unchanged source batch state can safely repeat evaluation. There is no
+  intermediate persisted `Evaluated` state for a pass or pending decision.
+
 ## Crash matrix
 
 | Crash point | Durable evidence | Recovery result | Automatic generation |

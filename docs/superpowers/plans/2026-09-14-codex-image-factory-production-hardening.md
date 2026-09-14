@@ -1290,6 +1290,161 @@ task-level spec/quality approval and a renewed whole-branch verdict of
 `Ready for candidate push: Yes`. Any Critical or Important finding keeps Task 11
 at the candidate-push gate.
 
+### Task 13: Prevent path alias corruption and atomically finalize evaluation
+
+**Files:**
+- Modify: `scripts/image_factory_cli.py:53-84,589-780`
+- Modify: `scripts/job_ledger.py:238-360`
+- Modify: `tests/test_cli.py:620-900`
+- Modify: `tests/test_ledger.py:280-520`
+- Modify: `docs/verification/offline.md:31-38`
+- Modify: `docs/superpowers/specs/2026-09-14-codex-image-factory-production-hardening-design.md`
+
+**Interfaces:**
+- Produces: `canonical_path(path: Path) -> Path`
+- Produces: `refuse_path_aliases(named_paths: dict[str, Path]) -> None`
+- Produces: `record_evaluation_final(scores_sha256: str, decision: str) -> dict`
+- Preserves: scores atomic publication, exact plan/receipt binding, and job lock
+- Proves: every alias refusal is byte-preserving and evaluation has no stranded
+  pass/pending intermediate state
+
+- [ ] **Step 1: Write failing evaluate path-collision tests**
+
+For each alias, construct a real completed job and invoke evaluate:
+
+```python
+for alias_name, scores_path in (
+    ("job", self.fixture.job_path),
+    ("plan", self.fixture.plan_path),
+    ("labels", labels_path),
+    ("advisory", advisory_path),
+    ("destination", self.fixture.destination),
+):
+    with self.subTest(alias=alias_name):
+        before = snapshot_participating_paths(...)
+        code, output = self.evaluate(scores=scores_path, labels=..., advisory=...)
+        self.assertEqual(code, cli.EXIT_USAGE)
+        self.assertIn("path collision", json.loads(output)["error"])
+        self.assertEqual(snapshot_participating_paths(...), before)
+```
+
+Add a separate relative/symlink spelling case when the host supports symlinks.
+The test must prove refusal occurs before scores, job, plan, labels, advisory, or
+destination bytes change.
+
+- [ ] **Step 2: Write failing optimize path-collision tests**
+
+Use a real persisted failing evaluation and test `--out` against `--job`,
+`--plan`, `--scores`, `--rewrites`, and the destination directory. Assert every
+input remains byte-identical, the ledger remains `Evaluated`, and no output is
+published. Also reject collisions among required inputs when two semantic roles
+resolve to the same path.
+
+- [ ] **Step 3: Write failing atomic evaluation-finalization tests**
+
+Add ledger tests:
+
+```python
+def test_record_evaluation_final_is_one_revision_and_one_history_entry(self) -> None:
+    before = self.ledger.read()
+    after = self.ledger.record_evaluation_final("a" * 64, "pass")
+    self.assertEqual(after["state"], "Accepted")
+    self.assertEqual(after["revision"], before["revision"] + 1)
+    self.assertEqual(len(after["history"]), len(before["history"]) + 1)
+
+
+def test_pending_evaluation_finalizes_directly(self) -> None:
+    after = self.ledger.record_evaluation_final("b" * 64, "pending_approval")
+    self.assertEqual(after["state"], "PendingApproval")
+```
+
+Add a CLI crash test by patching `record_evaluation_final` to raise
+`KeyboardInterrupt` after scores publication. Assert the ledger remains
+`Completed`, rerunning evaluate succeeds, and the final revision/history show
+one evaluation transition rather than a stranded `Evaluated` intermediate.
+
+- [ ] **Step 4: Run focused tests and verify RED**
+
+```bash
+python3 -m unittest \
+  tests.test_cli.EvaluateAndOptimizeCommandTests \
+  tests.test_ledger \
+  -v
+```
+
+Expected: scores can overwrite the ledger or inputs, optimize output can alias
+inputs, and pass/pending evaluation still performs two ledger transitions.
+
+- [ ] **Step 5: Implement canonical path refusal before mutation**
+
+```python
+def canonical_path(path: Path) -> Path:
+    return Path(path).expanduser().resolve(strict=False)
+
+
+def refuse_path_aliases(named_paths: dict[str, Path]) -> None:
+    seen: dict[Path, str] = {}
+    for role, path in named_paths.items():
+        resolved = canonical_path(path)
+        previous = seen.get(resolved)
+        if previous is not None:
+            raise ValueError(f"path collision between {previous} and {role}")
+        seen[resolved] = role
+```
+
+Evaluate calls this before reading optional labels/advisory and before writing
+scores, with roles `job`, `plan`, `scores`, optional `labels`, optional
+`advisory`, and `destination`. Optimize calls it before reading rewrites and
+before writing output, with roles `job`, `plan`, `scores`, `out`, optional
+`rewrites`, and `destination`. Convert collision errors to `EXIT_USAGE` JSON
+without traceback.
+
+- [ ] **Step 6: Implement one-write evaluation finalization**
+
+`record_evaluation_final` validates the score hash and decision, requires the
+current state to be `Completed`, `Partial`, or `PendingApproval`, computes the
+target state, appends one history entry, writes the evaluation record, updates
+state/revision/timestamp, and calls `_persist_mutation` exactly once.
+
+```python
+target = {
+    "fail": JobState.EVALUATED,
+    "pass": JobState.ACCEPTED,
+    "pending_approval": JobState.PENDING_APPROVAL,
+}[decision]
+```
+
+Replace the CLI's `record_evaluation(...)` plus `transition(...)` pair with this
+method. Keep `record_evaluation` only if an existing compatibility test or caller
+still needs it; production evaluate must not use the two-write path.
+
+- [ ] **Step 7: Run focused and complete verification**
+
+```bash
+python3 -m unittest tests.test_cli tests.test_ledger -v
+python3 -m unittest discover -s tests -v
+python3 -m compileall -q scripts tests
+python3 scripts/validate_distribution.py .
+git diff --check
+```
+
+Expected: all commands exit zero. Update `docs/verification/offline.md` with the
+observed full-suite count only after the final run.
+
+- [ ] **Step 8: Commit Task 13**
+
+```bash
+git add scripts/image_factory_cli.py scripts/job_ledger.py tests/test_cli.py tests/test_ledger.py docs/verification/offline.md docs/superpowers/specs/2026-09-14-codex-image-factory-production-hardening-design.md docs/superpowers/plans/2026-09-14-codex-image-factory-production-hardening.md
+git commit -m "fix: protect Image Factory transaction paths"
+```
+
+- [ ] **Step 9: Run independent Task 13 and renewed whole-branch review**
+
+Require Task 13 spec/quality approval, then regenerate the complete branch review
+package from `1eb2438` to HEAD. Candidate push remains forbidden unless the new
+review explicitly reports `Ready for candidate push: Yes` with no Critical or
+Important findings.
+
 ## Completion Gate
 
 ```text
@@ -1317,6 +1472,8 @@ fresh_session_no_spend_smoke = PASS
 paid_canary = PASS
 duplicate_current_evaluation_guard = PASS
 crash_recover_evaluate_chain = PASS
+path_alias_refusal = PASS
+evaluation_atomic_finalization = PASS
 ```
 
 ## Stop Conditions
