@@ -1579,6 +1579,62 @@ from `1eb2438` to HEAD. Candidate push remains forbidden unless the renewed
 review explicitly reports `Ready for candidate push: Yes` with no Critical or
 Important findings.
 
+### Task 15: Preserve pre-existing reference snapshot roots on refusal
+
+**Files:**
+- Modify: `scripts/image_factory_cli.py`
+- Modify: `tests/test_cli.py`
+- Modify: `docs/verification/offline.md`
+
+**Interfaces:**
+- Preserves: a snapshot root that existed before the current invocation
+- Removes: only attempt/root directories created by the failing invocation
+
+- [ ] **Step 1: Write the failing ownership test**
+
+Pre-create an empty `<job>.reference-snapshots/` directory, force a
+post-copy reference hash mismatch, and assert:
+
+```python
+self.assertTrue(snapshot_root.is_dir())
+self.assertEqual(list(snapshot_root.iterdir()), [])
+self.assertFalse(attempt_dir.exists())
+self.assertEqual(self.fixture.read_job(), job_before)
+self.assertEqual(invocation_count(), 0)
+```
+
+- [ ] **Step 2: Run the focused test and verify RED**
+
+Expected: the pre-existing empty snapshot root is removed by current cleanup.
+
+- [ ] **Step 3: Track root ownership and clean only invocation-owned paths**
+
+Capture `snapshot_root_existed = snapshot_root.exists()` before creating any
+snapshot. On failure, remove newly created attempt directories. Remove the root
+only when `snapshot_root_existed` was false and it is empty.
+
+- [ ] **Step 4: Run complete verification**
+
+```bash
+python3 -m unittest tests.test_cli.RunCommandTests -v
+python3 -m unittest discover -s tests -v
+python3 -m compileall -q scripts tests
+python3 scripts/validate_distribution.py .
+git diff --check
+```
+
+Update offline evidence with the observed final test count.
+
+- [ ] **Step 5: Commit and review**
+
+```bash
+git add scripts/image_factory_cli.py tests/test_cli.py docs/verification/offline.md docs/superpowers/plans/2026-09-14-codex-image-factory-production-hardening.md
+git commit -m "fix: preserve reference snapshot ownership"
+```
+
+Require independent Task 15 approval and a renewed whole-branch verdict of
+`Ready for candidate push: Yes` before publishing or merging.
+
 ## Completion Gate
 
 ```text
@@ -1610,6 +1666,7 @@ path_alias_refusal = PASS
 evaluation_atomic_finalization = PASS
 definite_failure_evaluation = PASS
 failed_item_user_directed_optimization = PASS
+reference_snapshot_ownership = PASS
 ```
 
 ## Stop Conditions
