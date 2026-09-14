@@ -167,7 +167,7 @@ class CrashMatrixTests(unittest.TestCase):
         code, _output = self.fixture.run()
         self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED)
 
-    def test_crash_after_the_external_call_marks_the_item_unknown(self) -> None:
+    def test_crash_after_the_external_call_leaves_the_item_attempting(self) -> None:
         self.crash_after("generation_runner.run_item")
         self.assertEqual(len(self.fixture.invocations()), 1)
         entry = self.fixture.ledger()["items"][0]

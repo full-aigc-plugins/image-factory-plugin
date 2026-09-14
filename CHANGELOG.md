@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## 0.1.2 — 2026-09-14
+
+### Added
+
+- Plan-bound approval: every generation round records the plan hash, the round, and
+  the number of remaining generation calls, and a rewritten round or a partially
+  finished batch requires a fresh approval for exactly the work that is left.
+- Cross-process job locking, so a second `run` is refused with `job_already_running`
+  instead of independently deciding the same item is still pending.
+- An explicit attempt lifecycle (`Attempting`, `Generated`, `Failed`, `Unknown`), with
+  the attempt reserved before the external call so an interruption cannot spend twice.
+- Per-item receipts written atomically under their idempotency key, with the aggregate
+  manifest derived by verifying those receipts against the artifacts they name.
+- `recover`, which reconciles interrupted items from receipts already on disk, rebuilds
+  the manifest, and never makes a generation call.
+- Schema version 1.1.0 with deterministic migration from 1.0.0 for image plans and job
+  ledgers; a legacy job that already carries approval evidence is refused rather than
+  migrated, because its binding cannot be reconstructed.
+- A cross-platform CI workflow running the suite on Ubuntu, macOS, and Windows with
+  Python 3.11 and 3.13, installing nothing.
+
+### Changed
+
+- Human result labels are mandatory: an unlabeled batch reaches `pending_approval`
+  instead of passing on its own, and a human rejection fails the batch regardless of
+  any advisory score.
+- The job state machine no longer lets a settled, completed, or unresolved job return
+  directly to `Running`; such transitions are rejected and reconciled by `recover`.
+- `optimize` requires `--job` and refuses scores that are not the ones the job recorded.
+- `status` reports the plan, approval, per-state counts, evaluation, and optimization
+  without disclosing prompts, reference paths, or environment paths.
+
 ### Changed
 
 - Added one shared conversational confirmation contract across the use, run, judge and recover Skills; Codex conversation is the product surface.

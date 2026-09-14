@@ -1,6 +1,6 @@
 # Codex Image Factory Plugin Technical Solution
 
-> Implemented technical proposal for version 0.1.1. Updated 2026-09-13. Describes what the code does today, not what it might do.
+> Implemented technical proposal for version 0.1.2. Updated 2026-09-14. Describes what the code does today, not what it might do.
 
 [English](Codex-Image-Factory-Plugin-Technical-Solution.md) | [简体中文](Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 

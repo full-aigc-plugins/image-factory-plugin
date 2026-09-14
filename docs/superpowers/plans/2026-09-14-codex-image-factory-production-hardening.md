@@ -1049,15 +1049,15 @@ git commit -m "ci: gate Image Factory production evidence"
 - Produces: freshly installed `codex-image-factory@partme-ai-image-factory` 0.1.2
 - Requires separate authorization before uninstall/reinstall, push/tag, or paid canary
 
-- [ ] **Step 1: Add failing version-alignment tests**
+- [x] **Step 1: Add failing version-alignment tests**
 
 Assert plugin manifest, changelog, architecture documents, runtime evidence, and distribution output agree on 0.1.2. Assert runtime evidence cannot retain the prior remote SHA as the current release SHA.
 
-- [ ] **Step 2: Bump release metadata and changelog**
+- [x] **Step 2: Bump release metadata and changelog**
 
 Set manifest version to `0.1.2`. Add a changelog entry covering plan-bound approval, process locking, attempt lifecycle, per-item receipts, reconciliation, human-label enforcement, state transitions, schema migration, and CI.
 
-- [ ] **Step 3: Run the complete local release gate**
+- [x] **Step 3: Run the complete local release gate**
 
 ```bash
 python3 -m compileall -q scripts tests
@@ -1070,11 +1070,11 @@ git status --short
 
 Expected: compile, tests, validation, probe, and diff check pass. Status lists only intended release changes. The current Codex CLI does not expose `plugin validate`, so do not report that nonexistent command as passed.
 
-- [ ] **Step 4: Review the complete change before publication**
+- [x] **Step 4: Review the complete change before publication**
 
 Use `superpowers:requesting-code-review`. Resolve every correctness, compatibility, security, concurrency, and recovery finding, then rerun Step 3. Confirm no user-owned dirty file was lost or silently folded into an unrelated commit.
 
-- [ ] **Step 5: Commit the release candidate**
+- [x] **Step 5: Commit the release candidate**
 
 ```bash
 git add .codex-plugin/plugin.json CHANGELOG.md README.md README.zh-CN.md docs/verification/runtime.md tests/test_distribution.py tests/test_distribution_extended.py

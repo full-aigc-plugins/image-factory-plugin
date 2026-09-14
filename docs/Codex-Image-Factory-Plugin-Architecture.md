@@ -1,6 +1,6 @@
 # Codex Image Factory Plugin Architecture
 
-> **Status:** image core and prompt discovery implemented and offline-verified. Runtime evidence for the 1.1.0 contracts is not yet observed; see `docs/verification/runtime.md`. **Version:** 0.1.1. **Updated:** 2026-09-13.
+> **Status:** image core and prompt discovery implemented and offline-verified. Runtime evidence for the 1.1.0 contracts is not yet observed; see `docs/verification/runtime.md`. **Version:** 0.1.2. **Updated:** 2026-09-14.
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 

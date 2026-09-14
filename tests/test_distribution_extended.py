@@ -1,5 +1,6 @@
 import json
 import re
+import sys
 import unittest
 from pathlib import Path
 
@@ -109,8 +110,8 @@ class DocumentationTests(unittest.TestCase):
         ):
             with self.subTest(document=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn("0.1.1", text)
-                self.assertIn("2026-09-13", text)
+                self.assertIn("0.1.2", text)
+                self.assertIn("2026-09-14", text)
 
     def test_no_document_names_an_image_model(self) -> None:
         """The platform chooses the model; claiming one would mislead the reader."""
@@ -310,6 +311,60 @@ class RuntimeEvidenceTests(unittest.TestCase):
         text = self.evidence()
         self.assertIn("Historical evidence", text)
         self.assertIn("not evidence for the 0.1.2 candidate", text)
+
+
+
+RELEASE_VERSION = "0.1.2"
+
+RELEASE_ARTIFACTS = (
+    "CHANGELOG.md",
+    "docs/Codex-Image-Factory-Plugin-Architecture.md",
+    "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
+    "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
+    "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
+    "docs/verification/runtime.md",
+)
+
+SHA40 = re.compile(r"\b[0-9a-f]{40}\b")
+
+
+class ReleaseAlignmentTests(unittest.TestCase):
+    """One version, stated identically everywhere, with no inherited evidence."""
+
+    def test_the_manifest_declares_the_release_version(self) -> None:
+        manifest = json.loads((ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["version"], RELEASE_VERSION)
+
+    def test_every_release_artifact_names_the_release_version(self) -> None:
+        for relative in RELEASE_ARTIFACTS:
+            with self.subTest(artifact=relative):
+                text = (ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn(RELEASE_VERSION, text)
+
+    def test_the_distribution_validator_prints_the_release_version(self) -> None:
+        import subprocess
+
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "validate_distribution.py"), "."],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(RELEASE_VERSION, result.stdout)
+
+    def test_the_candidate_evidence_claims_no_inherited_commit(self) -> None:
+        """A prior run's SHA must never appear as evidence for the current candidate."""
+        text = (ROOT / "docs/verification/runtime.md").read_text(encoding="utf-8")
+        split = text.index("## Historical evidence")
+        candidate_section = text[:split]
+        self.assertEqual(
+            SHA40.findall(candidate_section),
+            [],
+            "the candidate section must not carry a commit hash it did not observe",
+        )
+        self.assertNotIn("Observed remote head", candidate_section)
 
 
 if __name__ == "__main__":

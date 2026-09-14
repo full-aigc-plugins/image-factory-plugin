@@ -68,6 +68,12 @@ def _emit(payload: dict, as_json: bool, summary: list[str] | None = None) -> str
     return "\n".join(lines)
 
 
+def _evidence_summary(record: object, keys: tuple[str, ...]) -> dict | None:
+    if not isinstance(record, dict):
+        return None
+    return {key: record[key] for key in keys if key in record}
+
+
 def _under_lock(job_path: Path, args: argparse.Namespace, action) -> tuple[int, str]:
     """Run a mutating command while holding the job lock for this state file."""
     try:
@@ -529,7 +535,10 @@ def _evaluate_locked(
 
 
 def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
-    return _under_lock(Path(args.plan), args, lambda: _optimize_locked(args))
+    # Lock the job, not the plan: the plan is read-only input here, while the ledger
+    # is what this command mutates. Locking the plan let two concurrent optimizations
+    # of the same job use different tokens and both proceed.
+    return _under_lock(Path(args.job), args, lambda: _optimize_locked(args))
 
 
 def _optimize_locked(args: argparse.Namespace) -> tuple[int, str]:
@@ -788,8 +797,10 @@ def command_status(args: argparse.Namespace) -> tuple[int, str]:
         "approval": approval_summary,
         "approval_history_count": len(approvals.get("history", [])),
         "items": counts,
-        "evaluation": payload.get("evaluation"),
-        "optimization": payload.get("optimization"),
+        # Hashes and decisions are enough to re-identify the documents; the paths the
+        # caller happened to use are not disclosed, matching the docstring above.
+        "evaluation": _evidence_summary(payload.get("evaluation"), ("decision", "all_gates_passed", "evaluated_at", "scores_sha256")),
+        "optimization": _evidence_summary(payload.get("optimization"), ("round", "carried_forward", "rework", "optimized_at")),
         "usage_limit": payload.get("usage_limit"),
         "error_category": payload.get("error_category"),
     }

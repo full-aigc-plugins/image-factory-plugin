@@ -1,6 +1,6 @@
 # Codex Image Factory 插件架构
 
-> **状态**：图片内核与提示词检索已实现并通过离线验证；1.1.0 契约的运行期证据尚未取得，见 `docs/verification/runtime.md`。**版本**：0.1.1。**更新日期**：2026-09-13。
+> **状态**：图片内核与提示词检索已实现并通过离线验证；1.1.0 契约的运行期证据尚未取得，见 `docs/verification/runtime.md`。**版本**：0.1.2。**更新日期**：2026-09-14。
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 

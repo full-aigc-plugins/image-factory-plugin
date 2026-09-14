@@ -323,6 +323,21 @@ class StatusCommandTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertEqual(json.loads(output)["state"], "Completed")
 
+    def test_status_does_not_disclose_local_paths(self) -> None:
+        """A status report is routinely pasted into a conversation."""
+        self.fixture.run_approved_batch()
+        self.fixture.evaluate_batch()
+        code, output = self.fixture.run_cli("status", "--job", str(self.fixture.job_path), "--json")
+        self.assertEqual(code, 0, output)
+        report = json.loads(output)
+        self.assertNotIn(str(self.fixture.base), output)
+        for section in ("evaluation", "optimization"):
+            record = report.get(section)
+            if isinstance(record, dict):
+                with self.subTest(section=section):
+                    self.assertNotIn("scores_path", record)
+                    self.assertNotIn("next_plan_path", record)
+
     def test_status_on_a_missing_ledger_is_an_error(self) -> None:
         code, _output = self.fixture.run_cli(
             "status", "--job", str(self.fixture.base / "absent.json"), "--json"
@@ -551,6 +566,25 @@ class JobContentionTests(unittest.TestCase):
             )
         self.assertEqual(code, cli.EXIT_JOB_LOCKED, output)
         self.assertFalse((self.fixture.base / "scores.json").exists())
+
+    def test_a_locked_job_refuses_optimize(self) -> None:
+        """The mutated resource is the ledger, so the job is what must be locked."""
+        with job_lock.JobLock(self.fixture.job_path):
+            code, output = self.fixture.run_cli(
+                "optimize",
+                "--plan",
+                str(self.fixture.plan_path),
+                "--job",
+                str(self.fixture.job_path),
+                "--scores",
+                str(self.fixture.base / "scores.json"),
+                "--out",
+                str(self.fixture.base / "next.json"),
+                *self.fixture.base_args(),
+                "--json",
+            )
+        self.assertEqual(code, cli.EXIT_JOB_LOCKED, output)
+        self.assertEqual(json.loads(output)["error_category"], "job_already_running")
 
     def test_the_job_is_runnable_again_once_the_lock_is_released(self) -> None:
         with job_lock.JobLock(self.fixture.job_path):

@@ -1,6 +1,6 @@
 # Codex Image Factory 插件技术方案
 
-> 版本 0.1.1 的已实现技术方案，更新日期 2026-09-13。描述代码今天的行为，而非未来可能的行为。
+> 版本 0.1.2 的已实现技术方案，更新日期 2026-09-14。描述代码今天的行为，而非未来可能的行为。
 
 [English](Codex-Image-Factory-Plugin-Technical-Solution.md) | [简体中文](Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 
