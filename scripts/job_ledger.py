@@ -19,12 +19,11 @@ Two deliberate restrictions:
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
+import atomic_json
 import contract_migrations
 import schema_lite
 from contract_migrations import JOB_SCHEMA_VERSION
@@ -235,23 +234,10 @@ def load_ledger(path: Path) -> dict:
 
 
 def write_ledger(path: Path, payload: dict) -> None:
-    """Write atomically: a reader sees the previous or the next state, never a torn one."""
+    """Validate, scrub, then persist atomically through the shared writer."""
     _scrub(payload)
     _assert_well_formed(payload)
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary_name = tempfile.mkstemp(dir=str(target.parent), prefix=".ledger-", suffix=".tmp")
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(payload, stream, indent=2, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    except BaseException:
-        temporary.unlink(missing_ok=True)
-        raise
+    atomic_json.write_json_atomic(Path(path), payload)
 
 
 def schema_errors(payload: dict) -> list[str]:

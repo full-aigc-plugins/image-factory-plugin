@@ -28,6 +28,7 @@ import generation_runner
 import job_ledger
 import optimizer
 import plan_validator
+import receipt_store
 import prompt_library
 
 EXIT_OK = 0
@@ -72,10 +73,6 @@ def _resolve_codex_home(args: argparse.Namespace) -> Path:
 
 def _resolve_generation_dir(args: argparse.Namespace, codex_home: Path) -> Path:
     return Path(args.generation_dir) if args.generation_dir else codex_home / "generated_images"
-
-
-def _receipts_path(job_path: Path) -> Path:
-    return Path(str(job_path) + ".receipts.json")
 
 
 def _error_category(code: str) -> str:
@@ -292,19 +289,14 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         ledger.record_item(
             item, state="Generated", receipt_id=collected.receipt["artifact_id"]
         )
+        # One atomic file per artifact, then the aggregate is derived from what is
+        # actually verifiable on disk rather than accumulated in memory.
+        receipt_store.write_receipt(job_path, collected.receipt)
         receipts.append(collected.receipt)
 
     if receipts:
-        existing: list[dict] = []
-        manifest = _receipts_path(job_path)
-        if manifest.is_file():
-            try:
-                existing = json.loads(manifest.read_text(encoding="utf-8"))
-            except ValueError:
-                existing = []
-        manifest.write_text(
-            json.dumps(existing + receipts, indent=2, sort_keys=True), encoding="utf-8"
-        )
+        verified = receipt_store.load_verified_receipts(job_path, destination)
+        receipt_store.rebuild_manifest(job_path, verified)
 
     final = job_ledger.JobState.PARTIAL if failed else job_ledger.JobState.COMPLETED
     ledger.transition(final)
@@ -340,11 +332,11 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
     if not result.ok:
         return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)
 
-    manifest = _receipts_path(Path(args.job))
-    receipts = {}
-    if manifest.is_file():
-        for receipt in json.loads(manifest.read_text(encoding="utf-8")):
-            receipts[receipt["item_id"]] = receipt
+    # Evaluation reads only receipts that still verify against the artifacts they
+    # name, so a file changed after collection cannot be scored as if it were the
+    # collected one.
+    verified = receipt_store.load_verified_receipts(Path(args.job), Path(args.destination))
+    receipts = {receipt["item_id"]: receipt for receipt in verified.values()}
 
     try:
         advisory = _advisory_from_file(args.advisory)

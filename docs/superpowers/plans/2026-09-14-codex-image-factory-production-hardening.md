@@ -389,7 +389,7 @@ git commit -m "feat: bind Image Factory plans to verified hashes"
 - Produces: `rebuild_manifest(job_path: Path, receipts: dict[str, dict]) -> Path`
 - Consumed later by: run transaction, recovery, and evaluation
 
-- [ ] **Step 1: Write failing atomic-write tests**
+- [x] **Step 1: Write failing atomic-write tests**
 
 ```python
 def test_failed_atomic_write_preserves_previous_document(self) -> None:
@@ -401,7 +401,7 @@ def test_failed_atomic_write_preserves_previous_document(self) -> None:
     self.assertEqual(list(self.base.glob(".atomic-*.tmp")), [])
 ```
 
-- [ ] **Step 2: Write failing receipt-store tests**
+- [x] **Step 2: Write failing receipt-store tests**
 
 ```python
 def test_manifest_is_rebuilt_from_verified_per_item_receipts(self) -> None:
@@ -419,7 +419,7 @@ complete receipt pointing at a real PNG under the fixture destination. Also test
 closed-schema validation, artifact hash verification, tamper refusal, and
 duplicate idempotency-key refusal.
 
-- [ ] **Step 3: Run the new tests and verify RED**
+- [x] **Step 3: Run the new tests and verify RED**
 
 ```bash
 python3 -m unittest tests.test_atomic_json tests.test_receipt_store -v
@@ -427,11 +427,11 @@ python3 -m unittest tests.test_atomic_json tests.test_receipt_store -v
 
 Expected: imports fail because the two modules do not exist.
 
-- [ ] **Step 4: Implement atomic JSON persistence**
+- [x] **Step 4: Implement atomic JSON persistence**
 
 `write_json_atomic` creates a same-directory temporary file, serializes with sorted keys and one trailing newline, flushes and fsyncs, calls `os.replace`, best-effort fsyncs the parent directory where supported, and removes the temporary file on every exception. Refactor `write_ledger` to validate and scrub before calling it.
 
-- [ ] **Step 5: Implement the receipt store**
+- [x] **Step 5: Implement the receipt store**
 
 ```python
 def receipt_directory(job_path: Path) -> Path:
@@ -448,11 +448,11 @@ def manifest_path(job_path: Path) -> Path:
 
 Validate each receipt against `schemas/artifact_receipt.schema.json`, recompute artifact hash, bytes, and dimensions through existing collector helpers, and index loaded receipts by idempotency key.
 
-- [ ] **Step 6: Replace direct receipt-manifest I/O**
+- [x] **Step 6: Replace direct receipt-manifest I/O**
 
 Remove direct `Path.write_text` receipt-manifest writes and direct unverified loads from `image_factory_cli.py`. Evaluation reads only through `load_verified_receipts`.
 
-- [ ] **Step 7: Run focused and full tests**
+- [x] **Step 7: Run focused and full tests**
 
 ```bash
 python3 -m unittest tests.test_atomic_json tests.test_receipt_store tests.test_ledger tests.test_cli -v
@@ -461,7 +461,7 @@ python3 -m unittest discover -s tests -v
 
 Expected: all tests pass.
 
-- [ ] **Step 8: Commit durable receipt storage**
+- [x] **Step 8: Commit durable receipt storage**
 
 ```bash
 git add scripts/atomic_json.py scripts/receipt_store.py scripts/job_ledger.py scripts/image_factory_cli.py tests/test_atomic_json.py tests/test_receipt_store.py tests/test_ledger.py
