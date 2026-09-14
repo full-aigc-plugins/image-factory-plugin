@@ -64,9 +64,12 @@ class ProbeFixture:
         (self.codex_home / "generated_images").mkdir()
 
     def place_codex_on_path(self) -> Path:
-        target = self.bin_dir / "codex"
-        target.write_text(f"#!/bin/sh\ntouch '{self.marker}'\nexit 0\n", encoding="utf-8")
-        os.chmod(target, 0o755)
+        target = self.bin_dir / ("codex.cmd" if os.name == "nt" else "codex")
+        if os.name == "nt":
+            target.write_text(f'@type nul > "{self.marker}"\r\n@exit /b 0\r\n', encoding="utf-8")
+        else:
+            target.write_text(f"#!/bin/sh\ntouch '{self.marker}'\nexit 0\n", encoding="utf-8")
+            os.chmod(target, 0o755)
         return target
 
     def probe(self) -> "probe.Capability":
@@ -147,6 +150,7 @@ class CapabilityProbeTests(unittest.TestCase):
         self.assertEqual(result.verdict, "unavailable")
         self.assertIn("provider_lacks_image_generation", result.reasons)
 
+    @unittest.skipIf(os.name == "nt", "Windows chmod does not remove directory write access")
     def test_unwritable_generation_dir_is_unavailable(self) -> None:
         self.fixture.place_codex_on_path()
         self.fixture.write_auth()
@@ -164,10 +168,13 @@ class CapabilityProbeTests(unittest.TestCase):
         self.fixture.write_auth()
         self.fixture.write_config(CONFIG_WITH_GENERATION_ENABLED)
         self.fixture.make_generation_dir()
-        bundled = self.fixture.codex_home / "plugins" / ".plugin-appserver" / "codex"
+        bundled = self.fixture.codex_home / "plugins" / ".plugin-appserver" / (
+            "codex.cmd" if os.name == "nt" else "codex"
+        )
         bundled.parent.mkdir(parents=True)
-        bundled.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-        os.chmod(bundled, 0o755)
+        bundled.write_text("@exit /b 0\r\n" if os.name == "nt" else "#!/bin/sh\nexit 0\n", encoding="utf-8")
+        if os.name != "nt":
+            os.chmod(bundled, 0o755)
         result = self.fixture.probe()
         self.assertEqual(result.binary_source, "codex_home_appserver")
         self.assertEqual(result.verdict, "available")
@@ -221,10 +228,11 @@ class CapabilityProbeTests(unittest.TestCase):
         self.fixture.write_auth()
         self.fixture.write_config(CONFIG_WITH_GENERATION_ENABLED)
         self.fixture.make_generation_dir()
-        explicit = self.fixture.base / "elsewhere" / "codex"
+        explicit = self.fixture.base / "elsewhere" / ("codex.cmd" if os.name == "nt" else "codex")
         explicit.parent.mkdir()
-        explicit.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-        os.chmod(explicit, 0o755)
+        explicit.write_text("@exit /b 0\r\n" if os.name == "nt" else "#!/bin/sh\nexit 0\n", encoding="utf-8")
+        if os.name != "nt":
+            os.chmod(explicit, 0o755)
         result = self.fixture.probe_with_binary(explicit)
         self.assertEqual(result.verdict, "available", result.reasons)
         self.assertEqual(result.binary_source, "explicit")
@@ -239,6 +247,14 @@ class CapabilityProbeTests(unittest.TestCase):
         result = self.fixture.probe_with_binary(plain)
         self.assertEqual(result.verdict, "unavailable")
         self.assertIn("codex_binary_missing", result.reasons)
+
+    def test_windows_accepts_cmd_launchers_but_rejects_arbitrary_files(self) -> None:
+        launcher = self.fixture.base / "codex.cmd"
+        launcher.write_text("@exit /b 0\n", encoding="utf-8")
+        arbitrary = self.fixture.base / "codex.txt"
+        arbitrary.write_text("data", encoding="utf-8")
+        self.assertTrue(probe._is_executable_file(launcher, platform_name="nt"))
+        self.assertFalse(probe._is_executable_file(arbitrary, platform_name="nt"))
 
 
 if __name__ == "__main__":

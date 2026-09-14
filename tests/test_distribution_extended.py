@@ -1,4 +1,5 @@
 import json
+import subprocess
 import re
 import unittest
 from pathlib import Path
@@ -198,8 +199,6 @@ class RepositoryStructureTests(unittest.TestCase):
 
     def test_no_build_artifacts_are_tracked(self) -> None:
         """Caches appear in any working tree that has run the suite; what matters is what is committed."""
-        import subprocess
-
         tracked = subprocess.run(
             ["git", "ls-files"], cwd=str(ROOT), capture_output=True, text=True, check=False
         ).stdout.splitlines()
@@ -219,7 +218,11 @@ class RepositoryStructureTests(unittest.TestCase):
     def test_cli_entry_point_is_executable(self) -> None:
         entry = ROOT / "bin/image-factory"
         self.assertTrue(entry.is_file())
-        self.assertTrue(entry.stat().st_mode & 0o111, "bin/image-factory must be executable")
+        tracked = subprocess.run(
+            ["git", "ls-files", "-s", "--", "bin/image-factory"],
+            cwd=str(ROOT), capture_output=True, text=True, check=True,
+        ).stdout.split()
+        self.assertEqual(tracked[0], "100755", "bin/image-factory must be executable in the Git index")
 
     def test_manifest_asset_paths_exist(self) -> None:
         manifest = json.loads((ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))

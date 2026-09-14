@@ -42,9 +42,13 @@ def _build_shared_shim() -> Path:
     """
     directory = Path(tempfile.mkdtemp(prefix="image-factory-codex-shim-"))
     atexit.register(shutil.rmtree, directory, True)
-    shim = directory / "codex"
-    shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
-    shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    if os.name == "nt":
+        shim = directory / "codex.cmd"
+        shim.write_text(f'@"{fast_python()}" "{FAKE}" %*\n', encoding="utf-8")
+    else:
+        shim = directory / "codex"
+        shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
+        shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return shim
 
 
@@ -129,6 +133,22 @@ class ArgvTests(unittest.TestCase):
         self.assertEqual(argv[0], "/usr/bin/codex")
         self.assertEqual(argv[1], "exec")
         self.assertEqual(argv[-1], runner.build_prompt("draw a portrait"))
+
+    def test_windows_cmd_launcher_uses_cmd_exe_with_a_quoted_argument_vector(self) -> None:
+        argv = [r"C:\Program Files\Codex\codex.cmd", "exec", "prompt&whoami"]
+        launch = runner.build_subprocess_argv(
+            argv,
+            platform_name="nt",
+            command_interpreter=r"C:\Windows\System32\cmd.exe",
+        )
+        self.assertEqual(
+            launch[:4],
+            [r"C:\Windows\System32\cmd.exe", "/d", "/s", "/c"],
+        )
+        self.assertEqual(
+            launch[4],
+            '""C:\\Program Files\\Codex\\codex.cmd" "exec" "prompt&whoami""',
+        )
 
     def test_argv_never_bypasses_approvals_or_sandbox(self) -> None:
         argv = runner.build_argv(

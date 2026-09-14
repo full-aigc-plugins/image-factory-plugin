@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -23,7 +24,7 @@ class RunConcurrencyTests(unittest.TestCase):
 
     def test_only_one_process_can_spend_the_batch(self) -> None:
         command = [
-            str(Path(__file__).resolve().parents[1] / "bin" / "image-factory"), "run",
+            sys.executable, str(Path(__file__).resolve().parents[1] / "scripts" / "image_factory_cli.py"), "run",
             "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
             "--codex-bin", str(SHIM), *self.fixture.base_args(), "--approve", "--json",
         ]
