@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import uuid
 from pathlib import Path
 
 import artifact_collector
@@ -41,6 +42,10 @@ EXIT_JOB_LOCKED = 5
 EXIT_RECOVERY_REQUIRED = 6
 
 DEFAULT_TIMEOUT_SECONDS = generation_runner.DEFAULT_TIMEOUT_SECONDS
+
+# Outcomes that leave the external call genuinely unknown. They are never
+# retried automatically, because the call may have completed.
+UNRESOLVED_OUTCOMES = ("timeout", "artifact_missing")
 
 # Collection failures share one vocabulary with the ledger, which is narrower
 # because a ledger entry has to mean something a resume can act on.
@@ -194,56 +199,67 @@ def command_quote(args: argparse.Namespace) -> tuple[int, str]:
 # ------------------------------------------------------------------------- run
 
 
-def _prepare_run(
-    ledger: job_ledger.JobLedger,
-    *,
-    approved: bool,
-    result: plan_validator.PlanResult,
-) -> tuple[job_ledger.JobState | None, str | None]:
-    """Walk the job to Running, or report why it cannot proceed.
+class ApprovalRequiredError(Exception):
+    """The plan needs a fresh approval bound to this exact work."""
 
-    Every path to Running goes through a fresh approval bound to this plan hash,
-    this round, and this call count. That is the only way the ledger permits
-    spending, so an interrupted or completed job cannot quietly resume spending
-    its original allowance.
+    def __init__(self, remaining_count: int) -> None:
+        self.remaining_count = remaining_count
+        super().__init__(
+            f"this plan requires approval for {remaining_count} remaining call(s)"
+        )
+
+
+class RunStateError(Exception):
+    """The job is in a state where starting a new run would be unsafe."""
+
+
+def require_runnable_state(payload: dict, pending: list) -> job_ledger.JobState:
+    """Refuse any state where starting to spend would be unsafe.
+
+    States that describe an unfinished or already-settled transaction are refused
+    rather than repaired here: an interrupted run is reconciled by `recover`, not
+    by silently starting a second one.
     """
+    state = job_ledger.JobState(payload["state"])
+    if state in (
+        job_ledger.JobState.DRAFT,
+        job_ledger.JobState.PLAN_VALIDATED,
+        job_ledger.JobState.APPROVED,
+        job_ledger.JobState.OPTIMIZED,
+    ):
+        return state
+    if state is job_ledger.JobState.PARTIAL:
+        if payload.get("usage_limit") is not None:
+            raise RunStateError("a usage limit is in force; wait for its reset time")
+        if any(row.get("state") == "Unknown" for row in payload["items"]):
+            raise RunStateError("an earlier item outcome is unresolved; reconcile the job first")
+        return state
+    raise RunStateError(f"a job in state {state.value} must not start a new run")
+
+
+def prepare_run(ledger: job_ledger.JobLedger, plan, approved: bool) -> list:
+    """Return the items to attempt, having bound the plan and recorded approval."""
+    pending = ledger.pending_items(plan.items)
+    if not pending:
+        return []
+    require_runnable_state(ledger.read(), pending)
+    # The approval is bound to the calls that are about to happen, not to the size
+    # of the original plan, so a partially finished batch cannot reuse an approval
+    # for work it already spent against.
+    ledger.bind_plan(plan.plan_sha256, plan.round, len(pending))
+    if not approved:
+        ledger.set_error_category("approval_required")
+        raise ApprovalRequiredError(len(pending))
+    ledger.record_approval(plan.plan_sha256, plan.round, len(pending), "run_approve_flag")
     state = job_ledger.JobState(ledger.read()["state"])
     if state in (job_ledger.JobState.DRAFT, job_ledger.JobState.OPTIMIZED):
         ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
         state = job_ledger.JobState.PLAN_VALIDATED
-
-    if state in (
-        job_ledger.JobState.PLAN_VALIDATED,
-        job_ledger.JobState.EVALUATED,
-        job_ledger.JobState.PARTIAL,
-    ):
-        ledger.bind_plan(result.plan_sha256, result.round, len(result.items))
+    if state in (job_ledger.JobState.PLAN_VALIDATED, job_ledger.JobState.PARTIAL):
         ledger.transition(job_ledger.JobState.PENDING_APPROVAL)
-        state = job_ledger.JobState.PENDING_APPROVAL
-
-    if state is job_ledger.JobState.PENDING_APPROVAL:
-        if not approved:
-            ledger.set_error_category("approval_required")
-            return None, "approval_required"
-        ledger.record_approval(
-            result.plan_sha256, result.round, len(result.items), "run_approve_flag"
-        )
-        ledger.transition(job_ledger.JobState.APPROVED)
-        state = job_ledger.JobState.APPROVED
-
-    if state is job_ledger.JobState.APPROVED:
-        ledger.transition(job_ledger.JobState.RUNNING)
-        return job_ledger.JobState.RUNNING, None
-
-    if state is job_ledger.JobState.RUNNING:
-        # Resuming an interrupted run in place. The attempt lifecycle already
-        # prevents a second call for any item whose outcome is uncertain.
-        return job_ledger.JobState.RUNNING, None
-
-    if state is job_ledger.JobState.UNKNOWN:
-        return None, "recovery_required"
-
-    return state, None
+    ledger.transition(job_ledger.JobState.APPROVED)
+    ledger.transition(job_ledger.JobState.RUNNING)
+    return pending
 
 
 def command_run(args: argparse.Namespace) -> tuple[int, str]:
@@ -306,33 +322,40 @@ def _run_locked(
         }
         return EXIT_OK, _emit(payload, args.json)
 
-    state, refusal = _prepare_run(ledger, approved=bool(args.approve), result=result)
-    if refusal == "approval_required":
+    try:
+        pending = prepare_run(ledger, result, approved=bool(args.approve))
+    except ApprovalRequiredError as error:
         payload = {
             "ok": False,
             "stage": "approval",
             "error_category": "approval_required",
-            "image_count": len(result.items),
-            "message": "this plan requires approval; rerun with --approve to spend the allowance",
+            "image_count": error.remaining_count,
+            "message": (
+                "this plan requires approval; rerun with --approve to spend the allowance"
+            ),
         }
         return EXIT_APPROVAL_REQUIRED, _emit(payload, args.json)
-    if refusal == "recovery_required":
+    except RunStateError as error:
+        ledger.set_error_category("recovery_required")
         payload = {
             "ok": False,
             "stage": "recovery",
             "error_category": "recovery_required",
             "image_count": len(result.items),
-            "message": (
-                "an earlier call may or may not have completed; reconcile the job "
-                "before spending again"
-            ),
+            "message": str(error),
         }
         return EXIT_RECOVERY_REQUIRED, _emit(payload, args.json)
 
     receipts: list[dict] = []
     failed = 0
+    unresolved = False
 
     for item in pending:
+        attempt_id = uuid.uuid4().hex
+        # Reserve the item before the external call. From this moment the item is
+        # no longer pending, so an interruption cannot lead to a second call for
+        # work that may already have run.
+        ledger.start_attempt(item, attempt_id)
         outcome = generation_runner.run_item(
             binary=codex_binary,
             item=item,
@@ -344,17 +367,23 @@ def _run_locked(
         )
         if not outcome.ok:
             assert outcome.failure is not None
-            failed += 1
             if outcome.failure.code == "quota_exceeded":
                 ledger.note_usage_limit(
                     limit_id=outcome.failure.limit_id or job_ledger.IMAGE_LIMIT_ID,
                     resets_at=outcome.failure.resets_at,
                 )
-                ledger.record_item(item, state="Failed", error_category="quota_exceeded")
+                ledger.fail_attempt(item, attempt_id, "quota_exceeded")
+                failed += 1
                 break
-            ledger.record_item(
-                item, state="Failed", error_category=_error_category(outcome.failure.code)
-            )
+            if outcome.failure.code in UNRESOLVED_OUTCOMES:
+                # A timeout or a vanished artifact leaves the external outcome
+                # unknown. Stop the batch rather than spending on later items
+                # while this one is unresolved.
+                ledger.mark_attempt_unknown(item.id, attempt_id)
+                unresolved = True
+                break
+            ledger.fail_attempt(item, attempt_id, _error_category(outcome.failure.code))
+            failed += 1
             continue
 
         collected = artifact_collector.collect_artifact(
@@ -371,30 +400,32 @@ def _run_locked(
         )
         if not collected.ok:
             assert collected.failure is not None
+            ledger.fail_attempt(item, attempt_id, _error_category(collected.failure.code))
             failed += 1
-            ledger.record_item(
-                item, state="Failed", error_category=_error_category(collected.failure.code)
-            )
             continue
 
         assert collected.receipt is not None
-        ledger.record_item(
-            item, state="Generated", receipt_id=collected.receipt["artifact_id"]
-        )
-        # One atomic file per artifact, then the aggregate is derived from what is
-        # actually verifiable on disk rather than accumulated in memory.
+        # Receipt first, ledger second. A receipt without a ledger entry is
+        # recoverable; a ledger entry claiming a receipt that was never persisted
+        # is not.
         receipt_store.write_receipt(job_path, collected.receipt)
+        ledger.complete_attempt(item, attempt_id, collected.receipt["artifact_id"])
         receipts.append(collected.receipt)
 
-    if receipts:
-        verified = receipt_store.load_verified_receipts(job_path, destination)
+    verified = receipt_store.load_verified_receipts(job_path, destination)
+    if verified:
         receipt_store.rebuild_manifest(job_path, verified)
 
-    final = job_ledger.JobState.PARTIAL if failed else job_ledger.JobState.COMPLETED
+    if unresolved:
+        final = job_ledger.JobState.UNKNOWN
+    elif failed:
+        final = job_ledger.JobState.PARTIAL
+    else:
+        final = job_ledger.JobState.COMPLETED
     ledger.transition(final)
 
     payload = {
-        "ok": failed == 0,
+        "ok": failed == 0 and not unresolved,
         "batch_id": result.batch_id,
         "round": result.round,
         "state": final.value,
@@ -403,7 +434,9 @@ def _run_locked(
         "receipts": receipts,
         "ledger": str(job_path),
     }
-    code = EXIT_OK if failed == 0 else EXIT_FAILURE
+    # An unresolved outcome is not a success even though nothing is proven to
+    # have failed: the batch did not reach a settled state.
+    code = EXIT_OK if (failed == 0 and not unresolved) else EXIT_FAILURE
     return code, _emit(payload, args.json)
 
 

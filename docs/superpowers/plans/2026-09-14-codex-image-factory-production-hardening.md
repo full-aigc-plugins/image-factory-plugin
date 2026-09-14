@@ -637,11 +637,11 @@ git commit -m "feat: record approvals and generation attempts"
 - Produces: `job_already_running` and `recovery_required` refusal payloads
 - Preserves: `generation_runner.run_item(...) -> GenerationOutcome`
 
-- [ ] **Step 1: Write failing approval-binding CLI tests**
+- [x] **Step 1: Write failing approval-binding CLI tests**
 
 Test that `run --approve` records the exact plan hash, round, and remaining count before the first fake invocation; changing the plan requires a new approval; and running without approval produces no invocation evidence. Assert the ledger stores neither prompt text nor reference paths.
 
-- [ ] **Step 2: Write one failing crash test per durability boundary**
+- [x] **Step 2: Write one failing crash test per durability boundary**
 
 Use `unittest.mock.patch` to raise `KeyboardInterrupt`:
 
@@ -653,7 +653,7 @@ Use `unittest.mock.patch` to raise `KeyboardInterrupt`:
 
 Reopen the job after every interruption and assert the specification's crash-matrix result. No ambiguous idempotency key may become pending.
 
-- [ ] **Step 3: Extend the fake generator with invocation evidence**
+- [x] **Step 3: Extend the fake generator with invocation evidence**
 
 Accept these optional control fields:
 
@@ -666,7 +666,7 @@ Accept these optional control fields:
 
 At process start, atomically create one uniquely named JSON file in `invocation_dir` containing process id and argv. Delay only after writing that evidence. Preserve all existing modes.
 
-- [ ] **Step 4: Write the failing two-process test**
+- [x] **Step 4: Write the failing two-process test**
 
 Launch two real `bin/image-factory run` processes against the same two-item plan and delayed fake generator:
 
@@ -683,7 +683,7 @@ The winning process legitimately invokes two planned items; the losing process i
 Define `receipts_for_unique_idempotency_keys() -> set[str]` in the test to load
 the per-item receipt files and return their `idempotency_key` values.
 
-- [ ] **Step 5: Run crash and concurrency tests and verify RED**
+- [x] **Step 5: Run crash and concurrency tests and verify RED**
 
 ```bash
 python3 -m unittest tests.test_run_crash_recovery tests.test_run_concurrency -v
@@ -691,7 +691,7 @@ python3 -m unittest tests.test_run_crash_recovery tests.test_run_concurrency -v
 
 Expected: current CLI loses receipt continuity, exposes ambiguous work incorrectly, or allows both processes to proceed.
 
-- [ ] **Step 6: Replace `_drive_to_running` with guarded preparation**
+- [x] **Step 6: Replace `_drive_to_running` with guarded preparation**
 
 ```python
 def prepare_run(
@@ -721,7 +721,7 @@ def prepare_run(
 
 Refuse `Running`, `Completed`, `Evaluated`, `PendingApproval`, `Unknown`, `Accepted`, and `Failed`. Permit `Partial` only when it has unattempted items, no unknown item, no active limit, and a fresh approval for the remaining count.
 
-- [ ] **Step 7: Implement the exact transaction order**
+- [x] **Step 7: Implement the exact transaction order**
 
 ```python
 attempt_id = uuid.uuid4().hex
@@ -751,7 +751,7 @@ If any item becomes `Unknown`, stop the loop and transition the batch to
 `Unknown`. Do not attempt later items because the current transaction has an
 unresolved external outcome.
 
-- [ ] **Step 8: Run focused and full tests**
+- [x] **Step 8: Run focused and full tests**
 
 ```bash
 python3 -m unittest tests.test_cli tests.test_run_crash_recovery tests.test_run_concurrency -v
@@ -760,7 +760,7 @@ python3 -m unittest discover -s tests -v
 
 Expected: every crash case matches the matrix and two processes produce one winning batch.
 
-- [ ] **Step 9: Commit crash-safe generation**
+- [x] **Step 9: Commit crash-safe generation**
 
 ```bash
 git add scripts/image_factory_cli.py tests/fakes/fake_codex.py tests/test_cli.py tests/test_run_crash_recovery.py tests/test_run_concurrency.py

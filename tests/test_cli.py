@@ -235,13 +235,14 @@ class RunCommandTests(unittest.TestCase):
         attempts = len(list(self.fixture.base.glob("**/*last-message.txt")))
         self.assertEqual(attempts, 1, "the second item must not be attempted after the limit is hit")
 
-    def test_missing_artifact_is_recorded_as_a_failed_item(self) -> None:
+    def test_missing_artifact_leaves_the_item_unresolved(self) -> None:
+        """An exit code of zero without a file is not proof that nothing happened."""
         self.fixture.control(mode="silent")
         code, output = self.run_batch("--approve")
         self.assertEqual(code, cli.EXIT_FAILURE, output)
         ledger = json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
-        self.assertEqual(ledger["state"], "Partial")
-        self.assertEqual(ledger["items"][0]["error_category"], "artifact_missing")
+        self.assertEqual(ledger["state"], "Unknown")
+        self.assertEqual(ledger["items"][0]["state"], "Unknown")
 
     def test_run_refuses_when_the_capability_probe_fails(self) -> None:
         bare = self.fixture.base / "bare-home"
@@ -513,6 +514,96 @@ class JobContentionTests(unittest.TestCase):
         self.assertEqual(
             (cli.EXIT_JOB_LOCKED, cli.EXIT_RECOVERY_REQUIRED), (5, 6)
         )
+
+
+class ApprovalBindingCliTests(unittest.TestCase):
+    """The approval a run records must describe exactly the work it is about to do."""
+
+    def setUp(self) -> None:
+        self.fixture = CliFixture()
+        self.addCleanup(self.fixture.cleanup)
+        self.invocations = self.fixture.base / "invocations"
+        self.invocations.mkdir()
+        self.reference = self.fixture.base / "references" / "style.png"
+        self.reference.parent.mkdir()
+        shutil.copyfile(REAL_PNG, self.reference)
+        self.fixture.write_plan(
+            valid_plan(
+                items=[
+                    {"id": "item-01", "prompt": "a calm portrait", "reference_images": [str(self.reference)]},
+                    {"id": "item-02", "prompt": "a second portrait"},
+                ]
+            )
+        )
+        self.fixture.control(invocation_dir=str(self.invocations))
+
+    def run_batch(self, *extra: str) -> tuple[int, str]:
+        return self.fixture.run_cli(
+            "run",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
+            "--codex-bin",
+            str(SHIM),
+            *self.fixture.base_args(),
+            "--json",
+            *extra,
+        )
+
+    def declared_hash(self) -> str:
+        _code, output = self.fixture.run_cli(
+            "quote", str(self.fixture.plan_path), "--json"
+        )
+        return json.loads(output)["plan_sha256"]
+
+    def ledger(self) -> dict:
+        return json.loads(self.fixture.job_path.read_text(encoding="utf-8"))
+
+    def invoked(self) -> list:
+        return sorted(self.invocations.glob("*.json"))
+
+    def test_approval_is_bound_to_the_declared_plan_and_remaining_count(self) -> None:
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, 0, output)
+        current = self.ledger()["approval"]["current"]
+        self.assertEqual(current["plan_hash"], self.declared_hash())
+        self.assertEqual(current["round"], 1)
+        self.assertEqual(current["remaining_count"], 2)
+        self.assertEqual(len(self.invoked()), 2)
+
+    def test_the_approval_precedes_spending(self) -> None:
+        """A refusal must leave no invocation behind, which only holds if the gate is first."""
+        code, output = self.run_batch()
+        self.assertEqual(code, cli.EXIT_APPROVAL_REQUIRED, output)
+        self.assertEqual(self.invoked(), [])
+        self.assertIsNone(self.ledger()["approval"]["current"])
+        self.assertEqual(self.ledger()["error_category"], "approval_required")
+
+    def test_a_settled_job_refuses_a_new_plan_and_reuses_no_approval(self) -> None:
+        """An approval authorizes the work it named, so a different plan needs a new cycle.
+
+        A completed job also cannot simply be re-run: an unfinished or settled
+        transaction is reconciled by `recover`, never by a silent second run.
+        """
+        self.run_batch("--approve")
+        recorded = self.ledger()["approval"]["current"]
+        self.assertEqual(len(self.invoked()), 2)
+
+        self.fixture.write_plan(
+            valid_plan(round=2, items=[{"id": "item-03", "prompt": "a third portrait"}])
+        )
+        code, output = self.run_batch("--approve")
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
+        self.assertEqual(len(self.invoked()), 2, "a refused run must invoke nothing")
+        self.assertEqual(self.ledger()["approval"]["current"], recorded)
+
+    def test_the_ledger_records_neither_prompts_nor_reference_paths(self) -> None:
+        self.run_batch("--approve")
+        stored = self.fixture.job_path.read_text(encoding="utf-8")
+        self.assertNotIn("a calm portrait", stored)
+        self.assertNotIn(str(self.reference), stored)
+        self.assertNotIn(str(self.fixture.base), stored)
 
 
 if __name__ == "__main__":
