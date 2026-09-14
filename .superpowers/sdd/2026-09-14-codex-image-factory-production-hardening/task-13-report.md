@@ -133,6 +133,43 @@ exit 0
 
 No push, tag, installation, canary, or progress-ledger edit was performed.
 
+## Fix round 5/5
+
+The final review found reference images absent from the protected input closure
+and exposed a plan-validation-to-invocation byte race.
+
+- Every canonical current-plan reference is now protected for `run` and
+  `recover`, including exact, relative, symlink, and writable-tree descendants.
+- `<job>.reference-snapshots/` is a declared writable tree. Under JobLock,
+  approved pending items receive read-only per-attempt snapshots before the
+  ledger attempt is recorded; the directory is the exact future `attempt_id`.
+- After copying, snapshot and source hashes must both equal the plan-bound hash.
+  Mismatch cleans only newly created snapshots, records no attempt, invokes
+  nothing, and returns structured `recovery_required` output.
+- Generation receives only snapshot paths. Recovery creates no snapshots.
+
+RED evidence: five alias subtests failed, the mutation test errored because no
+snapshot implementation existed, the snapshot-path assertion failed, and the
+recover protection assertion failed.
+
+GREEN evidence:
+
+```text
+reference-focused tests: Ran 4 tests ... OK
+python3 -m unittest tests.test_cli tests.test_recovery tests.test_ledger tests.test_plan -v
+Ran 167 tests ... OK
+python3 -m unittest discover -s tests -v
+Ran 391 tests ... OK
+python3 -m compileall -q scripts tests
+exit 0
+python3 scripts/validate_distribution.py .
+validated codex-image-factory compatibility foundation 0.1.2
+git diff --check
+exit 0
+```
+
+No push, tag, installation, canary, progress edit, or subagent action occurred.
+
 ## Fix round 3/5
 
 The third review found that default binary preflight and capability validation

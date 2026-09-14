@@ -135,6 +135,26 @@ class RecoveryCommandTests(unittest.TestCase):
                 self.assertEqual(snapshot_tree(fixture.base), before)
                 self.assertEqual(fixture.read_job()["state"], "Running")
 
+    def test_recover_protects_reference_inputs_without_creating_snapshots(self) -> None:
+        reference = cli.receipt_store.manifest_path(self.fixture.job_path)
+        reference.write_bytes((ROOT / "assets" / "logo.png").read_bytes())
+        self.fixture.write_plan(valid_plan(items=[{
+            "id": "item-01", "prompt": "a calm portrait",
+            "reference_images": [str(reference)],
+        }]))
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Running"
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        before = snapshot_tree(self.fixture.base)
+        code, output = self.fixture.run_cli(
+            "recover", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--destination", str(self.fixture.destination), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_USAGE, output)
+        self.assertIn("path collision", json.loads(output)["error"])
+        self.assertEqual(snapshot_tree(self.fixture.base), before)
+        self.assertFalse(Path(str(self.fixture.job_path) + ".reference-snapshots").exists())
+
     def test_attempting_with_verified_receipt_becomes_generated(self) -> None:
         self.rewrite_item(0, "Attempting")
         code, report = self.recover()

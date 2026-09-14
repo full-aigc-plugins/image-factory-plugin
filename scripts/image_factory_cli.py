@@ -20,9 +20,10 @@ import argparse
 import hashlib
 import json
 import math
+import shutil
 import sys
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 import artifact_collector
@@ -146,12 +147,14 @@ def preflight_mutating_command_paths(args: argparse.Namespace) -> None:
     job_path = Path(args.job)
     destination = Path(args.destination)
     receipt_directory = receipt_store.receipt_directory(job_path)
+    reference_snapshot_directory = Path(str(job_path) + ".reference-snapshots")
     work_directory = destination / ".work"
     message_directory = destination / ".last-messages"
     derived = {
         "job_lock": job_lock.lock_path_for(job_path),
         "receipt_manifest": receipt_store.manifest_path(job_path),
         "receipt_directory": receipt_directory,
+        "reference_snapshot_directory": reference_snapshot_directory,
         "work_directory": work_directory,
         "last_message_directory": message_directory,
     }
@@ -168,17 +171,29 @@ def preflight_mutating_command_paths(args: argparse.Namespace) -> None:
         derived[f"artifact:{item.id}"] = (
             artifact_directory / f"{item.id}-r{item.round}-{key_suffix}.png"
         )
-    refuse_path_aliases({**paths, **derived})
+    reference_inputs: dict[str, Path] = {}
+    reference_seen: set[Path] = set()
+    for item in result.items:
+        for index, reference in enumerate(item.reference_images):
+            source = Path(reference)
+            if not source.is_absolute():
+                source = Path(args.plan).parent / source
+            canonical = canonical_path(source)
+            if canonical not in reference_seen:
+                reference_inputs[f"reference:{item.id}:{index}"] = source
+                reference_seen.add(canonical)
+    refuse_path_aliases({**paths, **reference_inputs, **derived})
 
     write_trees = {
         "destination": destination,
         "receipt_directory": receipt_directory,
+        "reference_snapshot_directory": reference_snapshot_directory,
         "work_directory": work_directory,
         "last_message_directory": message_directory,
     }
     if args.command == "run":
         write_trees["generation_dir"] = args._effective_generation_dir
-    input_files = {"plan": Path(args.plan), "job": job_path}
+    input_files = {"plan": Path(args.plan), "job": job_path, **reference_inputs}
     if args.command == "run":
         input_files["codex_bin"] = Path(args._effective_codex_binary)
     for input_role, input_path in input_files.items():
@@ -189,6 +204,54 @@ def preflight_mutating_command_paths(args: argparse.Namespace) -> None:
                 raise ValueError(
                     f"path collision between {input_role} and {tree_role} tree"
                 )
+
+
+def snapshot_plan_references(
+    result: plan_validator.PlanResult,
+    plan_path: Path,
+    job_path: Path,
+    pending_keys: set[str],
+) -> tuple[plan_validator.PlanResult, dict[str, str]]:
+    """Copy and verify references before any attempt is recorded or invoked."""
+    snapshot_root = Path(str(job_path) + ".reference-snapshots")
+    created_directories: list[Path] = []
+    snapshot_items: list[plan_validator.PlanItem] = []
+    attempt_ids: dict[str, str] = {}
+    try:
+        for item in result.items:
+            if item.idempotency_key not in pending_keys or not item.reference_images:
+                snapshot_items.append(item)
+                continue
+            attempt_id = uuid.uuid4().hex
+            attempt_ids[item.idempotency_key] = attempt_id
+            attempt_directory = snapshot_root / attempt_id
+            attempt_directory.mkdir(parents=True, exist_ok=False)
+            created_directories.append(attempt_directory)
+            snapshots: list[str] = []
+            for index, (reference, expected_sha256) in enumerate(
+                zip(item.reference_images, item.reference_sha256, strict=True)
+            ):
+                source = Path(reference)
+                if not source.is_absolute():
+                    source = plan_path.parent / source
+                snapshot = attempt_directory / f"reference-{index}-{expected_sha256}.bin"
+                shutil.copyfile(source, snapshot)
+                snapshot_sha256 = plan_validator.file_sha256(snapshot)
+                source_sha256 = plan_validator.file_sha256(source)
+                if snapshot_sha256 != expected_sha256 or source_sha256 != expected_sha256:
+                    raise ValueError(
+                        f"reference bytes changed after validation for item {item.id!r}"
+                    )
+                snapshot.chmod(0o400)
+                snapshots.append(str(snapshot))
+            snapshot_items.append(replace(item, reference_images=tuple(snapshots)))
+    except BaseException:
+        for directory in reversed(created_directories):
+            shutil.rmtree(directory, ignore_errors=True)
+        if snapshot_root.is_dir() and not any(snapshot_root.iterdir()):
+            snapshot_root.rmdir()
+        raise
+    return replace(result, items=tuple(snapshot_items)), attempt_ids
 
 
 def _resolve_codex_home(args: argparse.Namespace) -> Path:
@@ -411,6 +474,30 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         return EXIT_CAPABILITY_UNAVAILABLE, _emit(payload, args.json)
 
     codex_binary = args._effective_codex_binary
+    reference_attempt_ids: dict[str, str] = {}
+
+    if args.approve:
+        try:
+            if job_path.is_file():
+                preview_ledger = job_ledger.JobLedger(job_path)
+                pending_keys = {
+                    item.idempotency_key
+                    for item in preview_ledger.pending_items(result.items)
+                }
+            else:
+                pending_keys = {item.idempotency_key for item in result.items}
+            result, reference_attempt_ids = snapshot_plan_references(
+                result, plan_path, job_path, pending_keys
+            )
+        except (OSError, ValueError) as error:
+            return EXIT_RECOVERY_REQUIRED, _emit(
+                {
+                    "ok": False,
+                    "error_category": "recovery_required",
+                    "error": str(error),
+                },
+                args.json,
+            )
 
     ledger = job_ledger.JobLedger(job_path)
     if job_path.is_file():
@@ -473,7 +560,7 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
     unknown = False
 
     for item in pending:
-        attempt_id = uuid.uuid4().hex
+        attempt_id = reference_attempt_ids.get(item.idempotency_key) or uuid.uuid4().hex
         ledger.start_attempt(item, attempt_id)
         outcome = generation_runner.run_item(
             binary=codex_binary,

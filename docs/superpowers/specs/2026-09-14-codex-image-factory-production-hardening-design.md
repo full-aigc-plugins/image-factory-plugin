@@ -231,6 +231,12 @@ Recovery follows this evidence order:
   per-item receipt tree, work and last-message trees, and current-round artifact
   directories/files. An input file may not be equal to or descend from any tree
   the command can create, replace, or write.
+- Every current-plan reference image is a protected input. For an approved run,
+  each pending item's references are copied under the predeclared immutable
+  reference-snapshot tree before its attempt is recorded. Snapshot and source
+  hashes must still equal the plan-bound reference hashes after copying, and
+  Codex receives only those snapshots. Recovery validates references but never
+  creates snapshots or invokes generation.
 - Refusal happens before any participating file or ledger byte changes.
 - Evaluation writes the scores document atomically, then records the evaluation
   evidence and its final batch state in one atomic ledger mutation.

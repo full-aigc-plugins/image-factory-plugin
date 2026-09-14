@@ -425,6 +425,86 @@ class RunCommandTests(unittest.TestCase):
                 self.assertFalse(fixture.job_path.exists())
                 self.assertFalse((fixture.base / "fake-codex-argv.json").exists())
 
+    def test_run_refuses_references_that_alias_writable_paths_and_trees(self) -> None:
+        targets = derived_run_targets(self.fixture)
+        cases = {
+            "lock_exact": targets["lock"],
+            "receipt_descendant": targets["receipt_descendant"],
+            "work_descendant": targets["work_descendant"],
+            "artifact_exact": targets["artifact"],
+            "generation_descendant": self.fixture.generation_dir / "reference.png",
+        }
+        for name, target in cases.items():
+            with self.subTest(target=name):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(REAL_PNG.read_bytes())
+                reference = target
+                if name == "receipt_descendant":
+                    alias = self.fixture.base / "reference-alias"
+                    if not alias.exists():
+                        alias.symlink_to(self.fixture.base, target_is_directory=True)
+                    reference = alias / target.relative_to(self.fixture.base)
+                self.fixture.write_plan(valid_plan(items=[{
+                    "id": "item-01", "prompt": "a calm portrait",
+                    "reference_images": [str(reference)],
+                }]))
+                before = snapshot_tree(self.fixture.base)
+                code, output = self.run_batch("--approve")
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertIn("path collision", json.loads(output)["error"])
+                self.assertEqual(snapshot_tree(self.fixture.base), before)
+                self.assertFalse(self.fixture.job_path.exists())
+
+    def test_run_snapshots_references_and_refuses_post_preflight_source_mutation(self) -> None:
+        reference = self.fixture.base / "reference.png"
+        reference.write_bytes(REAL_PNG.read_bytes())
+        self.fixture.write_plan(valid_plan(items=[{
+            "id": "item-01", "prompt": "a calm portrait",
+            "reference_images": [str(reference)],
+        }]))
+        original_copy = shutil.copyfile
+
+        def copy_then_mutate(source, destination):
+            result = original_copy(source, destination)
+            Path(source).write_bytes(b"changed after preflight")
+            return result
+
+        with patch.object(cli.shutil, "copyfile", side_effect=copy_then_mutate), patch.object(
+            cli.generation_runner,
+            "run_item",
+            side_effect=AssertionError("changed references must spend zero calls"),
+        ):
+            code, output = self.run_batch("--approve")
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
+        self.assertIn("reference", json.loads(output)["error"])
+        self.assertFalse(self.fixture.job_path.exists())
+
+    def test_run_invokes_only_hash_verified_reference_snapshots(self) -> None:
+        reference = self.fixture.base / "reference.png"
+        reference.write_bytes(REAL_PNG.read_bytes())
+        expected_hash = hashlib.sha256(reference.read_bytes()).hexdigest()
+        self.fixture.write_plan(valid_plan(items=[{
+            "id": "item-01", "prompt": "a calm portrait",
+            "reference_images": [str(reference)],
+        }]))
+        original_run = cli.generation_runner.run_item
+        observed: list[Path] = []
+
+        def inspect_snapshot(**kwargs):
+            snapshot = Path(kwargs["item"].reference_images[0])
+            self.assertNotEqual(snapshot.resolve(), reference.resolve())
+            self.assertEqual(hashlib.sha256(snapshot.read_bytes()).hexdigest(), expected_hash)
+            ledger = self.fixture.read_job()
+            current = next(row for row in ledger["items"] if row["item_id"] == "item-01")
+            self.assertEqual(snapshot.parent.name, current["attempt_id"])
+            observed.append(snapshot)
+            return original_run(**kwargs)
+
+        with patch.object(cli.generation_runner, "run_item", side_effect=inspect_snapshot):
+            code, output = self.run_batch("--approve")
+        self.assertEqual(code, cli.EXIT_OK, output)
+        self.assertEqual(len(observed), 1)
+
     def test_run_without_approval_stops_before_spending(self) -> None:
         code, output = self.run_batch()
         self.assertEqual(code, cli.EXIT_APPROVAL_REQUIRED, output)
