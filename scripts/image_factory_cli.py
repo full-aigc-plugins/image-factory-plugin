@@ -130,7 +130,65 @@ def mutating_command_paths(args: argparse.Namespace) -> dict[str, Path]:
 
 def preflight_mutating_command_paths(args: argparse.Namespace) -> None:
     """Reject path aliases before a command lock or any other side effect."""
-    refuse_path_aliases(mutating_command_paths(args))
+    paths = mutating_command_paths(args)
+    refuse_path_aliases(paths)
+    if args.command not in {"run", "recover"}:
+        return
+
+    cached = getattr(args, "_validated_plan_cache", None)
+    if cached is None:
+        cached = _validated_plan(args)
+        args._validated_plan_cache = cached
+    result, _plan_path = cached
+    if not result.ok:
+        return
+
+    job_path = Path(args.job)
+    destination = Path(args.destination)
+    receipt_directory = receipt_store.receipt_directory(job_path)
+    work_directory = destination / ".work"
+    message_directory = destination / ".last-messages"
+    derived = {
+        "job_lock": job_lock.lock_path_for(job_path),
+        "receipt_manifest": receipt_store.manifest_path(job_path),
+        "receipt_directory": receipt_directory,
+        "work_directory": work_directory,
+        "last_message_directory": message_directory,
+    }
+    for item in result.items:
+        key_suffix = item.idempotency_key[:12]
+        artifact_directory = destination / result.batch_id / f"round-{item.round}"
+        derived[f"receipt:{item.id}"] = receipt_store.receipt_path(
+            job_path, item.idempotency_key
+        )
+        derived[f"last_message:{item.id}"] = (
+            message_directory / f"{item.id}-round-{item.round}.last-message.txt"
+        )
+        derived.setdefault(f"artifact_directory:round-{item.round}", artifact_directory)
+        derived[f"artifact:{item.id}"] = (
+            artifact_directory / f"{item.id}-r{item.round}-{key_suffix}.png"
+        )
+    refuse_path_aliases({**paths, **derived})
+
+    write_trees = {
+        "destination": destination,
+        "receipt_directory": receipt_directory,
+        "work_directory": work_directory,
+        "last_message_directory": message_directory,
+    }
+    if args.command == "run":
+        write_trees["generation_dir"] = args._effective_generation_dir
+    input_files = {"plan": Path(args.plan), "job": job_path}
+    if args.command == "run":
+        input_files["codex_bin"] = Path(args._effective_codex_binary)
+    for input_role, input_path in input_files.items():
+        resolved_input = canonical_path(input_path)
+        for tree_role, tree_path in write_trees.items():
+            resolved_tree = canonical_path(tree_path)
+            if resolved_input == resolved_tree or resolved_tree in resolved_input.parents:
+                raise ValueError(
+                    f"path collision between {input_role} and {tree_role} tree"
+                )
 
 
 def _resolve_codex_home(args: argparse.Namespace) -> Path:
@@ -342,7 +400,7 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
     destination = Path(args.destination)
     job_path = Path(args.job)
 
-    result, plan_path = _validated_plan(args)
+    result, plan_path = args._validated_plan_cache
     if not result.ok:
         return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)
 
@@ -498,7 +556,7 @@ def command_recover(args: argparse.Namespace) -> tuple[int, str]:
     except ValueError as error:
         return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
 
-    result, _plan_path = _validated_plan(args)
+    result, _plan_path = args._validated_plan_cache
     if not result.ok:
         return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)
 

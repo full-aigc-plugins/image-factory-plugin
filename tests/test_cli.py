@@ -51,6 +51,21 @@ def snapshot_tree(base: Path) -> dict[str, bytes]:
     }
 
 
+def derived_run_targets(fixture: CliFixture) -> dict[str, Path]:
+    result = cli.plan_validator.validate_plan(valid_plan(), base_dir=fixture.base)
+    item = result.items[0]
+    artifact_id = f"{item.id}-r{item.round}-{item.idempotency_key[:12]}"
+    return {
+        "lock": cli.job_lock.lock_path_for(fixture.job_path),
+        "manifest": cli.receipt_store.manifest_path(fixture.job_path),
+        "receipt_descendant": cli.receipt_store.receipt_directory(fixture.job_path) / "plan.json",
+        "receipt_file": cli.receipt_store.receipt_path(fixture.job_path, item.idempotency_key),
+        "work_descendant": fixture.destination / ".work" / "plan.json",
+        "last_message": fixture.destination / ".last-messages" / "item-01-round-1.last-message.txt",
+        "artifact": fixture.destination / "portrait-study" / "round-1" / f"{artifact_id}.png",
+    }
+
+
 class PortableShimTests(unittest.TestCase):
     def test_windows_shim_uses_cmd_launcher_syntax(self) -> None:
         shim = build_shim(platform_name="nt")
@@ -372,6 +387,43 @@ class RunCommandTests(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_OK, output)
         self.assertEqual(resolver.call_count, 1)
         self.assertEqual(observed_invocation_binaries, [str(SHIM), str(SHIM)])
+
+    def test_run_refuses_plan_inside_every_derived_write_target_before_locking(self) -> None:
+        for target_name in derived_run_targets(self.fixture):
+            with self.subTest(target=target_name):
+                fixture = CliFixture()
+                self.addCleanup(fixture.cleanup)
+                fixture.control()
+                target = derived_run_targets(fixture)[target_name]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(valid_plan()), encoding="utf-8")
+                plan_argument = target
+                if target_name == "manifest":
+                    alias = fixture.base / "alias"
+                    alias.symlink_to(fixture.base, target_is_directory=True)
+                    (fixture.base / "nested").mkdir()
+                    plan_argument = alias / "nested" / ".." / target.name
+                before = snapshot_tree(fixture.base)
+                with patch.object(
+                    cli.capability_probe,
+                    "probe",
+                    side_effect=AssertionError("derived path refusal must precede probe"),
+                ), patch.object(
+                    cli.generation_runner,
+                    "run_item",
+                    side_effect=AssertionError("derived path refusal must make zero calls"),
+                ):
+                    code, output = fixture.run_cli(
+                        "run", "--plan", str(plan_argument), "--job", str(fixture.job_path),
+                        "--destination", str(fixture.destination), "--codex-home", str(fixture.codex_home),
+                        "--generation-dir", str(fixture.generation_dir), "--codex-bin", str(SHIM),
+                        "--approve", "--json",
+                    )
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertIn("path collision", json.loads(output)["error"])
+                self.assertEqual(snapshot_tree(fixture.base), before)
+                self.assertFalse(fixture.job_path.exists())
+                self.assertFalse((fixture.base / "fake-codex-argv.json").exists())
 
     def test_run_without_approval_stops_before_spending(self) -> None:
         code, output = self.run_batch()

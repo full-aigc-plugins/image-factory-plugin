@@ -226,6 +226,11 @@ Recovery follows this evidence order:
 - Mutating-command preflight runs before acquiring the job lock, so a refused
   command does not create or alter even the lock sidecar. `run` checks its
   effective default or explicit Codex home, generation directory, and binary.
+- For `run` and `recover`, preflight performs read-only plan validation and then
+  closes over every deterministic write target: lock, compatibility manifest,
+  per-item receipt tree, work and last-message trees, and current-round artifact
+  directories/files. An input file may not be equal to or descend from any tree
+  the command can create, replace, or write.
 - Refusal happens before any participating file or ledger byte changes.
 - Evaluation writes the scores document atomically, then records the evaluation
   evidence and its final batch state in one atomic ledger mutation.

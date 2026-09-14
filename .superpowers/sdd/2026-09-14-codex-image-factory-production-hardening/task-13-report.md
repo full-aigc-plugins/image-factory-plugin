@@ -169,6 +169,48 @@ exit 0
 Existing path-collision, pre-lock refusal, and non-colliding JobLock tests remain
 green. No push, tag, installation, canary, or progress-ledger edit was performed.
 
+## Fix round 4/5
+
+The fourth review identified a critical closure gap: command role roots were
+safe, but a plan could still occupy a deterministic child path that `run` or
+`recover` would create, replace, or rewrite.
+
+### Added behavior
+
+- Lock-sidecar, compatibility-manifest, receipt-directory and every current-item
+  receipt path are part of preflight.
+- Destination `.work` and `.last-messages` trees, every deterministic current-item
+  last-message path, current-round artifact directories/files, and the effective
+  generation tree are part of preflight.
+- Inputs are rejected both on exact canonical equality and when located beneath
+  a directory tree the command may write.
+- The plan is parsed and schema-validated read-only before item-derived closure
+  is calculated. Its validated result is cached and reused by the handler after
+  the collision decision; no probe, lock, ledger, receipt, or destination write
+  precedes that decision.
+- Round artifact directories are intentionally deduplicated because multiple
+  valid items share the same current-round directory.
+
+### RED and GREEN evidence
+
+```text
+derived-path tests before fix: 14 expected failing subtests
+derived-path tests after fix: 14 scenarios ... OK
+python3 -m unittest tests.test_cli tests.test_recovery tests.test_ledger -v
+Ran 134 tests ... OK
+python3 -m unittest discover -s tests -v
+Ran 379 tests ... OK
+python3 -m compileall -q scripts tests
+exit 0
+python3 scripts/validate_distribution.py .
+validated codex-image-factory compatibility foundation 0.1.2
+git diff --check
+exit 0
+```
+
+The separate Partial failed-item lifecycle finding was intentionally not changed.
+No push, tag, installation, canary, or progress-ledger edit was performed.
+
 ## Fix round 2/5
 
 The second review found two remaining preflight gaps: default `run` paths were

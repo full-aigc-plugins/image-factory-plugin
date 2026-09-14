@@ -11,7 +11,13 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import image_factory_cli as cli  # noqa: E402
 import receipt_store  # noqa: E402
-from tests.test_cli import SHIM, CliFixture, snapshot_tree  # noqa: E402
+from tests.test_cli import (  # noqa: E402
+    SHIM,
+    CliFixture,
+    derived_run_targets,
+    snapshot_tree,
+    valid_plan,
+)
 
 
 class RecoveryCommandTests(unittest.TestCase):
@@ -98,6 +104,35 @@ class RecoveryCommandTests(unittest.TestCase):
                 self.assertIn("path collision", json.loads(output)["error"])
                 self.assertEqual(snapshot_tree(fixture.base), before)
                 self.assertFalse(cli.job_lock.lock_path_for(job_argument).exists())
+                self.assertEqual(fixture.read_job()["state"], "Running")
+
+    def test_recover_refuses_plan_inside_every_derived_write_target(self) -> None:
+        for target_name in derived_run_targets(self.fixture):
+            with self.subTest(target=target_name):
+                fixture = CliFixture()
+                self.addCleanup(fixture.cleanup)
+                fixture.write_plan()
+                fixture.control()
+                fixture.run_approved_batch()
+                ledger = fixture.read_job()
+                ledger["state"] = "Running"
+                fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+                target = derived_run_targets(fixture)[target_name]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(valid_plan()), encoding="utf-8")
+                before = snapshot_tree(fixture.base)
+                with patch.object(
+                    cli.receipt_store,
+                    "load_verified_receipts",
+                    side_effect=AssertionError("derived path refusal must precede receipt reads"),
+                ):
+                    code, output = fixture.run_cli(
+                        "recover", "--plan", str(target), "--job", str(fixture.job_path),
+                        "--destination", str(fixture.destination), "--json",
+                    )
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertIn("path collision", json.loads(output)["error"])
+                self.assertEqual(snapshot_tree(fixture.base), before)
                 self.assertEqual(fixture.read_job()["state"], "Running")
 
     def test_attempting_with_verified_receipt_becomes_generated(self) -> None:
