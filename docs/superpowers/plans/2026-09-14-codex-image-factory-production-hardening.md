@@ -1182,6 +1182,114 @@ Expected: installed version is 0.1.2; its cache commit, local HEAD, upstream mai
 remote main, and tag commit match. Report the final read-only parity evidence in
 the completion response.
 
+### Task 12: Close current-round evaluation cardinality and recovery acceptance
+
+**Files:**
+- Modify: `scripts/image_factory_cli.py:577-630`
+- Modify: `tests/test_cli.py:620-850`
+- Modify: `tests/test_multi_round_lifecycle.py:44-153`
+- Modify: `docs/verification/offline.md:31-38`
+
+**Interfaces:**
+- Produces: `current_rows_by_key(payload: dict, current_keys: set[str]) -> dict[str, dict]`
+- Consumes: current plan idempotency keys, receipt-store filtering, and ledger receipt IDs
+- Proves: recoverable round-two crashes can continue through evaluation to `Accepted`
+- Preserves: append-only historical ledger rows and receipts
+
+- [ ] **Step 1: Write a failing duplicate-current-row evaluation test**
+
+Create a completed batch, duplicate its current idempotency-key ledger row with a
+contradictory `Unknown` state, and invoke `evaluate`. Assert:
+
+```python
+self.assertEqual(code, cli.EXIT_FAILURE)
+self.assertIn("duplicate current-round ledger rows", json.loads(output)["error"])
+self.assertEqual(self.fixture.job_path.read_bytes(), ledger_before)
+self.assertEqual(self.scores_path.read_bytes(), scores_before)
+```
+
+The test must keep historical rows with different idempotency keys present so it
+proves only duplicate current evidence is rejected.
+
+- [ ] **Step 2: Extend both recoverable round-two crash tests through acceptance**
+
+For the post-receipt/pre-ledger-completion and post-ledger-completion/pre-manifest
+crash cases:
+
+1. Run `recover` and require exit 0 with one completed current item.
+2. Write labels `{"item-01": "approved"}`.
+3. Run `evaluate` against the round-two plan and rebuilt current evidence.
+4. Assert decision `pass`, scores round `2`, and ledger state `Accepted`.
+5. Assert the evaluated receipt id belongs to the round-two idempotency key, not
+   a historical round-one receipt.
+
+- [ ] **Step 3: Run the focused tests and verify RED**
+
+```bash
+python3 -m unittest \
+  tests.test_cli.EvaluateAndOptimizeCommandTests.test_evaluate_refuses_duplicate_current_round_ledger_rows \
+  tests.test_multi_round_lifecycle.MultiRoundLifecycleTests.test_round_two_crash_after_receipt_recovers_and_evaluates \
+  tests.test_multi_round_lifecycle.MultiRoundLifecycleTests.test_round_two_crash_after_completion_recovers_and_evaluates \
+  -v
+```
+
+Expected: duplicate rows are silently collapsed, and the two crash tests stop
+after recovery without proving evaluation acceptance.
+
+- [ ] **Step 4: Implement one exact current-row cardinality helper**
+
+```python
+def current_rows_by_key(payload: dict, current_keys: set[str]) -> dict[str, dict]:
+    rows: dict[str, dict] = {}
+    for row in payload["items"]:
+        key = row.get("idempotency_key")
+        if key not in current_keys:
+            continue
+        if key in rows:
+            raise ValueError("duplicate current-round ledger rows")
+        rows[key] = row
+    return rows
+```
+
+Use this helper before evaluation constructs any receipt map. Historical rows
+whose keys are outside `current_keys` remain stored and ignored. Reuse the helper
+from status where doing so removes equivalent duplicate-key logic without
+changing status output.
+
+- [ ] **Step 5: Complete recovery-to-evaluation acceptance coverage**
+
+Add a test helper that writes current-round approval labels, invokes the real CLI
+evaluation handler, reads the real scores file and ledger, and asserts current
+receipt identity. Do not mock `command_evaluate`, receipt loading, or ledger
+state transitions.
+
+- [ ] **Step 6: Run focused and full verification**
+
+```bash
+python3 -m unittest tests.test_cli tests.test_multi_round_lifecycle -v
+python3 -m unittest discover -s tests -v
+python3 -m compileall -q scripts tests
+python3 scripts/validate_distribution.py .
+git diff --check
+```
+
+Expected: all commands exit zero. Update `docs/verification/offline.md` with the
+observed full-suite count only after the final run.
+
+- [ ] **Step 7: Commit Task 12**
+
+```bash
+git add scripts/image_factory_cli.py tests/test_cli.py tests/test_multi_round_lifecycle.py docs/verification/offline.md docs/superpowers/plans/2026-09-14-codex-image-factory-production-hardening.md
+git commit -m "fix: close multi-round evaluation evidence gaps"
+```
+
+- [ ] **Step 8: Run independent Task 12 and whole-branch review**
+
+Generate a Task 12 review package from its recorded base to HEAD. Require both
+task-level spec/quality approval and a renewed whole-branch verdict of
+`Ready for candidate push: Yes`. Any Critical or Important finding keeps Task 11
+at the candidate-push gate.
+
 ## Completion Gate
 
 ```text
@@ -1207,6 +1315,8 @@ remote_sha_parity = PASS
 fresh_marketplace_install = PASS
 fresh_session_no_spend_smoke = PASS
 paid_canary = PASS
+duplicate_current_evaluation_guard = PASS
+crash_recover_evaluate_chain = PASS
 ```
 
 ## Stop Conditions
