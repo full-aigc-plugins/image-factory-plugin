@@ -27,6 +27,27 @@ def minimal_plan(**overrides) -> dict:
     return plan
 
 
+def schema_plan(**overrides) -> dict:
+    """A plan that already satisfies the published schema, so shape tests skip migration.
+
+    The direct-schema tests below assert on specific violations. Feeding them a
+    legacy plan would fail on the version constant first and mask the rule under
+    test, so they start from a document that is current in every respect.
+    """
+    plan = minimal_plan(
+        schema_version="1.1.0",
+        limits={"max_images": 20, "max_rounds": 3, "require_approval_before_run": True},
+        judge_policy={
+            "min_dimension": 256,
+            "reject_duplicates": True,
+            "pass_threshold": 0.8,
+            "require_human_labels": True,
+        },
+    )
+    plan.update(overrides)
+    return plan
+
+
 class PlanFixture:
     def __init__(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -51,22 +72,22 @@ class SchemaLiteTests(unittest.TestCase):
         self.assertTrue(any("extra" in error for error in errors), errors)
 
     def test_accepts_valid_instance(self) -> None:
-        self.assertEqual(schema_lite.validate(minimal_plan(), SCHEMA), [])
+        self.assertEqual(schema_lite.validate(schema_plan(), SCHEMA), [])
 
     def test_enforces_pattern_and_bounds(self) -> None:
-        errors = schema_lite.validate(minimal_plan(batch_id="X"), SCHEMA)
+        errors = schema_lite.validate(schema_plan(batch_id="X"), SCHEMA)
         self.assertTrue(any("batch_id" in error for error in errors), errors)
-        errors = schema_lite.validate(minimal_plan(round=0), SCHEMA)
+        errors = schema_lite.validate(schema_plan(round=0), SCHEMA)
         self.assertTrue(any("round" in error for error in errors), errors)
 
     def test_resolves_local_refs(self) -> None:
-        plan = minimal_plan(items=[{"id": "item-01", "prompt": ""}])
+        plan = schema_plan(items=[{"id": "item-01", "prompt": ""}])
         errors = schema_lite.validate(plan, SCHEMA)
         self.assertTrue(any("minLength" in error or "prompt" in error for error in errors), errors)
 
     def test_enforces_reference_image_ceiling(self) -> None:
         item = {"id": "item-01", "prompt": "p", "reference_images": [f"r{n}.png" for n in range(6)]}
-        errors = schema_lite.validate(minimal_plan(items=[item]), SCHEMA)
+        errors = schema_lite.validate(schema_plan(items=[item]), SCHEMA)
         self.assertTrue(any("maxItems" in error for error in errors), errors)
 
 
@@ -155,12 +176,18 @@ class PlanValidatorTests(unittest.TestCase):
         result = self.fixture.validate(minimal_plan())
         self.assertTrue(result.require_approval_before_run)
 
-    def test_approval_can_only_be_waived_explicitly(self) -> None:
+    def test_a_legacy_plan_cannot_opt_out_of_approval(self) -> None:
+        """Under 1.1.0 every round needs fresh approval, so migration removes the weaker posture."""
         result = self.fixture.validate(
             minimal_plan(limits={"max_images": 5, "max_rounds": 2, "require_approval_before_run": False})
         )
         self.assertTrue(result.ok, result.errors)
-        self.assertFalse(result.require_approval_before_run)
+        self.assertTrue(result.require_approval_before_run)
+
+    def test_human_labels_are_required_after_migration(self) -> None:
+        result = self.fixture.validate(minimal_plan())
+        self.assertTrue(result.ok, result.errors)
+        self.assertTrue(result.require_human_labels)
 
     def test_validator_caps_match_the_published_schema(self) -> None:
         item_cap = SCHEMA["properties"]["items"]["maxItems"]

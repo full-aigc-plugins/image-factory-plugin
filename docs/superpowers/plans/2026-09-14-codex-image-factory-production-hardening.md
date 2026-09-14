@@ -58,7 +58,7 @@
 - Produces: a reviewed path inventory separating pre-existing conversation/documentation work from production-hardening work
 - Constrains: every later `git add` to explicit paths
 
-- [ ] **Step 1: Capture the read-only repository baseline**
+- [x] **Step 1: Capture the read-only repository baseline**
 
 ```bash
 git branch --show-current
@@ -72,7 +72,7 @@ git rev-parse @{upstream}
 Expected: branch and revisions are recorded; existing modified, deleted, and
 untracked paths remain untouched.
 
-- [ ] **Step 2: Inspect overlap with planned files**
+- [x] **Step 2: Inspect overlap with planned files**
 
 ```bash
 git diff -- skills docs README.md README.zh-CN.md CHANGELOG.md
@@ -83,7 +83,7 @@ Expected: the first command shows pre-existing conversational/documentation work
 the second confirms whether any runtime path already has user changes. Do not
 discard either group.
 
-- [ ] **Step 3: Establish selective-staging discipline**
+- [x] **Step 3: Establish selective-staging discipline**
 
 Before every later commit:
 
@@ -114,7 +114,7 @@ contains user-authored changes, preserve them and review the combined diff.
 - Produces: `migrate_factory_job(document: object) -> MigrationResult`
 - Consumed later by: `plan_validator.validate_plan` and `job_ledger.load_ledger`
 
-- [ ] **Step 1: Write failing image-plan contract tests**
+- [x] **Step 1: Write failing image-plan contract tests**
 
 Add `load_schema(name: str) -> dict` at module scope; it loads the named file
 from `schemas/` with UTF-8 and `json.loads`. Then add:
@@ -130,7 +130,7 @@ def test_image_plan_1_1_requires_both_human_gates(self) -> None:
     self.assertEqual(policy["properties"]["require_human_labels"], {"const": True})
 ```
 
-- [ ] **Step 2: Write failing job contract tests**
+- [x] **Step 2: Write failing job contract tests**
 
 ```python
 def test_factory_job_1_1_exposes_transaction_fields(self) -> None:
@@ -145,7 +145,7 @@ def test_factory_job_1_1_exposes_transaction_fields(self) -> None:
     self.assertFalse(schema["$defs"]["approvalRecord"]["additionalProperties"])
 ```
 
-- [ ] **Step 3: Run contract tests and verify RED**
+- [x] **Step 3: Run contract tests and verify RED**
 
 Run:
 
@@ -155,7 +155,7 @@ python3 -m unittest tests.test_contracts tests.test_plan tests.test_ledger -v
 
 Expected: failures identify schema version `1.0.0`, missing safety fields, missing transaction fields, and missing migration functions.
 
-- [ ] **Step 4: Define the migration module**
+- [x] **Step 4: Define the migration module**
 
 Create this public surface:
 
@@ -236,13 +236,13 @@ Migration rules:
 - Reject missing, non-string, or unsupported versions with `ValueError`.
 - Never mutate the caller-owned dictionary.
 
-- [ ] **Step 5: Update both schemas**
+- [x] **Step 5: Update both schemas**
 
 Use only keywords supported by `scripts/schema_lite.py`. Add closed definitions for `batchRecord`, `approvalRecord`, `approvalLedger`, `evaluationRecord`, `optimizationRecord`, and the expanded `jobItem`. Use a 64-character lowercase hexadecimal pattern for hashes and `date-time` for timestamps.
 
 Add `job_already_running` and `recovery_required` to the closed job error-category enum.
 
-- [ ] **Step 6: Integrate migration at both schema entry points**
+- [x] **Step 6: Integrate migration at both schema entry points**
 
 Call `migrate_image_batch` before plan schema validation. Call
 `migrate_factory_job` before ledger schema validation. New plans and jobs are
@@ -258,7 +258,7 @@ job_migration = contract_migrations.migrate_factory_job(json.loads(raw))
 payload = _assert_well_formed(job_migration.document)
 ```
 
-- [ ] **Step 7: Implement migrations and make focused tests green**
+- [x] **Step 7: Implement migrations and make focused tests green**
 
 Run:
 
@@ -268,7 +268,7 @@ python3 -m unittest tests.test_contract_migrations tests.test_contracts tests.te
 
 Expected: migrated documents validate as 1.1.0; original dictionaries remain byte-equivalent when serialized canonically; no historical approval is invented.
 
-- [ ] **Step 8: Run the full regression suite**
+- [x] **Step 8: Run the full regression suite**
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -276,7 +276,7 @@ python3 -m unittest discover -s tests -v
 
 Expected: all tests pass.
 
-- [ ] **Step 9: Commit the contract boundary**
+- [x] **Step 9: Commit the contract boundary**
 
 ```bash
 git add schemas/image_batch.schema.json schemas/factory_job.schema.json scripts/contract_migrations.py scripts/plan_validator.py scripts/job_ledger.py tests/test_contract_migrations.py tests/test_contracts.py tests/test_plan.py tests/test_ledger.py

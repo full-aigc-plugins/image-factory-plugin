@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "batch_id", "round", "items"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"const": "1.1.0"},
     "batch_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
     "round": {"type": "integer", "minimum": 1},
     "goal": {"type": "string", "minLength": 1, "maxLength": 2000},
@@ -43,19 +43,19 @@
       "properties": {
         "max_images": {"type": "integer", "minimum": 1, "maximum": 200},
         "max_rounds": {"type": "integer", "minimum": 1, "maximum": 20},
-        "require_approval_before_run": {"type": "boolean"}
+        "require_approval_before_run": {"const": true}
       }
     },
     "judgePolicy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["min_dimension", "reject_duplicates", "pass_threshold"],
+      "required": ["min_dimension", "reject_duplicates", "pass_threshold", "require_human_labels"],
       "properties": {
         "min_dimension": {"type": "integer", "minimum": 16, "maximum": 4096},
         "reject_duplicates": {"type": "boolean"},
         "pass_threshold": {"type": "number", "minimum": 0, "maximum": 1},
         "advisory_enabled": {"type": "boolean"},
-        "require_human_labels": {"type": "boolean"}
+        "require_human_labels": {"const": true}
       }
     }
   }

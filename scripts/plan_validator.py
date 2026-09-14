@@ -18,6 +18,8 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+
+import contract_migrations
 from pathlib import Path
 
 import schema_lite
@@ -64,6 +66,7 @@ class PlanResult:
     min_dimension: int
     reject_duplicates: bool
     advisory_enabled: bool
+    require_human_labels: bool = True
 
 
 def file_sha256(target: Path) -> str:
@@ -149,6 +152,15 @@ def validate_plan(
     if instance is None:
         assert coercion_error is not None
         return PlanResult(**{**empty.__dict__, "errors": (coercion_error,)})
+
+    # A 1.0.0 plan is upgraded before it is judged, so a historical plan can never
+    # be executed under the weaker approval posture it was written with.
+    try:
+        instance = contract_migrations.migrate_image_batch(instance).document
+    except ValueError as error:
+        return PlanResult(
+            **{**empty.__dict__, "errors": (PlanError("plan_invalid", str(error)),)}
+        )
 
     structural = schema_lite.validate(instance, document)
     if structural:
@@ -257,4 +269,5 @@ def validate_plan(
         min_dimension=policy.get("min_dimension", 256),
         reject_duplicates=policy.get("reject_duplicates", True),
         advisory_enabled=policy.get("advisory_enabled", False),
+        require_human_labels=policy.get("require_human_labels", True),
     )

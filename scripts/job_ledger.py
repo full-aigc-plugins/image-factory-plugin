@@ -25,9 +25,11 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
+import contract_migrations
 import schema_lite
+from contract_migrations import JOB_SCHEMA_VERSION
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = JOB_SCHEMA_VERSION
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "factory_job.schema.json"
 JOB_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{2,63}$"
 IMAGE_LIMIT_ID = "image_gen"
@@ -60,6 +62,8 @@ ERROR_CATEGORIES = (
     "duplicate_artifact",
     "plan_invalid",
     "approval_required",
+    "job_already_running",
+    "recovery_required",
     "unknown",
 )
 
@@ -67,22 +71,29 @@ ERROR_CATEGORIES = (
 class JobState(str, Enum):
     DRAFT = "Draft"
     PLAN_VALIDATED = "PlanValidated"
+    PENDING_APPROVAL = "PendingApproval"
     APPROVED = "Approved"
     RUNNING = "Running"
     EVALUATED = "Evaluated"
     OPTIMIZED = "Optimized"
+    ACCEPTED = "Accepted"
     COMPLETED = "Completed"
     PARTIAL = "Partial"
     FAILED = "Failed"
     UNKNOWN = "Unknown"
 
 
-ITEM_STATES = ("Pending", "Generated", "Failed", "Skipped")
-ATTEMPTED_ITEM_STATES = ("Generated", "Failed", "Skipped")
+ITEM_STATES = ("Pending", "Attempting", "Generated", "Failed", "Skipped", "Unknown")
+# Every state that means a call may have reached the generator. An item in one of
+# these states is never attempted again automatically.
+ATTEMPTED_ITEM_STATES = ("Attempting", "Generated", "Failed", "Skipped", "Unknown")
 
 ALLOWED_TRANSITIONS: dict[JobState, frozenset[JobState]] = {
     JobState.DRAFT: frozenset({JobState.PLAN_VALIDATED, JobState.FAILED}),
-    JobState.PLAN_VALIDATED: frozenset({JobState.APPROVED, JobState.RUNNING, JobState.FAILED}),
+    JobState.PLAN_VALIDATED: frozenset(
+        {JobState.PENDING_APPROVAL, JobState.APPROVED, JobState.RUNNING, JobState.FAILED}
+    ),
+    JobState.PENDING_APPROVAL: frozenset({JobState.APPROVED, JobState.FAILED}),
     JobState.APPROVED: frozenset({JobState.RUNNING, JobState.FAILED}),
     JobState.RUNNING: frozenset(
         {JobState.COMPLETED, JobState.PARTIAL, JobState.UNKNOWN, JobState.FAILED}
@@ -90,11 +101,25 @@ ALLOWED_TRANSITIONS: dict[JobState, frozenset[JobState]] = {
     JobState.COMPLETED: frozenset({JobState.EVALUATED, JobState.RUNNING, JobState.FAILED}),
     JobState.PARTIAL: frozenset({JobState.EVALUATED, JobState.RUNNING, JobState.FAILED}),
     JobState.EVALUATED: frozenset(
-        {JobState.OPTIMIZED, JobState.COMPLETED, JobState.PARTIAL, JobState.FAILED}
+        {
+            JobState.OPTIMIZED,
+            JobState.ACCEPTED,
+            JobState.COMPLETED,
+            JobState.PARTIAL,
+            JobState.FAILED,
+        }
     ),
     JobState.OPTIMIZED: frozenset(
-        {JobState.PLAN_VALIDATED, JobState.RUNNING, JobState.COMPLETED, JobState.FAILED}
+        {
+            JobState.PLAN_VALIDATED,
+            JobState.PENDING_APPROVAL,
+            JobState.RUNNING,
+            JobState.ACCEPTED,
+            JobState.COMPLETED,
+            JobState.FAILED,
+        }
     ),
+    JobState.ACCEPTED: frozenset({JobState.RUNNING, JobState.FAILED}),
     JobState.UNKNOWN: frozenset(
         {JobState.RUNNING, JobState.COMPLETED, JobState.PARTIAL, JobState.FAILED}
     ),
@@ -105,10 +130,12 @@ RESOLVABLE_STATES = frozenset(
     {
         JobState.DRAFT,
         JobState.PLAN_VALIDATED,
+        JobState.PENDING_APPROVAL,
         JobState.APPROVED,
         JobState.RUNNING,
         JobState.EVALUATED,
         JobState.OPTIMIZED,
+        JobState.ACCEPTED,
         JobState.UNKNOWN,
     }
 )
@@ -140,7 +167,9 @@ def new_job(job_id: str) -> dict:
         "batch": None,
         "rounds": [],
         "items": [],
-        "approval": None,
+        "approval": {"current": None, "history": []},
+        "evaluation": None,
+        "optimization": None,
         "usage_limit": None,
         "error_category": None,
         "history": [],
@@ -196,6 +225,12 @@ def load_ledger(path: Path) -> dict:
     except ValueError as error:
         raise LedgerCorruptError(f"ledger at {target} is not valid JSON: {error}") from error
     _scrub(payload)
+    # A 1.0.0 ledger is upgraded in memory before it is judged, so historical jobs
+    # stay readable without ever being written back in the older shape.
+    try:
+        payload = contract_migrations.migrate_factory_job(payload).document
+    except ValueError as error:
+        raise LedgerCorruptError(f"ledger at {target} cannot be migrated: {error}") from error
     return _assert_well_formed(payload)
 
 
@@ -273,6 +308,8 @@ class JobLedger:
         state: str,
         receipt_id: str | None = None,
         error_category: str | None = None,
+        attempt_id: str | None = None,
+        attempt_started_at: str | None = None,
     ) -> dict:
         if state not in ITEM_STATES:
             raise ValueError(f"item state must be one of {ITEM_STATES}, got {state!r}")
@@ -288,6 +325,8 @@ class JobLedger:
                 "item_id": item_id,
                 "state": state,
                 "attempts": 0,
+                "attempt_id": attempt_id,
+                "attempt_started_at": attempt_started_at,
                 "receipt_id": None,
                 "idempotency_key": None,
                 "error_category": None,
@@ -299,6 +338,12 @@ class JobLedger:
         entry["idempotency_key"] = key
         entry["receipt_id"] = receipt_id
         entry["error_category"] = error_category
+        if attempt_id is not None:
+            entry["attempt_id"] = attempt_id
+        if attempt_started_at is not None:
+            entry["attempt_started_at"] = attempt_started_at
+        entry.setdefault("attempt_id", None)
+        entry.setdefault("attempt_started_at", None)
         payload["revision"] = payload["revision"] + 1
         payload["updated_at"] = _timestamp()
         self.write(payload)

@@ -65,7 +65,9 @@ class NewJobTests(unittest.TestCase):
         self.assertEqual(payload["items"], [])
         self.assertIsNone(payload["error_category"])
         self.assertIsNone(payload["usage_limit"])
-        self.assertIsNone(payload["approval"])
+        self.assertEqual(payload["approval"], {"current": None, "history": []})
+        self.assertIsNone(payload["evaluation"])
+        self.assertIsNone(payload["optimization"])
         self.assertRegex(payload["created_at"], ISO)
 
     def test_invalid_job_id_is_rejected(self) -> None:
