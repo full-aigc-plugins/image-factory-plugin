@@ -110,10 +110,9 @@ because it would otherwise look like a plugin failure.
 
 ## Tag history
 
-`v0.1.2` has been re-pointed twice, both times before any GitHub Release referenced
-it. The first move replaced `98fc6e32`; the second added this verification record,
-the measured multi-round outcome, and the collection runbook. No file under
-`scripts/` or `schemas/` changed across either move, so the released code is identical
-in all three targets. A consumer that fetched an earlier tag should re-fetch; the
-annotated tag's message and `git rev-list -n1 v0.1.2` are the authoritative statement
-of what it points at.
+`v0.1.2` was re-pointed before any GitHub Release referenced it, so that the tag
+would carry the verification record rather than an earlier draft of it. No file
+under `scripts/` or `schemas/` differed across the moves, so the released code is
+identical in every target the tag has ever pointed at. A consumer that fetched an
+earlier tag should re-fetch; the annotated tag's message and
+`git rev-list -n1 v0.1.2` are the authoritative statement of what it points at.
