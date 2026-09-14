@@ -354,6 +354,46 @@ class JobLedger:
             },
         )
 
+    def record_evaluation_final(self, scores_sha256: str, decision: str) -> dict:
+        """Persist evaluation evidence and its final state in one ledger revision."""
+        if not isinstance(scores_sha256, str) or not json_pattern_match(
+            scores_sha256, SHA256_PATTERN
+        ):
+            raise ValueError("scores_sha256 must be 64 lowercase hexadecimal characters")
+        targets = {
+            "fail": JobState.EVALUATED,
+            "pass": JobState.ACCEPTED,
+            "pending_approval": JobState.PENDING_APPROVAL,
+        }
+        if decision not in targets:
+            raise ValueError("unknown evaluation decision")
+
+        payload = self.read()
+        current = JobState(payload["state"])
+        if current not in (
+            JobState.COMPLETED,
+            JobState.PARTIAL,
+            JobState.PENDING_APPROVAL,
+        ):
+            raise InvalidTransitionError(f"cannot evaluate job in state {current.value}")
+        target = targets[decision]
+        timestamp = _timestamp()
+        payload["history"].append(
+            {
+                "from_state": current.value,
+                "to_state": target.value,
+                "at": timestamp,
+            }
+        )
+        payload["state"] = target.value
+        payload["evaluation"] = {
+            "scores_sha256": scores_sha256,
+            "decision": decision,
+            "evaluated_at": timestamp,
+        }
+        self._persist_mutation(payload)
+        return payload
+
     def record_optimization(self, plan_sha256: str, round_number: int) -> dict:
         if not isinstance(plan_sha256, str) or not json_pattern_match(
             plan_sha256, SHA256_PATTERN

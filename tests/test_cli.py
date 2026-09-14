@@ -582,7 +582,13 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
             "--json",
         )
 
-    def persist_failing_evaluation(self) -> None:
+    def persist_failing_evaluation(
+        self,
+        fixture: CliFixture | None = None,
+        scores_path: Path | None = None,
+    ) -> None:
+        fixture = fixture or self.fixture
+        scores_path = scores_path or self.scores_path
         failing = {
             "schema_version": "1.0.0", "batch_id": "portrait-study", "round": 1,
             "pass_threshold": 0.8,
@@ -600,9 +606,9 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
             ],
             "decision": "fail",
         }
-        cli.atomic_json.write_json_atomic(self.scores_path, failing)
-        ledger = cli.job_ledger.JobLedger(self.fixture.job_path)
-        ledger.record_evaluation(hashlib.sha256(self.scores_path.read_bytes()).hexdigest(), "fail")
+        cli.atomic_json.write_json_atomic(scores_path, failing)
+        ledger = cli.job_ledger.JobLedger(fixture.job_path)
+        ledger.record_evaluation(hashlib.sha256(scores_path.read_bytes()).hexdigest(), "fail")
 
     def replace_scores_evidence(self, scores: object) -> None:
         cli.atomic_json.write_json_atomic(self.scores_path, scores)
@@ -619,6 +625,123 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
         if rewrites is not None:
             arguments.extend(("--rewrites", str(rewrites)))
         return self.fixture.run_cli(*arguments)
+
+    @staticmethod
+    def snapshot_tree(base: Path) -> dict[str, bytes]:
+        return {
+            str(path.relative_to(base)): path.read_bytes()
+            for path in base.rglob("*")
+            if path.is_file()
+        }
+
+    def test_evaluate_refuses_every_participating_path_collision_before_mutation(self) -> None:
+        for alias_name in ("job", "plan", "labels", "advisory", "destination"):
+            with self.subTest(alias=alias_name):
+                fixture = CliFixture()
+                self.addCleanup(fixture.cleanup)
+                fixture.write_plan()
+                fixture.control()
+                fixture.run_approved_batch()
+                labels = fixture.base / "labels.json"
+                advisory = fixture.base / "advisory.json"
+                labels.write_text(json.dumps({"item-01": "approved", "item-02": "approved"}), encoding="utf-8")
+                advisory.write_text(json.dumps({"item-01": [1.0, "ok"]}), encoding="utf-8")
+                aliases = {
+                    "job": fixture.job_path,
+                    "plan": fixture.plan_path,
+                    "labels": labels,
+                    "advisory": advisory,
+                    "destination": fixture.destination,
+                }
+                arguments = [
+                    "evaluate", "--plan", str(fixture.plan_path), "--job", str(fixture.job_path),
+                    "--scores", str(aliases[alias_name]), "--labels", str(labels),
+                    "--advisory", str(advisory), *fixture.base_args(), "--json",
+                ]
+                before = self.snapshot_tree(fixture.base)
+                code, output = fixture.run_cli(*arguments)
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertIn("path collision", json.loads(output)["error"])
+                self.assertEqual(self.snapshot_tree(fixture.base), before)
+
+    def test_evaluate_refuses_symlink_and_relative_alias_spellings(self) -> None:
+        alias_parent = self.fixture.base / "alias"
+        try:
+            alias_parent.symlink_to(self.fixture.base, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("host does not support directory symlinks")
+        relative_job = alias_parent / "nested" / ".." / self.fixture.job_path.name
+        before = self.snapshot_tree(self.fixture.base)
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(relative_job), *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_USAGE, output)
+        self.assertIn("path collision", json.loads(output)["error"])
+        self.assertEqual(self.snapshot_tree(self.fixture.base), before)
+
+    def test_optimize_refuses_output_aliases_before_mutation(self) -> None:
+        for alias_name in ("job", "plan", "scores", "rewrites", "destination"):
+            with self.subTest(alias=alias_name):
+                fixture = CliFixture()
+                self.addCleanup(fixture.cleanup)
+                fixture.write_plan()
+                fixture.control()
+                fixture.run_approved_batch()
+                scores = fixture.base / "scores.json"
+                rewrites = fixture.base / "rewrites.json"
+                rewrites.write_text(json.dumps({"item-01": "a calmer portrait"}), encoding="utf-8")
+                self.persist_failing_evaluation(fixture, scores)
+                aliases = {
+                    "job": fixture.job_path,
+                    "plan": fixture.plan_path,
+                    "scores": scores,
+                    "rewrites": rewrites,
+                    "destination": fixture.destination,
+                }
+                before = self.snapshot_tree(fixture.base)
+                code, output = fixture.run_cli(
+                    "optimize", "--job", str(fixture.job_path), "--plan", str(fixture.plan_path),
+                    "--scores", str(scores), "--rewrites", str(rewrites),
+                    "--out", str(aliases[alias_name]), "--destination", str(fixture.destination), "--json",
+                )
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertIn("path collision", json.loads(output)["error"])
+                self.assertEqual(self.snapshot_tree(fixture.base), before)
+                self.assertEqual(fixture.read_job()["state"], "Evaluated")
+
+    def test_optimize_refuses_colliding_required_inputs(self) -> None:
+        self.persist_failing_evaluation()
+        before = self.snapshot_tree(self.fixture.base)
+        code, output = self.fixture.run_cli(
+            "optimize", "--job", str(self.fixture.job_path), "--plan", str(self.fixture.plan_path),
+            "--scores", str(self.fixture.plan_path), "--out", str(self.fixture.base / "next.json"),
+            "--destination", str(self.fixture.destination), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_USAGE, output)
+        self.assertIn("path collision", json.loads(output)["error"])
+        self.assertEqual(self.snapshot_tree(self.fixture.base), before)
+
+    def test_evaluate_crash_after_scores_publication_is_safely_rerunnable(self) -> None:
+        before = self.fixture.read_job()
+        with patch.object(cli.job_ledger.JobLedger, "record_evaluation_final", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.fixture.run_cli(
+                    "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+                    "--scores", str(self.scores_path), *self.fixture.base_args(), "--json",
+                )
+        self.assertTrue(self.scores_path.is_file())
+        self.assertEqual(self.fixture.read_job(), before)
+
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(self.scores_path), *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_OK, output)
+        after = self.fixture.read_job()
+        self.assertEqual(after["state"], "PendingApproval")
+        self.assertEqual(after["revision"], before["revision"] + 1)
+        self.assertEqual(len(after["history"]), len(before["history"]) + 1)
 
     def test_evaluate_writes_a_scores_document(self) -> None:
         code, output = self.fixture.run_cli(

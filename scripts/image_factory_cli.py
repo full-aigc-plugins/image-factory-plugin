@@ -73,6 +73,22 @@ def _load_json(path: Path) -> object:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def canonical_path(path: Path) -> Path:
+    """Return one absolute spelling for existing or prospective paths."""
+    return Path(path).expanduser().resolve(strict=False)
+
+
+def refuse_path_aliases(named_paths: dict[str, Path]) -> None:
+    """Reject two command roles that resolve to the same filesystem path."""
+    seen: dict[Path, str] = {}
+    for role, path in named_paths.items():
+        resolved = canonical_path(path)
+        previous = seen.get(resolved)
+        if previous is not None:
+            raise ValueError(f"path collision between {previous} and {role}")
+        seen[resolved] = role
+
+
 def _resolve_codex_home(args: argparse.Namespace) -> Path:
     if args.codex_home:
         return Path(args.codex_home)
@@ -587,6 +603,21 @@ def current_rows_by_key(payload: dict, current_keys: set[str]) -> dict[str, dict
 
 
 def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
+    participating_paths = {
+        "job": Path(args.job),
+        "plan": Path(args.plan),
+        "scores": Path(args.scores),
+        "destination": Path(args.destination),
+    }
+    if args.labels:
+        participating_paths["labels"] = Path(args.labels)
+    if args.advisory:
+        participating_paths["advisory"] = Path(args.advisory)
+    try:
+        refuse_path_aliases(participating_paths)
+    except ValueError as error:
+        return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
+
     result, _plan_path = _validated_plan(args)
     if not result.ok:
         return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)
@@ -659,13 +690,7 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
     scores_path = Path(args.scores)
     atomic_json.write_json_atomic(scores_path, evaluation.scores)
     scores_sha256 = hashlib.sha256(scores_path.read_bytes()).hexdigest()
-    ledger.record_evaluation(scores_sha256, evaluation.scores["decision"])
-    target = {
-        "pass": job_ledger.JobState.ACCEPTED,
-        "pending_approval": job_ledger.JobState.PENDING_APPROVAL,
-    }.get(evaluation.scores["decision"])
-    if target is not None:
-        ledger.transition(target)
+    ledger.record_evaluation_final(scores_sha256, evaluation.scores["decision"])
 
     payload = {
         "ok": evaluation.ok,
@@ -681,6 +706,20 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
 
 
 def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
+    participating_paths = {
+        "job": Path(args.job),
+        "plan": Path(args.plan),
+        "scores": Path(args.scores),
+        "out": Path(args.out),
+        "destination": Path(args.destination),
+    }
+    if args.rewrites:
+        participating_paths["rewrites"] = Path(args.rewrites)
+    try:
+        refuse_path_aliases(participating_paths)
+    except ValueError as error:
+        return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
+
     plan_path = Path(args.plan)
     plan = _load_json(plan_path)
     validation = plan_validator.validate_plan(plan, base_dir=plan_path.parent)

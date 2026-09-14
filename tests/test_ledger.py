@@ -492,6 +492,23 @@ class EvaluationAndOptimizationTests(unittest.TestCase):
         self.assertEqual(payload["evaluation"]["scores_sha256"], "b" * 64)
         self.assertRegex(payload["evaluation"]["evaluated_at"], ISO)
 
+    def test_record_evaluation_final_is_one_revision_and_one_history_entry(self) -> None:
+        before = self.ledger.read()
+        after = self.ledger.record_evaluation_final("a" * 64, "pass")
+        self.assertEqual(after["state"], "Accepted")
+        self.assertEqual(after["revision"], before["revision"] + 1)
+        self.assertEqual(len(after["history"]), len(before["history"]) + 1)
+        self.assertEqual(after["history"][-1]["from_state"], "Completed")
+        self.assertEqual(after["history"][-1]["to_state"], "Accepted")
+
+    def test_pending_evaluation_finalizes_directly(self) -> None:
+        after = self.ledger.record_evaluation_final("b" * 64, "pending_approval")
+        self.assertEqual(after["state"], "PendingApproval")
+
+    def test_failed_evaluation_finalizes_as_evaluated(self) -> None:
+        after = self.ledger.record_evaluation_final("c" * 64, "fail")
+        self.assertEqual(after["state"], "Evaluated")
+
     def test_optimization_records_next_plan_and_clears_current_approval(self) -> None:
         self.ledger.record_evaluation("b" * 64, "fail")
         payload = self.ledger.record_optimization("c" * 64, 2)

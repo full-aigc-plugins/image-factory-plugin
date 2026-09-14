@@ -33,7 +33,7 @@ operating systems.
 | Gate | Status | Evidence |
 | --- | --- | --- |
 | `compileall` | `PASS` | `python3 -m compileall -q scripts tests` exited 0 on 2026-09-14. |
-| `full_source_tests` | `PASS` | 365 tests ran successfully on 2026-09-14. |
+| `full_source_tests` | `PASS` | 373 tests ran successfully on 2026-09-14. |
 | `distribution_validation` | `PASS` | Validator reported compatibility foundation 0.1.2 and exited 0. |
 | `git_diff_check` | `PASS` | `git diff --check` exited 0 on 2026-09-14. |
 

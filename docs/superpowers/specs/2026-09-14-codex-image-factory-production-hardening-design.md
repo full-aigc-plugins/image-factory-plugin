@@ -155,8 +155,12 @@ stateDiagram-v2
     Running --> Partial
     Running --> Unknown
     Running --> Failed
-    Completed --> Evaluated
-    Partial --> Evaluated: no pending calls
+    Completed --> Evaluated: failed evaluation
+    Completed --> PendingApproval: approval remains
+    Completed --> Accepted: evaluation passes
+    Partial --> Evaluated: failed evaluation, no pending calls
+    Partial --> PendingApproval: approval remains, no pending calls
+    Partial --> Accepted: evaluation passes, no pending calls
     Partial --> PlanValidated: pending calls and fresh quote
     Unknown --> Completed: receipt reconciliation proves all results
     Unknown --> Partial: reconciliation proves a partial result
@@ -164,7 +168,9 @@ stateDiagram-v2
     Evaluated --> PendingApproval
     Evaluated --> Accepted
     Evaluated --> Optimized
-    PendingApproval --> Evaluated: labels supplied
+    PendingApproval --> Evaluated: labels reject
+    PendingApproval --> PendingApproval: labels incomplete
+    PendingApproval --> Accepted: labels approve
     Optimized --> PlanValidated
     Accepted --> [*]
     Failed --> [*]
@@ -184,9 +190,10 @@ Additional rules:
   ambiguous and becomes `Unknown`. A definite producer rejection, quota event, or
   deterministic collection failure becomes `Failed`; neither state is retried
   automatically.
-- `evaluate` performs `Completed/Partial -> Evaluated`, then maps `pass` to
-  `Accepted`, `pending_approval` to `PendingApproval`, and leaves a deterministic
-  or human rejection in `Evaluated` for explicit optimization.
+- `evaluate` records one direct transition from `Completed`, `Partial`, or
+  `PendingApproval`: `pass` becomes `Accepted`, `pending_approval` becomes
+  `PendingApproval`, and deterministic or human rejection becomes `Evaluated`
+  for explicit optimization.
 - `optimize` requires the job, scores, and current plan to agree before performing
   `Evaluated -> Optimized`.
 
