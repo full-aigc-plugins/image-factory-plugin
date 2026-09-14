@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import image_factory_cli as cli  # noqa: E402
 import receipt_store  # noqa: E402
-from tests.test_cli import SHIM, CliFixture  # noqa: E402
+from tests.test_cli import SHIM, CliFixture, snapshot_tree  # noqa: E402
 
 
 class RecoveryCommandTests(unittest.TestCase):
@@ -55,6 +55,51 @@ class RecoveryCommandTests(unittest.TestCase):
         row["receipt_id"] = None
         row["error_category"] = "unknown" if state == "Unknown" else None
         self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+
+    def test_recover_refuses_exact_relative_and_symlink_aliases_without_mutation(self) -> None:
+        cases = ("job_is_plan", "job_is_destination", "relative_symlink_job")
+        for alias_name in cases:
+            with self.subTest(alias=alias_name):
+                fixture = CliFixture()
+                self.addCleanup(fixture.cleanup)
+                fixture.write_plan()
+                fixture.control()
+                fixture.run_approved_batch()
+                ledger = fixture.read_job()
+                ledger["state"] = "Running"
+                fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+                alias_parent = fixture.base / "alias"
+                if alias_name == "relative_symlink_job":
+                    try:
+                        alias_parent.symlink_to(fixture.base, target_is_directory=True)
+                    except (OSError, NotImplementedError):
+                        continue
+                    (fixture.base / "nested").mkdir()
+                job_argument = {
+                    "job_is_plan": fixture.plan_path,
+                    "job_is_destination": fixture.destination,
+                    "relative_symlink_job": alias_parent / "nested" / ".." / fixture.plan_path.name,
+                }[alias_name]
+                with cli.job_lock.JobLock(job_argument):
+                    pass
+                before = snapshot_tree(fixture.base)
+                with patch.object(
+                    cli.receipt_store,
+                    "load_verified_receipts",
+                    side_effect=AssertionError("path refusal must precede receipt reads"),
+                ), patch.object(
+                    cli.generation_runner,
+                    "run_item",
+                    side_effect=AssertionError("recovery must make zero Codex calls"),
+                ):
+                    code, output = fixture.run_cli(
+                        "recover", "--plan", str(fixture.plan_path), "--job", str(job_argument),
+                        "--destination", str(fixture.destination), "--json",
+                    )
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertIn("path collision", json.loads(output)["error"])
+                self.assertEqual(snapshot_tree(fixture.base), before)
+                self.assertEqual(fixture.read_job()["state"], "Running")
 
     def test_attempting_with_verified_receipt_becomes_generated(self) -> None:
         self.rewrite_item(0, "Attempting")

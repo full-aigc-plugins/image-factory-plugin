@@ -85,6 +85,9 @@ class JobState(str, Enum):
 ITEM_STATES = ("Pending", "Attempting", "Generated", "Failed", "Skipped", "Unknown")
 ATTEMPTED_ITEM_STATES = ("Generated", "Failed", "Skipped")
 
+# Legacy compatibility surface for callers that still perform explicit state
+# transitions. Production evaluation must finalize through
+# JobLedger.record_evaluation_final so evidence and outcome use one write.
 ALLOWED_TRANSITIONS: dict[JobState, frozenset[JobState]] = {
     JobState.DRAFT: frozenset({JobState.PLAN_VALIDATED}),
     JobState.PLAN_VALIDATED: frozenset({JobState.APPROVED}),
@@ -339,6 +342,10 @@ class JobLedger:
         return payload
 
     def record_evaluation(self, scores_sha256: str, decision: str) -> dict:
+        """Record the legacy Evaluated intermediate state for compatibility.
+
+        Production evaluate orchestration must use ``record_evaluation_final``.
+        """
         if not isinstance(scores_sha256, str) or not json_pattern_match(
             scores_sha256, SHA256_PATTERN
         ):

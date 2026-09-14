@@ -288,6 +288,22 @@ def prepare_run(
 
 
 def command_run(args: argparse.Namespace) -> tuple[int, str]:
+    participating_paths = {
+        "plan": Path(args.plan),
+        "job": Path(args.job),
+        "destination": Path(args.destination),
+    }
+    if args.codex_home:
+        participating_paths["codex_home"] = Path(args.codex_home)
+    if args.generation_dir:
+        participating_paths["generation_dir"] = Path(args.generation_dir)
+    if args.codex_bin:
+        participating_paths["codex_bin"] = Path(args.codex_bin)
+    try:
+        refuse_path_aliases(participating_paths)
+    except ValueError as error:
+        return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
+
     home = _resolve_codex_home(args)
     generation_dir = _resolve_generation_dir(args, home)
     destination = Path(args.destination)
@@ -444,6 +460,17 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
 
 def command_recover(args: argparse.Namespace) -> tuple[int, str]:
     """Reconcile verified receipts into the ledger without invoking Codex."""
+    try:
+        refuse_path_aliases(
+            {
+                "plan": Path(args.plan),
+                "job": Path(args.job),
+                "destination": Path(args.destination),
+            }
+        )
+    except ValueError as error:
+        return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
+
     result, _plan_path = _validated_plan(args)
     if not result.ok:
         return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)

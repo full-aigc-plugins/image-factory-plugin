@@ -81,3 +81,54 @@ The resulting commit SHA is reported by the task owner after commit creation.
   hosts that cannot create directory symlinks; remote CI remains responsible
   for the supported OS matrix.
 - This task does not renew the whole-branch review or authorize candidate push.
+
+## Fix round 1/5
+
+Renewed review found that the design's mutating-command rule had only been
+applied to `evaluate` and `optimize`. The remediation extends canonical path
+refusal to the first executable lines of `run` and `recover`.
+
+### Added behavior
+
+- `run` checks plan, job, destination, and explicitly supplied Codex home,
+  generation directory, and binary paths before plan validation, capability
+  probing, ledger creation, or generation.
+- `recover` checks plan, job, and destination before plan or ledger reads and
+  before receipt or manifest access.
+- Exact, relative, and symlink spellings are covered. Regression tests prove
+  refusals preserve all existing bytes, create no ledger/output/invocation
+  evidence, and leave the source ledger in `Running` when applicable.
+- `ALLOWED_TRANSITIONS` and `record_evaluation` now explicitly document their
+  legacy compatibility role and require production evaluation to use the
+  one-write `record_evaluation_final` path.
+
+### RED evidence
+
+```text
+python3 -m unittest \
+  tests.test_cli.RunCommandTests.test_run_refuses_path_collisions_before_probe_or_mutation \
+  tests.test_recovery.RecoveryCommandTests.test_recover_refuses_exact_relative_and_symlink_aliases_without_mutation \
+  -v
+FAILED (failures=2, errors=3)
+```
+
+The old `run` reached the injected capability-probe failure, while old
+`recover` tried to parse the aliased plan/destination as a ledger.
+
+### GREEN and renewed verification evidence
+
+```text
+focused alias regression: Ran 2 tests ... OK
+python3 -m unittest tests.test_cli tests.test_recovery tests.test_ledger -v
+Ran 130 tests ... OK
+python3 -m unittest discover -s tests -v
+Ran 375 tests ... OK
+python3 -m compileall -q scripts tests
+exit 0
+python3 scripts/validate_distribution.py .
+validated codex-image-factory compatibility foundation 0.1.2
+git diff --check
+exit 0
+```
+
+No push, tag, installation, canary, or progress-ledger edit was performed.

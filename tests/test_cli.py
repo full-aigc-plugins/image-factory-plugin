@@ -43,6 +43,14 @@ def build_shim(platform_name: str | None = None) -> Path:
 SHIM = build_shim()
 
 
+def snapshot_tree(base: Path) -> dict[str, bytes]:
+    return {
+        str(path.relative_to(base)): path.read_bytes()
+        for path in base.rglob("*")
+        if path.is_file()
+    }
+
+
 class PortableShimTests(unittest.TestCase):
     def test_windows_shim_uses_cmd_launcher_syntax(self) -> None:
         shim = build_shim(platform_name="nt")
@@ -245,6 +253,42 @@ class RunCommandTests(unittest.TestCase):
             "--json",
             *extra,
         )
+
+    def test_run_refuses_path_collisions_before_probe_or_mutation(self) -> None:
+        for alias_name in ("job_is_plan", "job_is_destination"):
+            with self.subTest(alias=alias_name):
+                fixture = CliFixture()
+                self.addCleanup(fixture.cleanup)
+                fixture.write_plan()
+                fixture.control()
+                fixture.destination.mkdir()
+                (fixture.destination / "existing.bin").write_bytes(b"preserve me")
+                job_argument = {
+                    "job_is_plan": fixture.plan_path,
+                    "job_is_destination": fixture.destination,
+                }[alias_name]
+                with job_lock.JobLock(job_argument):
+                    pass
+                before = snapshot_tree(fixture.base)
+                with patch.object(
+                    cli.capability_probe,
+                    "probe",
+                    side_effect=AssertionError("path refusal must precede capability probe"),
+                ), patch.object(
+                    cli.generation_runner,
+                    "run_item",
+                    side_effect=AssertionError("path refusal must make zero Codex calls"),
+                ):
+                    code, output = fixture.run_cli(
+                        "run", "--plan", str(fixture.plan_path), "--job", str(job_argument),
+                        "--destination", str(fixture.destination), "--codex-bin", str(SHIM),
+                        "--codex-home", str(fixture.codex_home),
+                        "--generation-dir", str(fixture.generation_dir), "--approve", "--json",
+                    )
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertIn("path collision", json.loads(output)["error"])
+                self.assertEqual(snapshot_tree(fixture.base), before)
+                self.assertFalse((fixture.base / "fake-codex-argv.json").exists())
 
     def test_run_without_approval_stops_before_spending(self) -> None:
         code, output = self.run_batch()
@@ -626,14 +670,6 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
             arguments.extend(("--rewrites", str(rewrites)))
         return self.fixture.run_cli(*arguments)
 
-    @staticmethod
-    def snapshot_tree(base: Path) -> dict[str, bytes]:
-        return {
-            str(path.relative_to(base)): path.read_bytes()
-            for path in base.rglob("*")
-            if path.is_file()
-        }
-
     def test_evaluate_refuses_every_participating_path_collision_before_mutation(self) -> None:
         for alias_name in ("job", "plan", "labels", "advisory", "destination"):
             with self.subTest(alias=alias_name):
@@ -658,11 +694,11 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
                     "--scores", str(aliases[alias_name]), "--labels", str(labels),
                     "--advisory", str(advisory), *fixture.base_args(), "--json",
                 ]
-                before = self.snapshot_tree(fixture.base)
+                before = snapshot_tree(fixture.base)
                 code, output = fixture.run_cli(*arguments)
                 self.assertEqual(code, cli.EXIT_USAGE, output)
                 self.assertIn("path collision", json.loads(output)["error"])
-                self.assertEqual(self.snapshot_tree(fixture.base), before)
+                self.assertEqual(snapshot_tree(fixture.base), before)
 
     def test_evaluate_refuses_symlink_and_relative_alias_spellings(self) -> None:
         alias_parent = self.fixture.base / "alias"
@@ -671,14 +707,14 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
         except (OSError, NotImplementedError):
             self.skipTest("host does not support directory symlinks")
         relative_job = alias_parent / "nested" / ".." / self.fixture.job_path.name
-        before = self.snapshot_tree(self.fixture.base)
+        before = snapshot_tree(self.fixture.base)
         code, output = self.fixture.run_cli(
             "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
             "--scores", str(relative_job), *self.fixture.base_args(), "--json",
         )
         self.assertEqual(code, cli.EXIT_USAGE, output)
         self.assertIn("path collision", json.loads(output)["error"])
-        self.assertEqual(self.snapshot_tree(self.fixture.base), before)
+        self.assertEqual(snapshot_tree(self.fixture.base), before)
 
     def test_optimize_refuses_output_aliases_before_mutation(self) -> None:
         for alias_name in ("job", "plan", "scores", "rewrites", "destination"):
@@ -699,7 +735,7 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
                     "rewrites": rewrites,
                     "destination": fixture.destination,
                 }
-                before = self.snapshot_tree(fixture.base)
+                before = snapshot_tree(fixture.base)
                 code, output = fixture.run_cli(
                     "optimize", "--job", str(fixture.job_path), "--plan", str(fixture.plan_path),
                     "--scores", str(scores), "--rewrites", str(rewrites),
@@ -707,12 +743,12 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
                 )
                 self.assertEqual(code, cli.EXIT_USAGE, output)
                 self.assertIn("path collision", json.loads(output)["error"])
-                self.assertEqual(self.snapshot_tree(fixture.base), before)
+                self.assertEqual(snapshot_tree(fixture.base), before)
                 self.assertEqual(fixture.read_job()["state"], "Evaluated")
 
     def test_optimize_refuses_colliding_required_inputs(self) -> None:
         self.persist_failing_evaluation()
-        before = self.snapshot_tree(self.fixture.base)
+        before = snapshot_tree(self.fixture.base)
         code, output = self.fixture.run_cli(
             "optimize", "--job", str(self.fixture.job_path), "--plan", str(self.fixture.plan_path),
             "--scores", str(self.fixture.plan_path), "--out", str(self.fixture.base / "next.json"),
@@ -720,7 +756,7 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
         )
         self.assertEqual(code, cli.EXIT_USAGE, output)
         self.assertIn("path collision", json.loads(output)["error"])
-        self.assertEqual(self.snapshot_tree(self.fixture.base), before)
+        self.assertEqual(snapshot_tree(self.fixture.base), before)
 
     def test_evaluate_crash_after_scores_publication_is_safely_rerunnable(self) -> None:
         before = self.fixture.read_job()
