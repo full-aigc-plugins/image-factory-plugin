@@ -40,15 +40,13 @@ def _build_shared_shim() -> Path:
     executable is run, which costs about half a second. Building one shim for the
     module keeps that cost off every individual test.
     """
+    if os.name == "nt":
+        return Path(sys.executable)
     directory = Path(tempfile.mkdtemp(prefix="image-factory-codex-shim-"))
     atexit.register(shutil.rmtree, directory, True)
-    if os.name == "nt":
-        shim = directory / "codex.cmd"
-        shim.write_text(f'@"{fast_python()}" "{FAKE}" %*\n', encoding="utf-8")
-    else:
-        shim = directory / "codex"
-        shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
-        shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    shim = directory / "codex"
+    shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
+    shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return shim
 
 
@@ -78,6 +76,7 @@ class RunnerFixture:
         self.base = Path(self._tmp.name)
         self.workdir = self.base / "work"
         self.workdir.mkdir()
+        self._install_windows_exec(self.workdir)
         self.generation_dir = self.base / "generated_images"
         self.generation_dir.mkdir()
         self.control_path = self.base / "control.json"
@@ -105,7 +104,19 @@ class RunnerFixture:
             "timeout_seconds": 10.0,
         }
         kwargs.update(overrides)
+        self._install_windows_exec(Path(kwargs["workdir"]))
         return runner.run_item(**kwargs)
+
+    @staticmethod
+    def _install_windows_exec(workdir: Path) -> None:
+        if os.name == "nt":
+            workdir.mkdir(parents=True, exist_ok=True)
+            (workdir / "exec").write_text(
+                "import runpy, sys\n"
+                "sys.argv.insert(1, 'exec')\n"
+                f"runpy.run_path({str(FAKE)!r}, run_name='__main__')\n",
+                encoding="utf-8",
+            )
 
     def cleanup(self) -> None:
         if self._previous_env is None:
@@ -133,22 +144,6 @@ class ArgvTests(unittest.TestCase):
         self.assertEqual(argv[0], "/usr/bin/codex")
         self.assertEqual(argv[1], "exec")
         self.assertEqual(argv[-1], runner.build_prompt("draw a portrait"))
-
-    def test_windows_cmd_launcher_uses_cmd_exe_with_a_quoted_argument_vector(self) -> None:
-        argv = [r"C:\Program Files\Codex\codex.cmd", "exec", "prompt&whoami"]
-        launch = runner.build_subprocess_argv(
-            argv,
-            platform_name="nt",
-            command_interpreter=r"C:\Windows\System32\cmd.exe",
-        )
-        self.assertEqual(
-            launch[:4],
-            [r"C:\Windows\System32\cmd.exe", "/d", "/s", "/c"],
-        )
-        self.assertEqual(
-            launch[4],
-            '""C:\\Program Files\\Codex\\codex.cmd" "exec" "prompt&whoami""',
-        )
 
     def test_argv_never_bypasses_approvals_or_sandbox(self) -> None:
         argv = runner.build_argv(

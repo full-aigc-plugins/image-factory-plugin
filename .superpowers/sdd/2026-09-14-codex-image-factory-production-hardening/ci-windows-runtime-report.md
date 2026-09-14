@@ -64,3 +64,49 @@ and probe logic, rather than only in Windows fixtures.
 
 The remote Windows matrix has not been rerun because this task does not
 authorize pushing. Its status remains pending fresh remote CI evidence.
+
+## Review remediation: native executable boundary
+
+The first implementation above was rejected in review because passing arbitrary
+prompt and reference-path bytes through `cmd.exe` cannot preserve both exact
+argv semantics and the no-shell security boundary. The `.cmd/.bat` execution
+path is therefore superseded and removed.
+
+The corrected production contract is:
+
+- `generation_runner` always passes the original argv list directly to
+  `subprocess.run`; it does not call `cmd.exe`, does not construct a shell
+  command string, and does not enable `shell=True`.
+- Windows capability discovery and explicit overrides accept only native
+  `.exe` and `.com` files. `.cmd`, `.bat`, `.py`, `.js`, and arbitrary files are
+  rejected before any invocation, with guidance to supply a native binary.
+- POSIX continues to require a real executable bit through `os.access(X_OK)`.
+- Windows test generation uses the native `sys.executable` binary. A test-owned
+  Python file named `exec` is placed in the generation workdir so
+  `python.exe exec <argv>` drives the deterministic fake without adding any
+  test hook to production.
+- The test wrapper reinserts the consumed `exec` token before entering the fake,
+  preserving exact Codex argv evidence, single-argument prompt/reference
+  behavior, forbidden-flag checks, and one-attempt semantics.
+- The chmod-only unwritable-directory test remains honestly skipped on Windows;
+  this does not claim to validate Windows ACL behavior.
+
+Review-remediation RED evidence:
+
+- `.cmd` and `.bat` were incorrectly accepted by `_is_executable_file`.
+- Windows discovery incorrectly returned `.com`, `.exe`, `.bat`, and `.cmd`
+  candidates instead of only `.com` and `.exe`.
+
+Both source-level platform simulations failed before the correction and passed
+after it. Fresh full-suite and offline-gate evidence is recorded below after the
+final verification run.
+
+### Final review-remediation verification
+
+- Default interpreter (`Python 3.14.3`): 395 tests passed in 16.981s.
+- Python 3.13.0: 395 tests passed in 17.293s.
+- Both default and Python 3.13 `compileall` checks exited 0.
+- Distribution validation exited 0 and reported
+  `validated codex-image-factory compatibility foundation 0.1.2`.
+- `git diff --check` exited 0.
+- Remote Windows CI remains pending a separately authorized push.

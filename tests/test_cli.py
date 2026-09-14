@@ -30,15 +30,13 @@ def fast_python() -> str:
 
 
 def build_shim(platform_name: str | None = None) -> Path:
-    directory = Path(tempfile.mkdtemp(prefix="image-factory-cli-shim-"))
     selected_platform = os.name if platform_name is None else platform_name
     if selected_platform == "nt":
-        shim = directory / "codex.cmd"
-        shim.write_text(f'@"{fast_python()}" "{FAKE}" %*\n', encoding="utf-8")
-    else:
-        shim = directory / "codex"
-        shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
-        shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        return Path(sys.executable)
+    directory = Path(tempfile.mkdtemp(prefix="image-factory-cli-shim-"))
+    shim = directory / "codex"
+    shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
+    shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return shim
 
 
@@ -69,14 +67,13 @@ def derived_run_targets(fixture: CliFixture) -> dict[str, Path]:
 
 
 class PortableShimTests(unittest.TestCase):
-    def test_windows_shim_uses_cmd_launcher_syntax(self) -> None:
+    def test_windows_fixture_uses_a_native_python_executable(self) -> None:
         shim = build_shim(platform_name="nt")
-        self.addCleanup(shutil.rmtree, shim.parent)
-        self.assertEqual(shim.suffix, ".cmd")
-        self.assertIn("%*", shim.read_text(encoding="utf-8"))
+        self.assertEqual(shim, Path(sys.executable))
+        self.assertEqual(shim.suffix.lower(), ".exe" if os.name == "nt" else Path(sys.executable).suffix.lower())
 
     def test_shim_uses_the_platform_launcher_and_forwards_arguments(self) -> None:
-        expected_suffix = ".cmd" if os.name == "nt" else ""
+        expected_suffix = ".exe" if os.name == "nt" else ""
         self.assertEqual(SHIM.suffix, expected_suffix)
 
         with tempfile.TemporaryDirectory() as directory:
@@ -84,11 +81,20 @@ class PortableShimTests(unittest.TestCase):
             control_path.write_text(json.dumps({"mode": "success"}), encoding="utf-8")
             environment = os.environ.copy()
             environment["FAKE_CODEX_CONTROL"] = str(control_path)
+            command = [str(SHIM), "exec", "portable-check"]
+            if os.name == "nt":
+                (Path(directory) / "exec").write_text(
+                    "import runpy, sys\n"
+                    "sys.argv.insert(1, 'exec')\n"
+                    f"runpy.run_path({str(FAKE)!r}, run_name='__main__')\n",
+                    encoding="utf-8",
+                )
             result = subprocess.run(
-                [str(SHIM), "exec", "portable-check"],
+                command,
                 capture_output=True,
                 text=True,
                 env=environment,
+                cwd=directory,
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -140,6 +146,15 @@ class CliFixture:
         values.setdefault("generation_dir", str(self.generation_dir))
         values.setdefault("png_source", str(REAL_PNG))
         self.control_path.write_text(json.dumps(values), encoding="utf-8")
+        if os.name == "nt":
+            workdir = self.destination / ".work"
+            workdir.mkdir(parents=True, exist_ok=True)
+            (workdir / "exec").write_text(
+                "import runpy, sys\n"
+                "sys.argv.insert(1, 'exec')\n"
+                f"runpy.run_path({str(FAKE)!r}, run_name='__main__')\n",
+                encoding="utf-8",
+            )
         self._previous_env = os.environ.get("FAKE_CODEX_CONTROL")
         os.environ["FAKE_CODEX_CONTROL"] = str(self.control_path)
 

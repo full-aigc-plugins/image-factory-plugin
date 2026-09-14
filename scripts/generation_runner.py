@@ -104,27 +104,6 @@ def build_argv(
     return argv
 
 
-def build_subprocess_argv(
-    argv: list[str],
-    *,
-    platform_name: str | None = None,
-    command_interpreter: str | None = None,
-) -> list[str]:
-    """Return a shell-free process argv that can launch Windows batch shims safely."""
-    selected_platform = os.name if platform_name is None else platform_name
-    if selected_platform != "nt" or Path(argv[0]).suffix.lower() not in {".cmd", ".bat"}:
-        return argv
-    interpreter = command_interpreter or os.environ.get("COMSPEC") or "cmd.exe"
-    quoted_parts: list[str] = []
-    for part in argv:
-        quoted = subprocess.list2cmdline([part])
-        if not quoted.startswith('"'):
-            quoted = f'"{quoted}"'
-        quoted_parts.append(quoted)
-    command = f'"{" ".join(quoted_parts)}"'
-    return [interpreter, "/d", "/s", "/c", command]
-
-
 def _parse_events(stdout: str) -> tuple[dict, ...]:
     events: list[dict] = []
     for line in stdout.splitlines():
@@ -251,7 +230,7 @@ def run_item(
 
     try:
         completed = subprocess.run(
-            build_subprocess_argv(argv),
+            argv,
             capture_output=True,
             text=True,
             timeout=timeout_seconds,

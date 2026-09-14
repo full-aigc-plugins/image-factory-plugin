@@ -50,7 +50,7 @@ INSTALL_GUIDANCE = (
     "This plugin does not install Codex for you."
 )
 
-WINDOWS_EXECUTABLE_EXTENSIONS = (".com", ".exe", ".bat", ".cmd")
+WINDOWS_NATIVE_EXECUTABLE_EXTENSIONS = (".com", ".exe")
 
 
 @dataclass(frozen=True)
@@ -88,12 +88,7 @@ def _is_executable_file(candidate: Path, platform_name: str | None = None) -> bo
     if not candidate.is_file():
         return False
     if selected_platform == "nt":
-        extensions = tuple(
-            suffix.lower()
-            for suffix in os.environ.get("PATHEXT", ";".join(WINDOWS_EXECUTABLE_EXTENSIONS)).split(";")
-            if suffix
-        )
-        return candidate.suffix.lower() in extensions
+        return candidate.suffix.lower() in WINDOWS_NATIVE_EXECUTABLE_EXTENSIONS
     return os.access(candidate, os.X_OK)
 
 
@@ -101,12 +96,7 @@ def _candidate_paths(base: Path, platform_name: str | None = None) -> tuple[Path
     selected_platform = os.name if platform_name is None else platform_name
     if selected_platform != "nt" or base.suffix:
         return (base,)
-    extensions = tuple(
-        suffix.lower()
-        for suffix in os.environ.get("PATHEXT", ";".join(WINDOWS_EXECUTABLE_EXTENSIONS)).split(";")
-        if suffix
-    )
-    return tuple(base.with_suffix(suffix) for suffix in extensions)
+    return tuple(base.with_suffix(suffix) for suffix in WINDOWS_NATIVE_EXECUTABLE_EXTENSIONS)
 
 
 def _find_binary(search_path: tuple[str, ...], codex_home: Path) -> tuple[Path | None, str | None]:
@@ -168,7 +158,11 @@ def probe(
             return Capability(
                 verdict="unavailable",
                 reasons=("codex_binary_missing",),
-                guidance=f"the binary given explicitly is not executable: {candidate}",
+                guidance=(
+                    f"the binary given explicitly is not executable: {candidate}. "
+                    "On Windows, provide a native .exe or .com Codex binary; "
+                    "script launchers such as .cmd, .bat, .py, and .js are not executed."
+                ),
                 codex_home=home,
                 generation_dir=generation_dir,
             )
