@@ -1,29 +1,36 @@
 # Codex Image Factory Plugin Technical Solution
 
-> Implemented technical solution for the 0.1.2 release candidate. Updated 2026-09-14. External release gates remain unrun.
+> **Document control**
+>
+> | Field | Value |
+> |---|---|
+> | Status | Implemented for the 0.1.2 release candidate; external release gates remain unrun |
+> | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
+> | Audience | Implementers extending or reviewing this plugin |
+> | Runtime evidence | `docs/verification/` |
+> | Last structural revision | 2026-09-14 |
 
 [English](Codex-Image-Factory-Plugin-Technical-Solution.md) | [简体中文](Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 
 ## 1. Decision
 
-The plugin owns deterministic state and delegates generation and judgement to
-Codex. Concretely:
+The plugin owns deterministic state and delegates generation and judgement to Codex. Concretely:
 
-- **Generation is not implemented here.** One batch item is one `codex exec`
-  invocation, and the artifact is whatever new file appears in the generation
-  directory afterwards.
-- **Success requires a file.** An exit code of zero without a new image is
-  classified as `artifact_missing`.
-- **Rewrites are supplied, not generated.** `optimizer.plan_next_round` decides
-  which items to redo and requires an explicit instruction for each; the text
-  comes from Codex.
+- **Generation is not implemented here.** One batch item is one `codex exec` invocation, and the artifact is whatever new file appears in the generation directory afterwards.
+- **Success requires a file.** An exit code of zero without a new image is classified as `artifact_missing`.
+- **Rewrites are supplied, not generated.** `optimizer.plan_next_round` decides which items to redo and requires an explicit instruction for each; the text comes from Codex.
 - **Advisory scores are recorded, not obeyed.** Deterministic gates decide.
 - **No retries, no installs, no approval bypass.** Anywhere.
 
-The alternative — a plugin that called an image API directly with its own
-credentials — was rejected for this version because the built-in channel needs no
-additional credential and keeps one billing relationship, which matters more for
-a first version than parameter control the platform does not offer anyway.
+The alternative — a plugin that called an image API directly with its own credentials — was rejected for this version because the built-in channel needs no additional credential and keeps one billing relationship, which matters more for a first version than parameter control the platform does not offer anyway.
+
+| Alternative | Why it was rejected |
+|---|---|
+| Call an image API directly with plugin-owned credentials | Adds a second billing relationship and a credential to protect, for parameter control the platform does not offer anyway |
+| Predict output paths from the generator's naming scheme | Output names derive from an internal session and call id, so prediction would break silently |
+| Accept `size`, `quality`, `n`, or `model` in the plan schema | The built-in tool accepts none of them; accepting them would be an unkeepable promise |
+| Retry a failed or ambiguous item automatically | A silent retry is how one bad prompt becomes a large bill |
+| Let a model score decide the batch outcome | A judgement signal must not silently become a verdict |
 
 ## 2. Repository layout
 
@@ -49,7 +56,7 @@ scripts/
 skills/                            four Agent Skills
 data/                              attributed templates and source indexes
 vendor/upstream/                   inactive pinned upstream snapshots
-tests/                             351 tests, stdlib unittest
+tests/                             stdlib unittest suite
 docs/                              this document and its pair
 ```
 
@@ -62,13 +69,10 @@ Every Codex invocation is an argv array with `shell=False`:
   -C <workdir> -o <last-message-file> [-i <reference>]... <prompt>
 ```
 
-- `--json` yields a JSONL event stream, which is how a usage-limit failure is
-  recognised reliably rather than by matching prose on stderr.
-- `-o` writes the final message to a file, so a run's own account of what it did
-  is preserved as evidence without being trusted as proof.
+- `--json` yields a JSONL event stream, which is how a usage-limit failure is recognised reliably rather than by matching prose on stderr.
+- `-o` writes the final message to a file, so a run's own account of what it did is preserved as evidence without being trusted as proof.
 - `-i` attaches reference images; the platform allows at most five.
-- The working directory is created if missing, and also set as the process
-  working directory so relative paths resolve predictably.
+- The working directory is created if missing, and also set as the process working directory so relative paths resolve predictably.
 
 The prompt is the plugin's constant wrapper followed by the item's prompt:
 
@@ -81,9 +85,7 @@ Image description:
 <the item's prompt>
 ```
 
-The wrapper is constant so the author's prompt is the only variable part of a
-request, and `prompt_sha256` in a receipt therefore identifies exactly what was
-asked for.
+The wrapper is constant so the author's prompt is the only variable part of a request, and `prompt_sha256` in a receipt therefore identifies exactly what was asked for.
 
 ## 4. Generation modes
 
@@ -97,19 +99,11 @@ asked for.
 
 ## 5. Testing strategy
 
-- **Pure logic tests.** Schema enforcement, idempotency key derivation, gate
-  evaluation, and the state machine run with no filesystem or process activity.
-- **Fake generator.** `tests/fakes/fake_codex.py` stands in for `codex exec`,
-  driven by a JSON control file, so every classification path — success,
-  generation, failure, usage limit, timeout, silent exit — is exercised
-  deterministically.
-- **Portable fake adapter shim.** Tests create a `sh` launcher on Unix and a
-  `.cmd` launcher on Windows, then execute it to prove arguments reach the fake.
-- **Real artifacts.** Brand assets are real PNGs, so dimension, hash, and
-  duplicate detection are tested against genuine files rather than fabricated
-  bytes.
-- **Recorded invocations.** The fake writes the argv it received, so tests assert
-  how Codex was invoked, including that the approval-bypass flags are absent.
+- **Pure logic tests.** Schema enforcement, idempotency key derivation, gate evaluation, and the state machine run with no filesystem or process activity.
+- **Fake generator.** `tests/fakes/fake_codex.py` stands in for `codex exec`, driven by a JSON control file, so every classification path — success, generation, failure, usage limit, timeout, silent exit — is exercised deterministically.
+- **Portable fake adapter shim.** Tests create a `sh` launcher on Unix and a `.cmd` launcher on Windows, then execute it to prove arguments reach the fake.
+- **Real artifacts.** Brand assets are real PNGs, so dimension, hash, and duplicate detection are tested against genuine files rather than fabricated bytes.
+- **Recorded invocations.** The fake writes the argv it received, so tests assert how Codex was invoked, including that the approval-bypass flags are absent.
 
 Run everything with:
 
@@ -120,47 +114,29 @@ python3 scripts/validate_distribution.py .
 git diff --check
 ```
 
-GitHub Actions runs the same gates in six cells: Ubuntu, macOS, and Windows on
-Python 3.11 and 3.13. No job installs runtime dependencies.
+GitHub Actions runs the same gates in six cells: Ubuntu, macOS, and Windows on Python 3.11 and 3.13. No job installs runtime dependencies.
 
 ## 6. Transaction and recovery guarantees
 
-- `run --approve` records an approval bound to the validated plan SHA-256,
-  current round, and remaining item count.
-- A job-path-derived process lock is held from approval binding through the
-  final state transition. A losing writer fails before external invocation.
-- Each call is preceded by an atomic `Attempting` reservation with an
-  `attempt_id`. An interruption after that point is ambiguous.
-- A schema-valid, hash-verifying per-item receipt is the completion source of
-  truth; the aggregate manifest is rebuilt from those receipts.
-- Recovery invokes no generator. It promotes only receipt-proven work and marks
-  unresolved attempts `Unknown`, which ordinary run refuses to retry.
-- Legacy 1.0.0 plans and jobs migrate deterministically to schema 1.1.0 without
-  manufacturing approval evidence.
-- When human labels are required, missing labels force `pending_approval`; model
-  assessment cannot override that gate.
+- `run --approve` records an approval bound to the validated plan SHA-256, current round, and remaining item count.
+- A job-path-derived process lock is held from approval binding through the final state transition. A losing writer fails before external invocation.
+- Each call is preceded by an atomic `Attempting` reservation with an `attempt_id`. An interruption after that point is ambiguous.
+- A schema-valid, hash-verifying per-item receipt is the completion source of truth; the aggregate manifest is rebuilt from those receipts.
+- Recovery invokes no generator. It promotes only receipt-proven work and marks unresolved attempts `Unknown`, which ordinary run refuses to retry.
+- Legacy 1.0.0 plans and jobs migrate deterministically to schema 1.1.0 without manufacturing approval evidence.
+- When human labels are required, missing labels force `pending_approval`; model assessment cannot override that gate.
 
 ## 7. Failure model
 
 Stable failure codes, equal-width, comma-separated:
 
-`approval_required`, `artifact_missing`, `capability_unavailable`,
-`codex_missing`, `duplicate_artifact`, `generation_failed`, `hash_mismatch`,
-`optimizer_ambiguous_instruction`, `optimizer_empty_rewrite`,
-`optimizer_missing_instruction`, `optimizer_round_cap_reached`,
-`optimizer_unexpected_instruction`, `optimizer_unknown_item`, `plan_duplicate_item_id`,
-`plan_empty_prompt`, `plan_exceeds_max_images`, `plan_exceeds_max_rounds`,
-`plan_missing_reference_image`, `plan_schema_invalid`, `plan_unparseable`,
-`quota_exceeded`, `timeout`, `unknown`.
+`approval_required`, `artifact_missing`, `capability_unavailable`, `codex_missing`, `duplicate_artifact`, `generation_failed`, `hash_mismatch`, `optimizer_ambiguous_instruction`, `optimizer_empty_rewrite`, `optimizer_missing_instruction`, `optimizer_round_cap_reached`, `optimizer_unexpected_instruction`, `optimizer_unknown_item`, `plan_duplicate_item_id`, `plan_empty_prompt`, `plan_exceeds_max_images`, `plan_exceeds_max_rounds`, `plan_missing_reference_image`, `plan_schema_invalid`, `plan_unparseable`, `quota_exceeded`, `timeout`, `unknown`.
 
-Definite per-item failures can continue and leave the ledger `Partial`. A quota
-failure stops the batch, while an interrupted or otherwise ambiguous call stops
-later work and leaves `Unknown`. No outcome leads to an automatic retry.
+Definite per-item failures can continue and leave the ledger `Partial`. A quota failure stops the batch, while an interrupted or otherwise ambiguous call stops later work and leaves `Unknown`. No outcome leads to an automatic retry.
 
 ## 8. Platform facts and what follows from them
 
-Measured from the Codex source and from the installed binaries on the development
-machine (2026-09-12). Each fact drives a specific decision.
+Measured from the Codex source and from the installed binaries on the development machine (2026-09-12). Each fact drives a specific decision.
 
 | Platform fact | Decision it forces |
 | --- | --- |
@@ -173,9 +149,15 @@ machine (2026-09-12). Each fact drives a specific decision.
 
 ## 9. Clean-room rule
 
-This repository was written from the public Codex source tree, the published
-plugin conventions, and the JSON Schemas in `schemas/`. It vendors no vendor
-source code, no private endpoints, and no credentials, and it does not inspect or
-reimplement Codex's internal image pipeline. Interoperability rests entirely on
-the documented `codex exec` command line and on files Codex writes to the
-user's own disk.
+This repository was written from the public Codex source tree, the published plugin conventions, and the JSON Schemas in `schemas/`. It vendors no vendor source code, no private endpoints, and no credentials, and it does not inspect or reimplement Codex's internal image pipeline. Interoperability rests entirely on the documented `codex exec` command line and on files Codex writes to the user's own disk.
+
+## 10. Evidence map
+
+| Claim | Evidence |
+|---|---|
+| Execution contract and flags | `scripts/generation_runner.py`, and the fake that records argv |
+| Approval binding and locking | `scripts/image_factory_cli.py`, `scripts/job_lock.py` |
+| Receipt authority | `scripts/receipt_store.py`, `scripts/artifact_collector.py` |
+| Failure classification | `scripts/generation_runner.py`, the failure-code list above |
+| Ledger migration | `scripts/job_ledger.py` and the 1.0.0 migration tests |
+| Platform facts | The measured table above, dated 2026-09-12 |
