@@ -1445,6 +1445,140 @@ package from `1eb2438` to HEAD. Candidate push remains forbidden unless the new
 review explicitly reports `Ready for candidate push: Yes` with no Critical or
 Important findings.
 
+### Task 14: Give definite failed items a legal evaluation and optimization path
+
+**Files:**
+- Modify: `scripts/image_factory_cli.py:717-810`
+- Modify: `tests/test_cli.py:500-900`
+- Modify: `tests/test_multi_round_lifecycle.py`
+- Modify: `skills/codex-image-factory-judge/SKILL.md`
+- Modify: `skills/codex-image-factory-recover/SKILL.md`
+- Modify: `tests/test_skills.py`
+- Modify: `docs/verification/offline.md:31-38`
+- Modify: `docs/superpowers/specs/2026-09-14-codex-image-factory-production-hardening-design.md`
+
+**Interfaces:**
+- Consumes: current-round ledger rows, verified receipt map, and
+  `record_evaluation_final`
+- Produces: deterministic fail scores for receiptless `Failed/Skipped` items
+- Produces: `Partial -> Evaluated -> Optimized -> PlanValidated` user-directed
+  recovery path
+- Preserves: `Pending/Attempting/Unknown` refusal and no automatic retry
+
+- [ ] **Step 1: Write a failing definite-failure evaluation test**
+
+Run a real two-item fake batch where one item is generated and one receives a
+definite producer failure. Ensure no item remains pending, then invoke evaluate
+without fabricating a receipt for the failed item:
+
+```python
+self.assertEqual(run_payload["state"], "Partial")
+code, output = self.fixture.evaluate(...)
+self.assertEqual(code, cli.EXIT_FAILURE)
+scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
+self.assertEqual(scores["decision"], "fail")
+self.assertEqual(failures_for("item-02"), ["missing_artifact"])
+self.assertEqual(self.fixture.read_job()["state"], "Evaluated")
+```
+
+Assert the failed ledger row retains its error category, attempt count, and
+idempotency key.
+
+- [ ] **Step 2: Write failing eligibility-boundary tests**
+
+Parameterize current states `Pending`, `Attempting`, and `Unknown`. Evaluate must
+return structured failure, preserve scores/job bytes, and never enter
+`Evaluated`. Add a `Skipped` case that follows the same deterministic fail path
+as `Failed`.
+
+- [ ] **Step 3: Write the failing end-to-end optimization test**
+
+Starting from the evaluated definite failure:
+
+1. Invoke optimize without an instruction and require
+   `optimizer_missing_instruction`.
+2. Provide an explicit rewrite for the failed item.
+3. Require a schema-valid next-round plan containing only that item.
+4. Require job state `Optimized` and no generation invocation.
+5. Validate and quote the next round; require a new explicit approval before any
+   generation.
+
+This proves the legal next step without silently retrying the failed item.
+
+- [ ] **Step 4: Run focused tests and verify RED**
+
+```bash
+python3 -m unittest \
+  tests.test_cli.EvaluateAndOptimizeCommandTests \
+  tests.test_multi_round_lifecycle \
+  -v
+```
+
+Expected: evaluation rejects `Failed/Skipped` rows because it currently requires
+every row to be `Generated` with a receipt, leaving the job stranded in
+`Partial`.
+
+- [ ] **Step 5: Implement terminal-row evaluation**
+
+Before calling the evaluator:
+
+```python
+for item in result.items:
+    row = current_rows.get(item.idempotency_key)
+    if row is None or row["state"] in ("Pending", "Attempting", "Unknown"):
+        raise ValueError(f"plan item {item.id!r} is not terminal and cannot be evaluated")
+    if row["state"] in ("Failed", "Skipped"):
+        if item.idempotency_key in verified:
+            raise ValueError(f"failed plan item {item.id!r} has contradictory receipt evidence")
+        continue
+    if row["state"] != "Generated":
+        raise ValueError(f"unsupported ledger state for plan item {item.id!r}")
+    receipts[item.id] = require_exact_current_receipt(...)
+```
+
+Do not mutate failed rows. Passing an absent receipt to the existing evaluator
+must yield `missing_artifact` and decision `fail`. Finalize once through
+`record_evaluation_final`.
+
+- [ ] **Step 6: Align Skills with the legal failed-item path**
+
+The judge Skill must explain that definite failures can be evaluated and then
+rewritten, while ambiguous `Unknown` cannot. The recovery Skill's `Partial` row
+must distinguish:
+
+- pending items: quote and seek new approval;
+- no pending, definite failures: evaluate, then request explicit rewrite;
+- any unknown: reconcile and stop if unresolved.
+
+Neither Skill may say or imply that failed work is automatically retried.
+
+- [ ] **Step 7: Run focused and complete verification**
+
+```bash
+python3 -m unittest tests.test_cli tests.test_multi_round_lifecycle tests.test_skills -v
+python3 -m unittest discover -s tests -v
+python3 -m compileall -q scripts tests
+python3 scripts/validate_distribution.py .
+git diff --check
+```
+
+Expected: all commands exit zero. Update `docs/verification/offline.md` with the
+observed full-suite count only after the final run.
+
+- [ ] **Step 8: Commit Task 14**
+
+```bash
+git add scripts/image_factory_cli.py tests/test_cli.py tests/test_multi_round_lifecycle.py skills/codex-image-factory-judge/SKILL.md skills/codex-image-factory-recover/SKILL.md tests/test_skills.py docs/verification/offline.md docs/superpowers/specs/2026-09-14-codex-image-factory-production-hardening-design.md docs/superpowers/plans/2026-09-14-codex-image-factory-production-hardening.md
+git commit -m "fix: evaluate definite image failures"
+```
+
+- [ ] **Step 9: Run independent Task 14 and renewed whole-branch review**
+
+Require Task 14 spec/quality approval and regenerate the complete review package
+from `1eb2438` to HEAD. Candidate push remains forbidden unless the renewed
+review explicitly reports `Ready for candidate push: Yes` with no Critical or
+Important findings.
+
 ## Completion Gate
 
 ```text
@@ -1474,6 +1608,8 @@ duplicate_current_evaluation_guard = PASS
 crash_recover_evaluate_chain = PASS
 path_alias_refusal = PASS
 evaluation_atomic_finalization = PASS
+definite_failure_evaluation = PASS
+failed_item_user_directed_optimization = PASS
 ```
 
 ## Stop Conditions

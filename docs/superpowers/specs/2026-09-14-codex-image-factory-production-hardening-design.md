@@ -240,6 +240,21 @@ Recovery follows this evidence order:
   the unchanged source batch state can safely repeat evaluation. There is no
   intermediate persisted `Evaluated` state for a pass or pending decision.
 
+## Definite failed-item disposition
+
+- A `Partial` job is evaluable only when every current-plan item has a durable
+  terminal row and no current item is `Pending`, `Attempting`, or `Unknown`.
+- `Generated` rows require the exact verified current-plan receipt already
+  defined by the evaluation contract.
+- `Failed` and `Skipped` rows are evaluated without a receipt and therefore
+  produce the deterministic `missing_artifact` gate failure. Their original
+  ledger error category and attempt history remain unchanged.
+- A batch containing a `Failed` or `Skipped` current item finalizes directly to
+  `Evaluated` with decision `fail`.
+- Optimization may then create a new round only after the user supplies an
+  explicit rewrite or explicit `retry-unchanged` instruction for each failed
+  item. No failed item becomes pending and no generation retry is automatic.
+
 ## Crash matrix
 
 | Crash point | Durable evidence | Recovery result | Automatic generation |
