@@ -16,8 +16,8 @@ ALIASES = {
 def search(query: str, limit: int = 3) -> dict:
     if not query.strip() or not 1 <= limit <= 10:
         raise ValueError("query must be non-empty; limit must be between 1 and 10")
-    sources = json.loads((DATA / "prompt-sources.json").read_text())["sources"]
-    library = json.loads((DATA / "style-library.json").read_text())
+    sources = json.loads((DATA / "prompt-sources.json").read_text(encoding="utf-8"))["sources"]
+    library = json.loads((DATA / "style-library.json").read_text(encoding="utf-8"))
     expanded = query.casefold()
     for term, words in ALIASES.items():
         if term in query:
@@ -37,7 +37,7 @@ def search(query: str, limit: int = 3) -> dict:
                 "evidence": "upstream_template_not_factory_verified",
             })
     hits.sort(key=lambda hit: (-hit["rank_score"], hit["template"]["id"]))
-    catalog = json.loads((DATA / "prompt-categories.json").read_text())
+    catalog = json.loads((DATA / "prompt-categories.json").read_text(encoding="utf-8"))
     catalog_source = next(source for source in sources if source["id"] == "youmind-search")
     categories = []
     for category in catalog["categories"]:

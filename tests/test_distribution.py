@@ -129,7 +129,7 @@ class DistributionTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(ROOT / "scripts/validate_distribution.py"), str(ROOT)],
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8",
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(
@@ -141,7 +141,7 @@ class DistributionTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(ROOT / "scripts/validate_distribution.py"), "docs/.."],
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8",
             cwd=str(ROOT),
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

@@ -92,7 +92,7 @@ class PortableShimTests(unittest.TestCase):
             result = subprocess.run(
                 command,
                 capture_output=True,
-                text=True,
+                text=True, encoding="utf-8",
                 env=environment,
                 cwd=directory,
                 check=False,

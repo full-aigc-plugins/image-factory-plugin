@@ -200,7 +200,7 @@ class RepositoryStructureTests(unittest.TestCase):
     def test_no_build_artifacts_are_tracked(self) -> None:
         """Caches appear in any working tree that has run the suite; what matters is what is committed."""
         tracked = subprocess.run(
-            ["git", "ls-files"], cwd=str(ROOT), capture_output=True, text=True, check=False
+            ["git", "ls-files"], cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", check=False
         ).stdout.splitlines()
         noise = ("__pycache__", ".pytest_cache", "node_modules", ".DS_Store")
         offenders = [name for name in tracked if any(marker in name for marker in noise)]
@@ -220,7 +220,7 @@ class RepositoryStructureTests(unittest.TestCase):
         self.assertTrue(entry.is_file())
         tracked = subprocess.run(
             ["git", "ls-files", "-s", "--", "bin/image-factory"],
-            cwd=str(ROOT), capture_output=True, text=True, check=True,
+            cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", check=True,
         ).stdout.split()
         self.assertEqual(tracked[0], "100755", "bin/image-factory must be executable in the Git index")
 
@@ -241,6 +241,78 @@ class RepositoryStructureTests(unittest.TestCase):
             schema = json.loads(path.read_text(encoding="utf-8"))
             with self.subTest(schema=path.name):
                 self.assertEqual(schema["$id"], f"{repository}/schemas/{path.name}")
+
+
+
+OPEN_MODE = re.compile(r"""open\([^)]*?["']([rwxat+]+b?[rwxat+]*b?|[rwxat+]{1,3})["']""")
+
+
+def text_mode_open_without_encoding(line: str) -> bool:
+    """True when a line opens a file in text mode but never states its encoding.
+
+    Deliberately narrow: `os.open` returns a descriptor and has no encoding, and any
+    mode containing `b` is binary. Flagging those would make the guard useless.
+    """
+    if "open(" not in line or "encoding=" in line:
+        return False
+    if "os.fdopen(" in line or "os.open(" in line:
+        return False
+    match = OPEN_MODE.search(line)
+    if match is None:
+        return False
+    return "b" not in match.group(1)
+
+
+class LocaleIndependenceTests(unittest.TestCase):
+    """Text I/O must not depend on the host locale.
+
+    Windows defaults text reads to cp1252, so a `read_text()` without an explicit
+    encoding fails on any byte cp1252 leaves undefined. That bug shipped once, in
+    `prompt_library`, where it broke `prompt-search` for every Windows user while
+    passing on every POSIX host. It is cheaper to forbid the pattern than to find
+    it again from a CI log.
+    """
+
+    def source_lines(self):
+        for path in sorted((ROOT / "scripts").glob("*.py")):
+            text = path.read_text(encoding="utf-8")
+            for number, line in enumerate(text.splitlines(), 1):
+                yield path.name, number, line
+
+    def test_no_read_text_without_an_explicit_encoding(self) -> None:
+        offenders = [
+            f"{name}:{number}"
+            for name, number, line in self.source_lines()
+            if ".read_text(" in line and "encoding=" not in line
+        ]
+        self.assertEqual(offenders, [], "read_text() must state its encoding")
+
+    def test_no_text_mode_open_without_an_explicit_encoding(self) -> None:
+        offenders = [
+            f"{name}:{number}"
+            for name, number, line in self.source_lines()
+            if text_mode_open_without_encoding(line)
+        ]
+        self.assertEqual(offenders, [], "text-mode open() must state its encoding")
+
+
+class TextModeOpenDetectionTests(unittest.TestCase):
+    """The guard's own classifier, so it cannot silently stop detecting anything."""
+
+    def test_flags_a_text_open_without_encoding(self) -> None:
+        self.assertTrue(text_mode_open_without_encoding('path.open("r")'))
+        self.assertTrue(text_mode_open_without_encoding('open(name, "w")'))
+
+    def test_accepts_a_text_open_that_states_its_encoding(self) -> None:
+        self.assertFalse(text_mode_open_without_encoding('path.open("r", encoding="utf-8")'))
+
+    def test_ignores_binary_modes(self) -> None:
+        for line in ('temporary.open("rb+") as stream:', 'self.lock_path.open("a+b")', 'open(p, "rb")'):
+            with self.subTest(line=line):
+                self.assertFalse(text_mode_open_without_encoding(line))
+
+    def test_ignores_descriptor_opens(self) -> None:
+        self.assertFalse(text_mode_open_without_encoding("descriptor = os.open(directory, flags)"))
 
 
 if __name__ == "__main__":

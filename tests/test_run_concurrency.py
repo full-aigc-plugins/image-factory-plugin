@@ -30,7 +30,7 @@ class RunConcurrencyTests(unittest.TestCase):
         ]
         environment = os.environ.copy()
         environment["FAKE_CODEX_CONTROL"] = str(self.fixture.control_path)
-        processes = [subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=environment) for _ in range(2)]
+        processes = [subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", env=environment) for _ in range(2)]
         results = [process.communicate(timeout=20) + (process.returncode,) for process in processes]
         self.assertEqual(sorted(result[2] for result in results), [0, cli.EXIT_JOB_LOCKED])
         self.assertEqual(len(list(self.invocation_dir.glob("*.json"))), 2)

@@ -11,7 +11,7 @@ class PromptSearchTests(unittest.TestCase):
     def invoke(self, query, limit="3"):
         return subprocess.run(
             [sys.executable, str(ROOT / "scripts/image_factory_cli.py"), "prompt-search", query, "--limit", limit, "--json"],
-            capture_output=True, text=True,
+            capture_output=True, text=True, encoding="utf-8",
         )
 
     def test_chinese_story_request_has_attributed_templates(self):
