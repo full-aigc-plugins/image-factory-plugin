@@ -62,7 +62,7 @@ counts, remaining generation-call count, and one legal next action in plain lang
    | `Running` | A run was in progress and did not finish | Reconcile receipts; unresolved attempts become `Unknown` |
    | `Evaluated` | A verdict was reached | Judge the outcome or optimize the failing items |
    | `PendingApproval` | Deterministic evaluation passed but required human labels are missing | Return to judge and ask only for the missing labels |
-   | `Optimized` | A next round exists | Run the next round, then evaluate it |
+   | `Optimized` | A next round exists | Validate the next plan, quote the exact remaining generation calls, obtain fresh approval, then run and evaluate |
    | `Accepted` | Every required result was explicitly accepted | Terminal; do not run, recover, or optimize |
    | `Completed` | Every item produced a verified artifact | Evaluate the batch |
    | `Partial` | The run finished without completing every item | If pending items remain, quote them and seek fresh approval; with no pending items and only definite failures, evaluate them and then request an explicit rewrite or retry-unchanged; if any item is unknown, reconcile and stop if unresolved |

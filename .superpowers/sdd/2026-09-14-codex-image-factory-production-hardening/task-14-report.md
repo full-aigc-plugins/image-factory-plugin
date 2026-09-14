@@ -55,3 +55,20 @@ No Task 14 correctness concern remains in the local offline scope. Independent
 Task 14 review and renewed whole-branch review are still required. Remote CI,
 remote SHA parity, fresh Marketplace installation, fresh-session smoke, and paid
 canary remain separate release gates and were not authorized here.
+
+## Fix round 1/5: Optimized recovery approval sequence
+
+Closed the Important Skill guardrail finding. The recovery state table now maps
+`Optimized` to the exact ordered sequence: validate the next plan, quote the
+exact remaining generation calls, obtain fresh approval, then run and evaluate.
+It no longer abbreviates this state as a direct run action.
+
+TDD evidence:
+
+- RED: the new Skill contract test failed because the `Optimized` row lacked the
+  validation, quote, and fresh-approval markers.
+- GREEN: all 30 Skill tests passed after the single-row documentation change.
+- Full source suite: 387 tests passed.
+- `compileall`, distribution validation, and `git diff --check` exited 0.
+
+Runtime behavior and the explicit no-implicit-retry policy were unchanged.

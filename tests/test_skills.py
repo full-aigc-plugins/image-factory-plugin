@@ -211,6 +211,21 @@ class BodyTests(unittest.TestCase):
         self.assertIn("evaluate", body)
         self.assertIn("explicit rewrite", body)
 
+    def test_recover_skill_requires_the_full_optimized_approval_sequence(self) -> None:
+        body = self.body("codex-image-factory-recover").lower()
+        optimized_row = next(
+            line for line in body.splitlines() if line.strip().startswith("| `optimized`")
+        )
+        markers = (
+            "validate the next plan",
+            "quote the exact remaining generation calls",
+            "obtain fresh approval",
+            "run",
+            "evaluate",
+        )
+        positions = [optimized_row.index(marker) for marker in markers]
+        self.assertEqual(positions, sorted(positions))
+
     def test_recover_skill_maps_every_ledger_state(self) -> None:
         body = self.body("codex-image-factory-recover")
         for state in job_ledger.JobState:
