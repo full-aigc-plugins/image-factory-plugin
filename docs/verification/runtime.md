@@ -14,9 +14,9 @@ Allowed status values are `PASS`, `FAIL`, and `NOT_RUN`.
 | --- | --- | --- |
 | `remote_ci_matrix` | `PASS` | Run 34831417381 on `05674dc`: all six legs green (ubuntu/macos/windows x Python 3.11/3.13). The first two pushes failed on Windows 3.11 only; the causes and fixes are in the commits `d93748e` and `05674dc`. |
 | `remote_sha_parity` | `PASS` | `main` is at `05674dc` locally and on `origin`. Tag parity is not yet claimed: it requires the `v0.1.2` tag, which the release step adds. |
-| `fresh_marketplace_install` | `NOT_RUN` | Removing or installing a plugin requires separate authorization. |
-| `fresh_session_no_spend_smoke` | `NOT_RUN` | It must target a freshly installed 0.1.2 candidate. |
-| `paid_canary` | `NOT_RUN` | No allowance-spending run is authorized by Task 10. |
+| `fresh_marketplace_install` | `PASS` | The `partme-ai-image-factory` snapshot was upgraded, the plugin removed, and `codex plugin add codex-image-factory@partme-ai-image-factory` reinstalled 0.1.2. All 188 version-controlled files in the cache are byte-identical to the pushed commit. |
+| `fresh_session_no_spend_smoke` | `PASS` | A fresh `codex exec` session used the installed plugin to validate and quote a two-item plan and reported the plan hash, image count, and approval requirement. The reported hash `0792c5df...` was recomputed locally from the same plan and matched. The quote reported `spends_allowance_on_quote: false`. |
+| `paid_canary` | `PASS` | One authorized generation call on `be48f5d` (2026-09-14): the same plan was refused with exit code 3 without `--approve`, then ran once with it. Ledger reached `Completed` at revision 10 with one `Generated` item at `attempts: 1`. Artifact 714,394 bytes, 1254x1254, sha256 `68eac3b3...`, independently re-hashed with `shasum -a 256` and matching the receipt. `source.model_reported` is `null`. |
 | `usage_limit_evidence` | `NOT_RUN` | Deliberately exhausting image allowance is neither required nor authorized. |
 
 ## Evidence recording rules

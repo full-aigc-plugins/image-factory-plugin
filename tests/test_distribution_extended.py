@@ -43,9 +43,9 @@ REQUIRED_DOCUMENTS = (
 RUNTIME_GATES = {
     "remote_ci_matrix": "PASS",
     "remote_sha_parity": "PASS",
-    "fresh_marketplace_install": "NOT_RUN",
-    "fresh_session_no_spend_smoke": "NOT_RUN",
-    "paid_canary": "NOT_RUN",
+    "fresh_marketplace_install": "PASS",
+    "fresh_session_no_spend_smoke": "PASS",
+    "paid_canary": "PASS",
     "usage_limit_evidence": "NOT_RUN",
 }
 
