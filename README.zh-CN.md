@@ -6,13 +6,24 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-## 当前状态
+## 状态与版本
 
 0.1.2 当前是已通过本地验证的 release candidate（发布候选）。远程 CI、源码/远程/标签一致性、Marketplace 全新安装、全新会话无花费冒烟，以及需要单独授权的付费 canary 都仍是尚未执行的外部门禁。
 
 当前源码只保留已验证的 Image Factory 图片生产内核、带来源的离线提示词检索、固定上游 Skill 快照、共享对话确认流程和 68 个纯图片中文案例。Codex 对话就是产品界面；工作台界面、项目管理和视频合成不属于本仓库。
 
-## 项目定位
+## 快速开始
+
+从官方 PartMe.AI marketplace 安装并固定到 `main`：
+
+```bash
+codex plugin marketplace add partme-ai/codex-image-factory-plugin --ref main
+codex plugin add codex-image-factory@partme-ai-image-factory
+```
+
+重启 Codex 或 ChatGPT 桌面应用，打开新任务，让 Image Factory 基于参考图规划批次。插件会按"对话确认 → 批次校验 → 内置图像工具生成 → 回执采集 → 评测 → 批准后的优化轮"流程逐步推进 Codex。
+
+## 可以做什么
 
 `codex-image-factory` 把"给定参考图做一批图"变成一次可审计的生产运行：校验批次清单，由 Codex 逐项生成，采集每张产物并独立重算哈希，用确定性门禁评测，再把失败项改写成新一轮 prompt，经你批准后才执行。
 
@@ -26,7 +37,16 @@ Codex -> 校验后的批次清单 -> 内置图像工具 -> 产物采集 + 回执
 
 插件自身不出图。生成由 Codex 通过其内置图像工具、使用你已有的 Codex 认证完成。
 
-## 平台边界
+### 工厂补齐的部分
+
+- **对话确认** —— 用户自然描述目标、选择推荐方向、确认创作卡和报价，再用编号批准或调整结果。
+- **批次清单校验** —— 封闭 schema、幂等键、花费前先设硬上限。
+- **可核验回执** —— 哈希、大小、尺寸全部从磁盘文件独立重算，并做二次复核以发现验证窗口内被改写的文件。
+- **持久台账** —— 原子写、受约束的状态机、密钥清洗，中断后是恢复而不是重复生成。
+- **评测** —— 确定性门禁做主判；模型给出的分数仅作参考，同时采集你的批准/驳回标注，用于日后校准该分数。
+- **优化即新一轮** —— 失败项被改写成新的 prompt 集合，而不是覆盖上一轮。
+
+## 边界与契约
 
 以下是 Codex 图像工具的实测性质，不是偏好设定；插件围绕它们设计。
 
@@ -37,26 +57,15 @@ Codex -> 校验后的批次清单 -> 内置图像工具 -> 产物采集 + 回执
 
 由于生成不可参数化，需要显式尺寸或质量档位的功能属于**范围之外**而非"计划中"。若日后需要，那是需要独立标注的、由插件自持 API 通道的扩展点；本仓库不新增该通道，也不读取 API Key。
 
-## 工厂补齐的部分
-
-- **对话确认** —— 用户自然描述目标、选择推荐方向、确认创作卡和报价，再用编号批准或调整结果。
-- **批次清单校验** —— 封闭 schema、幂等键、花费前先设硬上限。
-- **可核验回执** —— 哈希、大小、尺寸全部从磁盘文件独立重算，并做二次复核以发现验证窗口内被改写的文件。
-- **持久台账** —— 原子写、受约束的状态机、密钥清洗，中断后是恢复而不是重复生成。
-- **评测** —— 确定性门禁做主判；模型给出的分数仅作参考，同时采集你的批准/驳回标注，用于日后校准该分数。
-- **优化即新一轮** —— 失败项被改写成新的 prompt 集合，而不是覆盖上一轮。
-
-## 文档
+## 文档导航
 
 新增离线提示词模板检索：
 `bin/image-factory prompt-search '成语绘本分镜' --limit 3 --json`。
 已集成 22 套模板、31 类案例索引、11 类检索目录与六个来源入口。
 全文图库按需查阅；详见[提示词参考层](docs/prompt-library.md)。
 
-- [Architecture](docs/Codex-Image-Factory-Plugin-Architecture.md)
-- [架构文档](docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
-- [Technical solution](docs/Codex-Image-Factory-Plugin-Technical-Solution.md)
-- [技术方案](docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
+- [Architecture](docs/Codex-Image-Factory-Plugin-Architecture.md) · [架构文档](docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
+- [Technical solution](docs/Codex-Image-Factory-Plugin-Technical-Solution.md) · [技术方案](docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 - [设计规格](docs/superpowers/specs/2026-09-12-codex-image-factory-plugin-design.md)
 - [实施计划](docs/superpowers/plans/2026-09-12-codex-image-factory-plugin-implementation.md)
 - [便携清单迁移说明](docs/portable-migration.md)
