@@ -11,8 +11,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "tests" / "fakes"))
-import launcher  # noqa: E402
 
 import generation_runner as runner  # noqa: E402
 import plan_validator  # noqa: E402
@@ -22,9 +20,37 @@ FAKE = ROOT / "tests" / "fakes" / "fake_codex.py"
 REAL_PNG = ROOT / "assets" / "logo.png"
 
 
-SHIM = launcher.build_shared_launcher(
-    Path(tempfile.mkdtemp(prefix="image-factory-codex-shim-")), FAKE
-)
+def fast_python() -> str:
+    """Prefer the plain framework interpreter over Python.app.
+
+    On macOS `sys.executable` can point inside Python.app, and launching that
+    costs extra through the app-bundle machinery. That is pure test overhead:
+    production invokes the real Codex binary.
+    """
+    candidate = Path(sys.base_prefix) / "bin" / "python3"
+    if candidate.is_file():
+        return str(candidate)
+    return sys.executable
+
+
+def _build_shared_shim() -> Path:
+    """Create the fake-codex shim once for the whole module.
+
+    macOS performs a security evaluation the first time each newly written
+    executable is run, which costs about half a second. Building one shim for the
+    module keeps that cost off every individual test.
+    """
+    if os.name == "nt":
+        return Path(sys.executable)
+    directory = Path(tempfile.mkdtemp(prefix="image-factory-codex-shim-"))
+    atexit.register(shutil.rmtree, directory, True)
+    shim = directory / "codex"
+    shim.write_text(f'#!/bin/sh\nexec "{fast_python()}" "{FAKE}" "$@"\n', encoding="utf-8")
+    shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return shim
+
+
+SHIM = _build_shared_shim()
 
 
 def make_item(item_id: str = "item-01", prompt: str = "a calm portrait", references: tuple[str, ...] = ()) -> plan_validator.PlanItem:
@@ -50,6 +76,7 @@ class RunnerFixture:
         self.base = Path(self._tmp.name)
         self.workdir = self.base / "work"
         self.workdir.mkdir()
+        self._install_windows_exec(self.workdir)
         self.generation_dir = self.base / "generated_images"
         self.generation_dir.mkdir()
         self.control_path = self.base / "control.json"
@@ -77,7 +104,19 @@ class RunnerFixture:
             "timeout_seconds": 10.0,
         }
         kwargs.update(overrides)
+        self._install_windows_exec(Path(kwargs["workdir"]))
         return runner.run_item(**kwargs)
+
+    @staticmethod
+    def _install_windows_exec(workdir: Path) -> None:
+        if os.name == "nt":
+            workdir.mkdir(parents=True, exist_ok=True)
+            (workdir / "exec").write_text(
+                "import runpy, sys\n"
+                "sys.argv.insert(1, 'exec')\n"
+                f"runpy.run_path({str(FAKE)!r}, run_name='__main__')\n",
+                encoding="utf-8",
+            )
 
     def cleanup(self) -> None:
         if self._previous_env is None:
@@ -196,6 +235,15 @@ class RunTests(unittest.TestCase):
         result = self.fixture.run(timeout_seconds=0.5)
         self.assertFalse(result.ok)
         self.assertEqual(result.failure.code, "timeout")
+        self.assertEqual(result.attempts_made, 1)
+
+    @unittest.skipIf(os.name == "nt", "negative signal return codes are a Unix contract")
+    def test_signal_termination_is_classified_as_interrupted(self) -> None:
+        self.fixture.control(mode="signal")
+        result = self.fixture.run()
+        self.assertFalse(result.ok)
+        self.assertEqual(result.exit_code, -15)
+        self.assertEqual(result.failure.code, "interrupted")
         self.assertEqual(result.attempts_made, 1)
 
     def test_usage_limit_is_classified_with_its_reset_time(self) -> None:

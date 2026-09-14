@@ -1,6 +1,6 @@
 # Codex Image Factory Plugin Architecture
 
-> **Status:** image core and prompt discovery implemented and offline-verified. Runtime evidence for the 1.1.0 contracts is not yet observed; see `docs/verification/runtime.md`. **Version:** 0.1.2. **Updated:** 2026-09-14.
+> **Status:** 0.1.2 release candidate, offline-verified; external release gates are not yet run. **Updated:** 2026-09-14.
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 
@@ -86,13 +86,17 @@ sequenceDiagram
   C-->>K: accepted, with idempotency keys
   K->>C: quote
   C-->>K: image count, approval required
-  U->>K: approve
-  K->>C: run --approve
+  U->>K: approve exact round and call count
+  K->>C: run --approve (bind validated plan hash)
+  C->>D: acquire job lock
   loop each pending item
+    C->>D: record Attempting and attempt id
     C->>X: exec, one prompt
     X->>D: image file
-    C->>D: verify, publish, write receipt
+    C->>D: verify and atomically write per-item receipt
+    C->>D: record Generated
   end
+  C->>D: rebuild aggregate receipt manifest
   C-->>K: receipts and final state
   K->>C: evaluate
   C-->>K: gates, advisory, decision
@@ -102,14 +106,16 @@ sequenceDiagram
 
 Failure, cancellation, and timeout semantics:
 
-- A **timeout** ends that item only. It is classified as `timeout` and is not
-  retried; the batch continues with the remaining items.
+- A **timeout or interrupted subprocess after reservation** is ambiguous. The
+  item becomes `Unknown` unless a valid per-item receipt proves completion; it
+  is never retried automatically.
 - A **usage limit** stops the whole batch. The limit id and reset time are
   recorded, and no further item is attempted in that run.
 - A **missing artifact** after an exit code of zero is a failure, not a success.
   The generator's claim and the disk's evidence are different things.
-- **Cancellation** leaves the ledger at `Running` with the completed items
-  recorded. The next run skips them.
+- **Cancellation** preserves the durable `Attempting` evidence. Recovery either
+  verifies its receipt or changes it to `Unknown`; it never turns it back into
+  pending work.
 
 ## 5. Contracts
 
@@ -127,8 +133,10 @@ path, `sha256`, `bytes`, `width`, `height`, `prompt_sha256`, and
 `source.model_reported` is nullable and is `null` in practice: the plugin records
 what Codex reported and never infers a model.
 
-**`schemas/factory_job.schema.json`** — the ledger. Governs the state machine,
-per-item states, and the closed set of failure categories.
+**`schemas/factory_job.schema.json`** — the 1.1.0 ledger. Governs the state
+machine, approval history, plan-hash binding, and the `Attempting`/`Unknown`
+item lifecycle. Legacy 1.0.0 documents migrate in memory without inventing
+approval evidence or changing observed outcomes.
 
 **`schemas/scores.schema.json`** — one evaluation. Separates
 `deterministic_gates` from `advisory` and `human_labels`, and ends in a
@@ -161,6 +169,14 @@ credentials. This repository adds none and reads no API keys.
   appear in an invocation.
 - **No silent retry.** There is no retry loop anywhere. A failed item is
   recorded and reported.
+- **One cross-process writer.** A job-path-derived OS lock covers approval,
+  reservation, invocation, receipt persistence, and final transition. A second
+  writer fails with `job_already_running` before it can invoke Codex.
+- **Receipts are authoritative.** One atomically written, schema-valid,
+  hash-verifying receipt per item is the source of truth. The aggregate manifest
+  is only a projection and can be rebuilt during recovery.
+- **Human labels are mandatory when configured.** Deterministic success and
+  advisory assessment cannot produce `pass` while a required label is missing.
 - **Secrets are refused, not scrubbed.** The ledger rejects credential-like keys
   on both read and write, so a ledger is always safe to share as evidence.
 - **Atomic writes.** Ledger writes go through a temporary file, `fsync`, and
@@ -186,54 +202,13 @@ of these is missing and what to do about it, without network access and without
 executing anything.
 
 Python 3.11 or later is required for `tomllib`. All scripts use the standard
-library only.
+library only. GitHub Actions defines six offline cells: Linux, macOS, and Windows
+on Python 3.11 and 3.13. Each cell compiles sources, runs the full suite, validates
+the distribution, and checks the diff without installing runtime dependencies.
 
-## 9. Transaction model
+## 9. Evolution
 
-Version 1.1.0 makes spending a transaction rather than a loop, and that shape is
-the most important thing to understand before changing any of this code.
-
-- **One writer per job.** Every mutating command takes an exclusive advisory lock
-  on `<job>.lock` before it reads the ledger, so a second `run` cannot decide the
-  same item is pending. Contention is reported as `job_already_running` and spends
-  nothing.
-- **Approval is bound, not boolean.** An approval records the plan hash, the round,
-  and the number of calls still outstanding. Any change to the plan — a rewritten
-  prompt, an added image, a different reference, a new round — invalidates the
-  current approval while keeping the history as an audit trail.
-- **Attempts are reserved before the call.** An item enters `Attempting` and its
-  attempt counter increments before the external call, so an interruption cannot
-  lead to a second call for work that may already have run. Only an item with no
-  recorded attempt is pending.
-- **Receipts are the source of truth.** Each artifact's receipt is its own file,
-  written atomically under its idempotency key; the aggregate manifest is derived
-  by reading those receipts back and verifying them against the files they name.
-- **Unresolved means stop.** A timeout or a vanished artifact leaves the item
-  `Unknown` and halts the batch, because spending on later items while an earlier
-  outcome is unresolved is how one interruption becomes a double charge.
-- **Recovery cannot spend.** `recover` settles interrupted items from receipts
-  already on disk, rebuilds the manifest, and refuses to guess: an item with no
-  evidence stays `Unknown`, and the command reports `recovery_required`.
-- **Human labels are mandatory.** A 1.1.0 plan requires human result labels, so an
-  unlabeled batch reaches `pending_approval` rather than passing on its own.
-
-Historical 1.0.0 plans and ledgers are upgraded in memory by
-`scripts/contract_migrations.py`. Migration may tighten a document — both human
-gates become mandatory — but it may never invent approval that was not observed,
-and a 1.0.0 job that already carries approval evidence is refused rather than
-migrated.
-
-## 10. Continuous integration
-
-`.github/workflows/ci.yml` runs the full suite on Ubuntu, macOS, and Windows with
-Python 3.11 and 3.13. Each job compiles every script and test, runs the whole
-offline suite, validates the distribution, and checks whitespace. No job installs
-anything, on purpose: a job that installed a package would stop being evidence
-that the plugin needs none.
-
-## 11. Evolution
-
-This document describes only the implemented image core and prompt-discovery layer.
+This document describes the implemented 0.1.2 release candidate image core and prompt-discovery layer.
 Workbench UI, parent project state, and non-image media pipelines are separate product
 responsibilities and are not implemented or planned in this plugin repository.
 

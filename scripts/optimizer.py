@@ -198,8 +198,6 @@ def plan_next_round(
         items.append(replacement)
 
     next_plan: dict = {
-        # Keep the source version rather than stamping the current one: migration
-        # is what upgrades and tightens, and it only does so for a legacy input.
         "schema_version": current_plan.get("schema_version", "1.0.0"),
         "batch_id": current_plan["batch_id"],
         "round": current_round + 1,
@@ -211,9 +209,6 @@ def plan_next_round(
         next_plan["limits"] = copy.deepcopy(current_plan["limits"])
     if "judge_policy" in current_plan:
         next_plan["judge_policy"] = copy.deepcopy(current_plan["judge_policy"])
-
-    # A round derived from a legacy plan must not inherit its weaker posture: the
-    # next round is always emitted carrying the mandatory approval and label gates.
     next_plan = contract_migrations.migrate_image_batch(next_plan).document
 
     return OptimizeResult(

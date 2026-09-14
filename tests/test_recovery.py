@@ -1,258 +1,352 @@
 import hashlib
 import json
-import os
-import shutil
-import stat
 import sys
-import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "tests" / "fakes"))
-import launcher  # noqa: E402
 
-import artifact_collector  # noqa: E402
 import image_factory_cli as cli  # noqa: E402
-import job_ledger  # noqa: E402
-import plan_validator  # noqa: E402
 import receipt_store  # noqa: E402
-
-
-FAKE = ROOT / "tests" / "fakes" / "fake_codex.py"
-REAL_PNG = ROOT / "assets" / "logo.png"
-
-SHIM = launcher.build_shared_launcher(
-    Path(tempfile.mkdtemp(prefix="image-factory-recovery-shim-")), FAKE
+from tests.test_cli import (  # noqa: E402
+    SHIM,
+    CliFixture,
+    derived_run_targets,
+    snapshot_tree,
+    valid_plan,
 )
 
 
-def one_item_plan(**overrides) -> dict:
-    plan = {
-        "schema_version": "1.1.0",
-        "batch_id": "portrait-study",
-        "round": 1,
-        "limits": {"max_images": 5, "max_rounds": 3, "require_approval_before_run": True},
-        "judge_policy": {
-            "min_dimension": 64,
-            "reject_duplicates": True,
-            "pass_threshold": 0.8,
-            "require_human_labels": True,
-        },
-        "items": [{"id": "item-01", "prompt": "a calm portrait"}],
-    }
-    plan.update(overrides)
-    return plan
+class RecoveryCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = CliFixture()
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.write_plan()
+        self.fixture.control()
+        result = self.fixture.run_approved_batch()
+        self.receipts = result["receipts"]
 
-
-class RecoveryFixture:
-    """A job left mid-flight, with or without the artifact its attempt produced."""
-
-    def __init__(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.base = Path(self._tmp.name)
-        self.codex_home = self.base / "codex-home"
-        self.codex_home.mkdir()
-        (self.codex_home / "auth.json").write_text("{}", encoding="utf-8")
-        (self.codex_home / "config.toml").write_text('model = "gpt-5.6-sol"\n', encoding="utf-8")
-        self.generation_dir = self.codex_home / "generated_images"
-        self.generation_dir.mkdir()
-        self.destination = self.base / "out"
-        self.destination.mkdir()
-        self.invocation_dir = self.base / "invocations"
-        self.invocation_dir.mkdir()
-        self.plan_path = self.base / "plan.json"
-        self.job_path = self.base / "job.json"
-        self.control_path = self.base / "control.json"
-        self._previous_env: str | None = None
-
-    def plan(self) -> plan_validator.PlanResult:
-        return plan_validator.validate_plan(
-            json.loads(self.plan_path.read_text(encoding="utf-8")), base_dir=self.base
-        )
-
-    def installed(self) -> "RecoveryFixture":
-        self.plan_path.write_text(json.dumps(one_item_plan()), encoding="utf-8")
-        # Any Codex call during recovery would write evidence here, which the tests
-        # assert stays empty.
-        self.control_path.write_text(
-            json.dumps(
-                {
-                    "mode": "generate",
-                    "generation_dir": str(self.generation_dir),
-                    "png_source": str(REAL_PNG),
-                    "invocation_dir": str(self.invocation_dir),
-                }
-            ),
-            encoding="utf-8",
-        )
-        self._previous_env = os.environ.get("FAKE_CODEX_CONTROL")
-        os.environ["FAKE_CODEX_CONTROL"] = str(self.control_path)
-        return self
-
-    def interrupted(self, *, item_state: str = "Attempting", with_artifact: bool = False):
-        """Leave the job in the state an interrupted run would have left behind."""
-        result = self.plan()
-        ledger = job_ledger.JobLedger(self.job_path)
-        ledger.write(job_ledger.new_job(result.batch_id))
-        ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
-        ledger.bind_plan(result.plan_sha256, result.round, len(result.items))
-        ledger.record_approval(result.plan_sha256, result.round, len(result.items), "run_approve_flag")
-        ledger.transition(job_ledger.JobState.APPROVED)
-        ledger.transition(job_ledger.JobState.RUNNING)
-        item = result.items[0]
-        ledger.start_attempt(item, "attempt-1")
-        if item_state == "Unknown":
-            ledger.mark_attempt_unknown(item.id, "attempt-1")
-        if with_artifact:
-            receipt_store.write_receipt(self.job_path, self.receipt(item.idempotency_key))
-        return ledger
-
-    def receipt(self, idempotency_key: str) -> dict:
-        relative = f"portrait-study/round-1/item-01-{idempotency_key[:8]}.png"
-        target = self.destination / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(REAL_PNG, target)
-        size = artifact_collector.parse_png_size(target)
-        assert size is not None
-        return {
-            "schema_version": "1.0.0",
-            "plugin_id": "codex-image-factory",
-            "batch_id": "portrait-study",
-            "item_id": "item-01",
-            "round": 1,
-            "artifact_id": f"item-01-r1-{idempotency_key[:12]}",
-            "path": relative,
-            "sha256": artifact_collector.file_sha256(target),
-            "bytes": target.stat().st_size,
-            "width": size[0],
-            "height": size[1],
-            "prompt_sha256": hashlib.sha256(b"prompt").hexdigest(),
-            "idempotency_key": idempotency_key,
-            "source": {
-                "kind": "codex_image_gen",
-                "session_id": "session-a",
-                "call_id": "call-1",
-                "model_reported": None,
-            },
-            "collected_at": "2026-09-12T00:00:00Z",
-        }
-
-    def recover(self) -> tuple[int, str]:
-        return cli.run_cli(
-            [
+    def recover(self) -> tuple[int, dict]:
+        invocation_evidence_before = tuple(self.fixture.base.rglob("*last-message.txt"))
+        with patch.object(
+            cli.generation_runner,
+            "run_item",
+            side_effect=AssertionError("recovery must make zero Codex calls"),
+        ):
+            code, output = self.fixture.run_cli(
                 "recover",
                 "--plan",
-                str(self.plan_path),
+                str(self.fixture.plan_path),
                 "--job",
-                str(self.job_path),
+                str(self.fixture.job_path),
                 "--destination",
-                str(self.destination),
-                "--codex-home",
-                str(self.codex_home),
-                "--generation-dir",
-                str(self.generation_dir),
+                str(self.fixture.destination),
                 "--json",
-            ]
+            )
+        self.assertEqual(
+            tuple(self.fixture.base.rglob("*last-message.txt")),
+            invocation_evidence_before,
+            "recovery must create no invocation evidence",
+        )
+        return code, json.loads(output)
+
+    def rewrite_item(self, index: int, state: str) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Unknown" if state == "Unknown" else "Running"
+        row = ledger["items"][index]
+        row["state"] = state
+        row["receipt_id"] = None
+        row["error_category"] = "unknown" if state == "Unknown" else None
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+
+    def test_recover_refuses_exact_relative_and_symlink_aliases_without_mutation(self) -> None:
+        cases = ("job_is_plan", "job_is_destination", "relative_symlink_job")
+        for alias_name in cases:
+            with self.subTest(alias=alias_name):
+                fixture = CliFixture()
+                self.addCleanup(fixture.cleanup)
+                fixture.write_plan()
+                fixture.control()
+                fixture.run_approved_batch()
+                ledger = fixture.read_job()
+                ledger["state"] = "Running"
+                fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+                alias_parent = fixture.base / "alias"
+                if alias_name == "relative_symlink_job":
+                    try:
+                        alias_parent.symlink_to(fixture.base, target_is_directory=True)
+                    except (OSError, NotImplementedError):
+                        continue
+                    (fixture.base / "nested").mkdir()
+                job_argument = {
+                    "job_is_plan": fixture.plan_path,
+                    "job_is_destination": fixture.destination,
+                    "relative_symlink_job": alias_parent / "nested" / ".." / fixture.plan_path.name,
+                }[alias_name]
+                before = snapshot_tree(fixture.base)
+                with patch.object(
+                    cli.receipt_store,
+                    "load_verified_receipts",
+                    side_effect=AssertionError("path refusal must precede receipt reads"),
+                ), patch.object(
+                    cli.generation_runner,
+                    "run_item",
+                    side_effect=AssertionError("recovery must make zero Codex calls"),
+                ):
+                    code, output = fixture.run_cli(
+                        "recover", "--plan", str(fixture.plan_path), "--job", str(job_argument),
+                        "--destination", str(fixture.destination), "--json",
+                    )
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertIn("path collision", json.loads(output)["error"])
+                self.assertEqual(snapshot_tree(fixture.base), before)
+                self.assertFalse(cli.job_lock.lock_path_for(job_argument).exists())
+                self.assertEqual(fixture.read_job()["state"], "Running")
+
+    def test_recover_refuses_plan_inside_every_derived_write_target(self) -> None:
+        for target_name in derived_run_targets(self.fixture):
+            with self.subTest(target=target_name):
+                fixture = CliFixture()
+                self.addCleanup(fixture.cleanup)
+                fixture.write_plan()
+                fixture.control()
+                fixture.run_approved_batch()
+                ledger = fixture.read_job()
+                ledger["state"] = "Running"
+                fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+                target = derived_run_targets(fixture)[target_name]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(valid_plan()), encoding="utf-8")
+                before = snapshot_tree(fixture.base)
+                with patch.object(
+                    cli.receipt_store,
+                    "load_verified_receipts",
+                    side_effect=AssertionError("derived path refusal must precede receipt reads"),
+                ):
+                    code, output = fixture.run_cli(
+                        "recover", "--plan", str(target), "--job", str(fixture.job_path),
+                        "--destination", str(fixture.destination), "--json",
+                    )
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertIn("path collision", json.loads(output)["error"])
+                self.assertEqual(snapshot_tree(fixture.base), before)
+                self.assertEqual(fixture.read_job()["state"], "Running")
+
+    def test_recover_protects_reference_inputs_without_creating_snapshots(self) -> None:
+        reference = cli.receipt_store.manifest_path(self.fixture.job_path)
+        reference.write_bytes((ROOT / "assets" / "logo.png").read_bytes())
+        self.fixture.write_plan(valid_plan(items=[{
+            "id": "item-01", "prompt": "a calm portrait",
+            "reference_images": [str(reference)],
+        }]))
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Running"
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        before = snapshot_tree(self.fixture.base)
+        code, output = self.fixture.run_cli(
+            "recover", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--destination", str(self.fixture.destination), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_USAGE, output)
+        self.assertIn("path collision", json.loads(output)["error"])
+        self.assertEqual(snapshot_tree(self.fixture.base), before)
+        self.assertFalse(Path(str(self.fixture.job_path) + ".reference-snapshots").exists())
+
+    def test_attempting_with_verified_receipt_becomes_generated(self) -> None:
+        self.rewrite_item(0, "Attempting")
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_OK, report)
+        self.assertEqual(report["state"], "Completed")
+        self.assertEqual(report["reconciled"], ["item-01"])
+        self.assertEqual(self.fixture.read_job()["items"][0]["state"], "Generated")
+
+    def test_attempting_without_receipt_becomes_unknown(self) -> None:
+        self.rewrite_item(0, "Attempting")
+        receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[0]["idempotency_key"]
+        ).unlink()
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, report)
+        self.assertEqual(report["state"], "Unknown")
+        self.assertEqual(report["unknown"], ["item-01"])
+        self.assertEqual(report["remaining_generation_calls"], 0)
+        self.assertEqual(self.fixture.read_job()["items"][0]["state"], "Unknown")
+
+    def test_aggregate_manifest_alone_cannot_reconcile_an_attempt(self) -> None:
+        self.rewrite_item(0, "Attempting")
+        receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[0]["idempotency_key"]
+        ).unlink()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, report)
+        self.assertEqual(report["unknown"], ["item-01"])
+
+    def test_unknown_with_verified_receipt_becomes_generated(self) -> None:
+        self.rewrite_item(0, "Unknown")
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_OK, report)
+        self.assertEqual(report["state"], "Completed")
+        self.assertEqual(report["reconciled"], ["item-01"])
+
+    def test_recovery_rebuilds_manifest_from_verified_receipts(self) -> None:
+        self.rewrite_item(0, "Attempting")
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
+        code, _report = self.recover()
+        self.assertEqual(code, cli.EXIT_OK)
+        rebuilt = json.loads(
+            receipt_store.manifest_path(self.fixture.job_path).read_text(encoding="utf-8")
+        )
+        self.assertEqual({row["item_id"] for row in rebuilt}, {"item-01", "item-02"})
+
+    def test_tampered_receipt_is_refused_without_mutating_the_ledger(self) -> None:
+        self.rewrite_item(0, "Attempting")
+        before = self.fixture.job_path.read_bytes()
+        artifact = self.fixture.destination / self.receipts[0]["path"]
+        artifact.write_bytes(b"tampered")
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_FAILURE, report)
+        self.assertIn("artifact verification", report["error"])
+        self.assertEqual(self.fixture.job_path.read_bytes(), before)
+
+    def test_prompt_hash_mismatch_is_refused_without_mutating_the_ledger(self) -> None:
+        self.rewrite_item(0, "Attempting")
+        stored = receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[0]["idempotency_key"]
+        )
+        receipt = json.loads(stored.read_text(encoding="utf-8"))
+        receipt["prompt_sha256"] = hashlib.sha256(b"a different prompt").hexdigest()
+        stored.write_text(json.dumps(receipt), encoding="utf-8")
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
+        before = self.fixture.job_path.read_bytes()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_FAILURE, report)
+        self.assertIn("prompt", report["error"])
+        self.assertEqual(self.fixture.job_path.read_bytes(), before)
+
+    def test_generated_without_matching_per_item_receipt_becomes_unknown(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Running"
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[0]["idempotency_key"]
+        ).unlink()
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, report)
+        self.assertEqual(report["state"], "Unknown")
+        self.assertIn("item-01", report["unknown"])
+        self.assertEqual(self.fixture.read_job()["items"][0]["state"], "Unknown")
+
+    def test_historical_ledger_row_is_ignored_and_preserved(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Running"
+        foreign = dict(ledger["items"][0])
+        foreign.update(item_id="foreign", idempotency_key="d" * 64)
+        ledger["items"].append(foreign)
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_OK, report)
+        self.assertEqual(len(self.fixture.read_job()["items"]), 3)
+
+    def test_duplicate_ledger_rows_are_refused_without_mutation(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Running"
+        ledger["items"].append(dict(ledger["items"][0]))
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        before = self.fixture.job_path.read_bytes()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_FAILURE, report)
+        self.assertIn("duplicate", report["error"])
+        self.assertEqual(self.fixture.job_path.read_bytes(), before)
+
+    def test_report_counts_conserve_exact_current_plan_items(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Partial"
+        ledger["items"] = ledger["items"][:1]
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[1]["idempotency_key"]
+        ).unlink()
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
+        code, report = self.recover()
+        self.assertEqual(code, cli.EXIT_OK, report)
+        self.assertEqual(report["state"], "Partial")
+        self.assertEqual(report["completed_count"], 1)
+        self.assertEqual(report["failed_count"], 0)
+        self.assertEqual(report["unknown_count"], 0)
+        self.assertEqual(report["pending_count"], 1)
+        self.assertEqual(
+            report["completed_count"]
+            + report["failed_count"]
+            + report["unknown_count"]
+            + report["pending_count"],
+            2,
         )
 
-    def ledger(self) -> dict:
-        return job_ledger.load_ledger(self.job_path)
+    def test_explicit_pending_row_counts_as_pending_and_remaining_work(self) -> None:
+        ledger = self.fixture.read_job()
+        ledger["state"] = "Partial"
+        pending = ledger["items"][1]
+        pending.update(
+            state="Pending",
+            attempts=0,
+            attempt_id=None,
+            attempt_started_at=None,
+            receipt_id=None,
+            error_category=None,
+        )
+        self.fixture.job_path.write_text(json.dumps(ledger), encoding="utf-8")
+        receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[1]["idempotency_key"]
+        ).unlink()
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
 
-    def invocations(self) -> list[Path]:
-        return sorted(self.invocation_dir.glob("*.json"))
+        code, report = self.recover()
 
-    def cleanup(self) -> None:
-        if self._previous_env is None:
-            os.environ.pop("FAKE_CODEX_CONTROL", None)
-        else:
-            os.environ["FAKE_CODEX_CONTROL"] = self._previous_env
-        self._tmp.cleanup()
+        self.assertEqual(code, cli.EXIT_OK, report)
+        self.assertEqual(report["state"], "Partial")
+        self.assertEqual(report["completed_count"], 1)
+        self.assertEqual(report["pending_count"], 1)
+        self.assertEqual(report["remaining_generation_calls"], 1)
+        self.assertEqual(
+            report["completed_count"]
+            + report["failed_count"]
+            + report["unknown_count"]
+            + report["pending_count"],
+            2,
+        )
 
+    def test_unresolved_unknown_blocks_an_ordinary_run(self) -> None:
+        self.rewrite_item(0, "Attempting")
+        receipt_store.receipt_path(
+            self.fixture.job_path, self.receipts[0]["idempotency_key"]
+        ).unlink()
+        receipt_store.manifest_path(self.fixture.job_path).unlink()
+        code, _report = self.recover()
+        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED)
 
-class RecoveryTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.fixture = RecoveryFixture().installed()
-        self.addCleanup(self.fixture.cleanup)
-
-    def test_an_interrupted_attempt_with_evidence_becomes_generated(self) -> None:
-        self.fixture.interrupted(item_state="Attempting", with_artifact=True)
-        code, output = self.fixture.recover()
-        self.assertEqual(code, 0, output)
-        payload = json.loads(output)
-        self.assertEqual(payload["reconciled"], ["item-01"])
-        self.assertEqual(payload["unknown"], [])
-        self.assertEqual(self.fixture.ledger()["items"][0]["state"], "Generated")
-        self.assertEqual(self.fixture.ledger()["state"], "Completed")
-
-    def test_an_interrupted_attempt_without_evidence_becomes_unknown(self) -> None:
-        self.fixture.interrupted(item_state="Attempting", with_artifact=False)
-        code, output = self.fixture.recover()
+        with patch.object(
+            cli.generation_runner,
+            "run_item",
+            side_effect=AssertionError("unknown work must not be retried"),
+        ):
+            code, output = self.fixture.run_cli(
+                "run",
+                "--plan",
+                str(self.fixture.plan_path),
+                "--job",
+                str(self.fixture.job_path),
+                "--codex-bin",
+                str(SHIM),
+                *self.fixture.base_args(),
+                "--approve",
+                "--json",
+            )
         self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
-        payload = json.loads(output)
-        self.assertEqual(payload["unknown"], ["item-01"])
-        self.assertEqual(self.fixture.ledger()["items"][0]["state"], "Unknown")
-        self.assertEqual(self.fixture.ledger()["state"], "Unknown")
-
-    def test_an_unknown_item_with_evidence_becomes_generated(self) -> None:
-        self.fixture.interrupted(item_state="Unknown", with_artifact=True)
-        code, output = self.fixture.recover()
-        self.assertEqual(code, 0, output)
-        self.assertEqual(json.loads(output)["reconciled"], ["item-01"])
-        self.assertEqual(self.fixture.ledger()["items"][0]["state"], "Generated")
-
-    def test_a_tampered_artifact_does_not_count_as_evidence(self) -> None:
-        ledger = self.fixture.interrupted(item_state="Attempting", with_artifact=True)
-        receipt = self.fixture.ledger()["items"][0]
-        published = self.fixture.destination / "portrait-study" / "round-1"
-        for path in published.glob("*.png"):
-            path.write_bytes(path.read_bytes() + b"tampered")
-        code, output = self.fixture.recover()
-        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
-        self.assertEqual(json.loads(output)["unknown"], ["item-01"])
-        self.assertIsNotNone(receipt)
-        self.assertIsNotNone(ledger)
-
-    def test_the_manifest_is_rebuilt_from_verified_receipts(self) -> None:
-        self.fixture.interrupted(item_state="Attempting", with_artifact=True)
-        self.fixture.recover()
-        manifest = receipt_store.manifest_path(self.fixture.job_path)
-        self.assertTrue(manifest.is_file())
-        self.assertEqual(len(json.loads(manifest.read_text(encoding="utf-8"))), 1)
-
-    def test_recovery_makes_no_generation_call(self) -> None:
-        for state, artifact in (("Attempting", True), ("Attempting", False), ("Unknown", False)):
-            with self.subTest(state=state, artifact=artifact):
-                fixture = RecoveryFixture().installed()
-                try:
-                    fixture.interrupted(item_state=state, with_artifact=artifact)
-                    fixture.recover()
-                    self.assertEqual(fixture.invocations(), [])
-                finally:
-                    fixture.cleanup()
-
-    def test_recovery_reports_the_remaining_generation_calls(self) -> None:
-        self.fixture.interrupted(item_state="Attempting", with_artifact=True)
-        _code, output = self.fixture.recover()
-        payload = json.loads(output)
-        self.assertEqual(payload["pending_count"], 0)
-        self.assertEqual(payload["remaining_generation_calls"], 0)
-
-    def test_recovery_is_idempotent(self) -> None:
-        self.fixture.interrupted(item_state="Attempting", with_artifact=True)
-        self.fixture.recover()
-        code, output = self.fixture.recover()
-        self.assertEqual(code, 0, output)
-        self.assertEqual(json.loads(output)["reconciled"], [])
-
-    def test_a_settled_job_recovers_to_its_own_state(self) -> None:
-        self.fixture.interrupted(item_state="Attempting", with_artifact=True)
-        self.fixture.recover()
-        code, output = self.fixture.recover()
-        self.assertEqual(code, 0, output)
-        self.assertEqual(json.loads(output)["state"], "Completed")
 
 
 if __name__ == "__main__":

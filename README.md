@@ -8,6 +8,8 @@
 
 ## Status
 
+Version 0.1.2 is a locally verified release candidate. Remote CI, source/remote/tag parity, a fresh Marketplace install, a fresh-session no-spend smoke, and the separately authorized paid canary remain external release gates and are not yet run.
+
 The current source retains the verified Image Factory runtime, attributed offline prompt discovery, pinned upstream Skill snapshots, a shared conversational confirmation workflow, and a 68-case image-only Chinese documentation library. The Codex conversation is the product surface; workbench UI, project management, and video composition are outside this repository.
 
 ## Purpose
@@ -39,13 +41,8 @@ Because generation is not parameterised, features that require explicit size or 
 
 - **Conversational confirmation** — describe the goal naturally, choose a suggested direction, approve a compact creation card and quote, then accept or revise numbered results.
 - **Batch plan validation** — closed schemas, idempotency keys, and hard caps before anything is spent.
-- **Plan-bound approval** — each round records the plan hash, the round, and the number of remaining generation calls, so a rewritten plan or a partly finished batch needs a fresh approval.
-- **One writer per job** — mutating commands take a job lock, so two runs cannot independently decide the same item is pending.
-- **Reserved attempts** — an item is marked `Attempting` before the external call, so an interruption never spends twice for work that may already have run.
-- **Per-item receipts** — one atomically written receipt per artifact, and the manifest is derived by verifying those receipts against the files they name.
-- **Non-spending recovery** — `recover` settles interrupted items from receipts already on disk and refuses to guess when there is no evidence.
-- **Evaluation** — deterministic gates decide; a model-authored score is advisory, and your approve/reject labels are captured so that score can be calibrated against real decisions.
-- **Optimization as a new round** — failures are rewritten into a new prompt set rather than overwriting the previous one.
+- **Verified receipts** — every hash, size, and dimension is recomputed from the file on disk, with a second check to catch a file rewritten mid-validation.
+- **Durable ledger** — atomic writes, a governed state machine, and secret scrubbing, so an interrupted run resumes instead of regenerating.
 - **Evaluation** — deterministic gates decide; a model-authored score is advisory, and your approve/reject labels are captured so that score can be calibrated against real decisions.
 - **Optimization as a new round** — failures are rewritten into a new prompt set rather than overwriting the previous one.
 

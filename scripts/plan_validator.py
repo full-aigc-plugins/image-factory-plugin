@@ -18,10 +18,9 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-
-import contract_migrations
 from pathlib import Path
 
+import contract_migrations
 import schema_lite
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "image_batch.schema.json"
@@ -66,51 +65,9 @@ class PlanResult:
     min_dimension: int
     reject_duplicates: bool
     advisory_enabled: bool
-    require_human_labels: bool = True
-    plan_sha256: str = ""
-    migration_notes: tuple[str, ...] = ()
-
-
-def canonical_plan_sha256(result_fields: dict) -> str:
-    """Hash what a batch actually asks for: its identity, policy, and item content.
-
-    Deliberately excluded: JSON whitespace, key order, the local path a reference
-    image was read from, and migration prose. Approval binds to the work, and two
-    operators describing the same work from different directories are asking for
-    the same round.
-    """
-    encoded = json.dumps(
-        result_fields,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def plan_identity_fields(
-    *,
-    batch_id: str,
-    round_number: int,
-    limits: dict,
-    judge_policy: dict,
-    items: tuple[PlanItem, ...],
-) -> dict:
-    return {
-        "batch_id": batch_id,
-        "round": round_number,
-        "limits": limits,
-        "judge_policy": judge_policy,
-        "items": [
-            {
-                "id": item.id,
-                "prompt": item.prompt,
-                "reference_sha256": list(item.reference_sha256),
-                "idempotency_key": item.idempotency_key,
-            }
-            for item in items
-        ],
-    }
+    plan_sha256: str
+    require_human_labels: bool
+    migration_notes: tuple[str, ...]
 
 
 def file_sha256(target: Path) -> str:
@@ -152,6 +109,17 @@ def compute_idempotency_key(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def canonical_plan_sha256(result_fields: dict) -> str:
+    """Return the SHA-256 of a canonical, semantic plan representation."""
+    encoded = json.dumps(
+        result_fields,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _load_schema() -> dict:
     return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 
@@ -190,6 +158,9 @@ def validate_plan(
         min_dimension=0,
         reject_duplicates=True,
         advisory_enabled=False,
+        plan_sha256="",
+        require_human_labels=True,
+        migration_notes=(),
     )
 
     instance, coercion_error = _coerce(plan)
@@ -197,23 +168,18 @@ def validate_plan(
         assert coercion_error is not None
         return PlanResult(**{**empty.__dict__, "errors": (coercion_error,)})
 
-    # A 1.0.0 plan is upgraded before it is judged, so a historical plan can never
-    # be executed under the weaker approval posture it was written with.
     try:
         migration = contract_migrations.migrate_image_batch(instance)
     except ValueError as error:
         return PlanResult(
-            **{**empty.__dict__, "errors": (PlanError("plan_invalid", str(error)),)}
+            **{**empty.__dict__, "errors": (PlanError("plan_schema_invalid", str(error)),)}
         )
     instance = migration.document
-    migration_notes = migration.notes
-
+    empty = PlanResult(**{**empty.__dict__, "migration_notes": migration.notes})
     structural = schema_lite.validate(instance, document)
     if structural:
         errors = tuple(PlanError("plan_schema_invalid", message) for message in structural)
-        return PlanResult(
-            **{**empty.__dict__, "errors": errors, "migration_notes": migration_notes}
-        )
+        return PlanResult(**{**empty.__dict__, "errors": errors})
 
     batch_id = instance["batch_id"]
     round_number = instance["round"]
@@ -304,6 +270,41 @@ def validate_plan(
             )
         )
 
+    require_human_labels = policy.get("require_human_labels", True)
+    pass_threshold = policy.get("pass_threshold", 0.8)
+    min_dimension = policy.get("min_dimension", 256)
+    reject_duplicates = policy.get("reject_duplicates", True)
+    advisory_enabled = policy.get("advisory_enabled", False)
+    plan_sha256 = ""
+    if not errors:
+        plan_sha256 = canonical_plan_sha256(
+            {
+                "batch_id": batch_id,
+                "round": round_number,
+                "limits": {
+                    "max_images": max_images,
+                    "max_rounds": max_rounds,
+                    "require_approval_before_run": require_approval,
+                },
+                "judge_policy": {
+                    "min_dimension": min_dimension,
+                    "reject_duplicates": reject_duplicates,
+                    "pass_threshold": pass_threshold,
+                    "advisory_enabled": advisory_enabled,
+                    "require_human_labels": require_human_labels,
+                },
+                "items": [
+                    {
+                        "id": item.id,
+                        "prompt": item.prompt,
+                        "reference_sha256": list(item.reference_sha256),
+                        "idempotency_key": item.idempotency_key,
+                    }
+                    for item in items
+                ],
+            }
+        )
+
     return PlanResult(
         ok=not errors,
         batch_id=batch_id,
@@ -313,23 +314,11 @@ def validate_plan(
         require_approval_before_run=require_approval,
         max_images=max_images,
         max_rounds=max_rounds,
-        pass_threshold=policy.get("pass_threshold", 0.8),
-        min_dimension=policy.get("min_dimension", 256),
-        reject_duplicates=policy.get("reject_duplicates", True),
-        advisory_enabled=policy.get("advisory_enabled", False),
-        require_human_labels=policy.get("require_human_labels", True),
-        migration_notes=migration_notes,
-        plan_sha256=(
-            canonical_plan_sha256(
-                plan_identity_fields(
-                    batch_id=batch_id,
-                    round_number=round_number,
-                    limits=limits,
-                    judge_policy=policy,
-                    items=tuple(items),
-                )
-            )
-            if not errors
-            else ""
-        ),
+        pass_threshold=pass_threshold,
+        min_dimension=min_dimension,
+        reject_duplicates=reject_duplicates,
+        advisory_enabled=advisory_enabled,
+        plan_sha256=plan_sha256,
+        require_human_labels=require_human_labels,
+        migration_notes=migration.notes,
     )

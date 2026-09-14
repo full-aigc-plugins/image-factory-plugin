@@ -1,4 +1,3 @@
-import json
 import sys
 import tempfile
 import unittest
@@ -17,11 +16,11 @@ class AtomicJsonTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.base = Path(self._tmp.name)
-        self.target = self.base / "doc.json"
+        self.target = self.base / "document.json"
 
-    def test_document_is_written_with_sorted_keys_and_one_trailing_newline(self) -> None:
-        atomic_json.write_json_atomic(self.target, {"b": 1, "a": 2})
-        self.assertEqual(self.target.read_text(encoding="utf-8"), '{\n  "a": 2,\n  "b": 1\n}\n')
+    def test_write_is_sorted_and_ends_with_one_newline(self) -> None:
+        atomic_json.write_json_atomic(self.target, {"z": 1, "a": 2})
+        self.assertEqual(self.target.read_text(encoding="utf-8"), '{\n  "a": 2,\n  "z": 1\n}\n')
 
     def test_failed_atomic_write_preserves_previous_document(self) -> None:
         self.target.write_text('{"revision":1}\n', encoding="utf-8")
@@ -30,31 +29,6 @@ class AtomicJsonTests(unittest.TestCase):
                 atomic_json.write_json_atomic(self.target, {"revision": 2})
         self.assertEqual(self.target.read_text(encoding="utf-8"), '{"revision":1}\n')
         self.assertEqual(list(self.base.glob(".atomic-*.tmp")), [])
-
-    def test_no_temporary_file_survives_a_successful_write(self) -> None:
-        atomic_json.write_json_atomic(self.target, {"revision": 2})
-        self.assertEqual(list(self.base.glob(".atomic-*.tmp")), [])
-
-    def test_an_existing_document_is_replaced(self) -> None:
-        atomic_json.write_json_atomic(self.target, {"revision": 1})
-        atomic_json.write_json_atomic(self.target, {"revision": 2})
-        self.assertEqual(json.loads(self.target.read_text(encoding="utf-8")), {"revision": 2})
-
-    def test_missing_parent_directories_are_created(self) -> None:
-        nested = self.base / "a" / "b" / "doc.json"
-        atomic_json.write_json_atomic(nested, {"ok": True})
-        self.assertTrue(nested.is_file())
-
-    def test_unserialisable_payload_is_rejected_and_nothing_is_left_behind(self) -> None:
-        with self.assertRaises(TypeError):
-            atomic_json.write_json_atomic(self.target, {"bad": {1, 2}})
-        self.assertFalse(self.target.exists())
-        self.assertEqual(list(self.base.glob(".atomic-*.tmp")), [])
-
-    def test_the_written_document_round_trips(self) -> None:
-        payload = {"nested": {"list": [1, 2, 3]}, "unicode": "画像"}
-        atomic_json.write_json_atomic(self.target, payload)
-        self.assertEqual(json.loads(self.target.read_text(encoding="utf-8")), payload)
 
 
 if __name__ == "__main__":

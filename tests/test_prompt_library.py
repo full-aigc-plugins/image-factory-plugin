@@ -1,5 +1,6 @@
 import json
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -9,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class PromptSearchTests(unittest.TestCase):
     def invoke(self, query, limit="3"):
         return subprocess.run(
-            [str(ROOT / "bin/image-factory"), "prompt-search", query, "--limit", limit, "--json"],
+            [sys.executable, str(ROOT / "scripts/image_factory_cli.py"), "prompt-search", query, "--limit", limit, "--json"],
             capture_output=True, text=True,
         )
 

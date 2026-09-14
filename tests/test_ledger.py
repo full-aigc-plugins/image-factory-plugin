@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,8 @@ import schema_lite  # noqa: E402
 
 JOB_SCHEMA = json.loads((ROOT / "schemas/factory_job.schema.json").read_text(encoding="utf-8"))
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+ATTEMPT_1 = "1" * 32
+ATTEMPT_2 = "2" * 32
 
 
 def make_item(item_id: str, prompt: str = "a calm portrait") -> plan_validator.PlanItem:
@@ -111,14 +114,75 @@ class TransitionTests(unittest.TestCase):
         self.assertEqual(revisions, sorted(revisions))
         self.assertEqual(revisions, [1, 2, 3, 4, 5])
 
-    def test_running_cannot_be_entered_without_approval(self) -> None:
-        """1.1.0 makes approval an unavoidable step, so Running is not a shortcut."""
+    def test_plan_validated_cannot_enter_running_without_approval(self) -> None:
         self.ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
         with self.assertRaises(job_ledger.InvalidTransitionError):
             self.ledger.transition(job_ledger.JobState.RUNNING)
 
+    def test_completed_cannot_reenter_running(self) -> None:
+        for state in (
+            job_ledger.JobState.PLAN_VALIDATED,
+            job_ledger.JobState.APPROVED,
+            job_ledger.JobState.RUNNING,
+            job_ledger.JobState.COMPLETED,
+        ):
+            self.ledger.transition(state)
+        with self.assertRaises(job_ledger.InvalidTransitionError):
+            self.ledger.transition(job_ledger.JobState.RUNNING)
+
+    def test_unknown_cannot_enter_running(self) -> None:
+        for state in (
+            job_ledger.JobState.PLAN_VALIDATED,
+            job_ledger.JobState.APPROVED,
+            job_ledger.JobState.RUNNING,
+            job_ledger.JobState.UNKNOWN,
+        ):
+            self.ledger.transition(state)
+        with self.assertRaises(job_ledger.InvalidTransitionError):
+            self.ledger.transition(job_ledger.JobState.RUNNING)
+
+    def test_evaluated_may_enter_each_review_outcome(self) -> None:
+        for target in (
+            job_ledger.JobState.PENDING_APPROVAL,
+            job_ledger.JobState.ACCEPTED,
+            job_ledger.JobState.OPTIMIZED,
+        ):
+            with self.subTest(target=target.value):
+                fixture = LedgerFixture()
+                self.addCleanup(fixture.cleanup)
+                ledger = fixture.ledger()
+                ledger.write(job_ledger.new_job("portrait-study"))
+                for state in (
+                    job_ledger.JobState.PLAN_VALIDATED,
+                    job_ledger.JobState.APPROVED,
+                    job_ledger.JobState.RUNNING,
+                    job_ledger.JobState.COMPLETED,
+                    job_ledger.JobState.EVALUATED,
+                ):
+                    ledger.transition(state)
+                self.assertEqual(ledger.transition(target)["state"], target.value)
+
     def test_failed_is_terminal(self) -> None:
-        self.ledger.transition(job_ledger.JobState.FAILED)
+        for state in (
+            job_ledger.JobState.PLAN_VALIDATED,
+            job_ledger.JobState.APPROVED,
+            job_ledger.JobState.RUNNING,
+            job_ledger.JobState.FAILED,
+        ):
+            self.ledger.transition(state)
+        with self.assertRaises(job_ledger.InvalidTransitionError):
+            self.ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
+
+    def test_accepted_is_terminal(self) -> None:
+        for state in (
+            job_ledger.JobState.PLAN_VALIDATED,
+            job_ledger.JobState.APPROVED,
+            job_ledger.JobState.RUNNING,
+            job_ledger.JobState.COMPLETED,
+            job_ledger.JobState.EVALUATED,
+            job_ledger.JobState.ACCEPTED,
+        ):
+            self.ledger.transition(state)
         with self.assertRaises(job_ledger.InvalidTransitionError):
             self.ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
 
@@ -134,8 +198,14 @@ class TransitionTests(unittest.TestCase):
         self.assertEqual(states, reachable)
 
     def test_history_records_a_note_when_given(self) -> None:
+        for state in (
+            job_ledger.JobState.PLAN_VALIDATED,
+            job_ledger.JobState.APPROVED,
+            job_ledger.JobState.RUNNING,
+        ):
+            self.ledger.transition(state)
         payload = self.ledger.transition(job_ledger.JobState.FAILED, note="plan rejected")
-        self.assertEqual(payload["history"][0]["note"], "plan rejected")
+        self.assertEqual(payload["history"][-1]["note"], "plan rejected")
 
 
 class PersistenceTests(unittest.TestCase):
@@ -149,6 +219,16 @@ class PersistenceTests(unittest.TestCase):
         leftovers = [entry.name for entry in self.fixture.base.iterdir() if entry.name != "job.json"]
         self.assertEqual(leftovers, [])
         self.assertTrue(self.fixture.path.is_file())
+
+    def test_failed_shared_atomic_write_preserves_previous_ledger(self) -> None:
+        ledger = self.fixture.ledger()
+        ledger.write(job_ledger.new_job("portrait-study"))
+        before = self.fixture.path.read_bytes()
+        with mock.patch("atomic_json.json.dump", side_effect=OSError("injected write failure")):
+            with self.assertRaises(OSError):
+                ledger.transition(job_ledger.JobState.PLAN_VALIDATED)
+        self.assertEqual(self.fixture.path.read_bytes(), before)
+        self.assertEqual(list(self.fixture.base.glob(".atomic-*.tmp")), [])
 
     def test_written_ledger_validates_against_the_schema(self) -> None:
         ledger = self.fixture.ledger()
@@ -175,13 +255,38 @@ class PersistenceTests(unittest.TestCase):
         with self.assertRaises(job_ledger.LedgerCorruptError):
             ledger.read()
 
+    def test_legacy_batch_secret_is_refused_before_normalization(self) -> None:
+        payload = job_ledger.new_job("portrait-study")
+        payload["schema_version"] = "1.0.0"
+        payload["approval"] = None
+        payload.pop("evaluation")
+        payload.pop("optimization")
+        payload["batch"] = {"api_key": "must-not-be-hidden-by-migration"}
+        self.fixture.path.write_text(json.dumps(payload), encoding="utf-8")
+        with self.assertRaises(job_ledger.LedgerCorruptError):
+            self.fixture.ledger().read()
+
     def test_corrupt_json_is_refused(self) -> None:
         self.fixture.path.write_text("{not json", encoding="utf-8")
         with self.assertRaises(job_ledger.LedgerCorruptError):
             self.fixture.ledger().read()
 
+    def test_valid_json_migration_failure_is_not_reported_as_json_syntax(self) -> None:
+        self.fixture.path.write_text(json.dumps({"schema_version": "2.0.0"}), encoding="utf-8")
+        with self.assertRaises(job_ledger.LedgerCorruptError) as raised:
+            self.fixture.ledger().read()
+        self.assertIn("could not be migrated", str(raised.exception))
+        self.assertNotIn("not valid JSON", str(raised.exception))
+
     def test_missing_required_fields_are_refused(self) -> None:
-        self.fixture.path.write_text(json.dumps({"schema_version": "1.0.0"}), encoding="utf-8")
+        self.fixture.path.write_text(json.dumps({"schema_version": "1.1.0"}), encoding="utf-8")
+        with self.assertRaises(job_ledger.LedgerCorruptError):
+            self.fixture.ledger().read()
+
+    def test_schema_invalid_ledger_is_refused_on_load(self) -> None:
+        payload = job_ledger.new_job("portrait-study")
+        payload["unexpected"] = True
+        self.fixture.path.write_text(json.dumps(payload), encoding="utf-8")
         with self.assertRaises(job_ledger.LedgerCorruptError):
             self.fixture.ledger().read()
 
@@ -202,6 +307,21 @@ class PersistenceTests(unittest.TestCase):
         with self.assertRaises(job_ledger.LedgerCorruptError):
             self.fixture.ledger().write(payload)
 
+    def test_legacy_ledger_is_migrated_in_memory_without_rewriting_disk(self) -> None:
+        payload = job_ledger.new_job("portrait-study")
+        payload["schema_version"] = "1.0.0"
+        payload["approval"] = None
+        payload.pop("evaluation")
+        payload.pop("optimization")
+        raw = json.dumps(payload, sort_keys=True)
+        self.fixture.path.write_text(raw, encoding="utf-8")
+
+        loaded = self.fixture.ledger().read()
+
+        self.assertEqual(loaded["schema_version"], "1.1.0")
+        self.assertEqual(loaded["approval"], {"current": None, "history": []})
+        self.assertEqual(self.fixture.path.read_text(encoding="utf-8"), raw)
+
 
 class ItemTrackingTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -210,6 +330,56 @@ class ItemTrackingTests(unittest.TestCase):
         self.ledger = self.fixture.ledger()
         self.ledger.write(job_ledger.new_job("portrait-study"))
         self.items = (make_item("item-01"), make_item("item-02"))
+        self.item = self.items[0]
+
+    def test_attempt_is_counted_once_when_it_starts(self) -> None:
+        started = self.ledger.start_attempt(self.item, ATTEMPT_1)
+        completed = self.ledger.complete_attempt(self.item, ATTEMPT_1, "receipt-1")
+        self.assertEqual(started["items"][0]["attempts"], 1)
+        self.assertEqual(completed["items"][0]["attempts"], 1)
+
+    def test_unknown_attempt_is_never_pending(self) -> None:
+        self.ledger.start_attempt(self.item, ATTEMPT_1)
+        payload = self.ledger.mark_attempt_unknown(self.item.id, ATTEMPT_1)
+        self.assertEqual(payload["items"][0]["attempts"], 1)
+        self.assertEqual(self.ledger.pending_items((self.item,)), [])
+
+    def test_attempt_completion_requires_the_active_attempt(self) -> None:
+        self.ledger.start_attempt(self.item, ATTEMPT_1)
+        with self.assertRaises(ValueError):
+            self.ledger.complete_attempt(self.item, ATTEMPT_2, "receipt-1")
+
+    def test_attempt_key_cannot_be_started_twice(self) -> None:
+        self.ledger.start_attempt(self.item, ATTEMPT_1)
+        with self.assertRaises(ValueError):
+            self.ledger.start_attempt(self.item, ATTEMPT_2)
+
+    def test_failure_does_not_increment_and_requires_the_active_attempt(self) -> None:
+        self.ledger.start_attempt(self.item, ATTEMPT_1)
+        with self.assertRaises(ValueError):
+            self.ledger.fail_attempt(self.item, ATTEMPT_2, "generation_failed")
+        payload = self.ledger.fail_attempt(self.item, ATTEMPT_1, "generation_failed")
+        self.assertEqual(payload["items"][0]["attempts"], 1)
+
+    def test_unknown_requires_the_active_attempt(self) -> None:
+        self.ledger.start_attempt(self.item, ATTEMPT_1)
+        with self.assertRaises(ValueError):
+            self.ledger.mark_attempt_unknown(self.item.id, ATTEMPT_2)
+
+    def test_start_refuses_every_recorded_outcome(self) -> None:
+        for state in ("Generated", "Failed", "Skipped", "Unknown"):
+            with self.subTest(state=state):
+                fixture = LedgerFixture()
+                self.addCleanup(fixture.cleanup)
+                ledger = fixture.ledger()
+                ledger.write(job_ledger.new_job("portrait-study"))
+                ledger.record_item(self.item, state=state)
+                with self.assertRaises(ValueError):
+                    ledger.start_attempt(self.item, ATTEMPT_1)
+
+    def test_attempt_id_must_be_uuid_hex(self) -> None:
+        with self.assertRaises(ValueError):
+            self.ledger.start_attempt(self.item, "attempt-1")
 
     def test_fresh_job_has_every_item_pending(self) -> None:
         pending = self.ledger.pending_items(self.items)
@@ -238,6 +408,8 @@ class ItemTrackingTests(unittest.TestCase):
         self.assertEqual(entry["receipt_id"], "rec-1")
         self.assertEqual(entry["idempotency_key"], self.items[0].idempotency_key)
         self.assertIsNone(entry["error_category"])
+        self.assertIsNone(entry["attempt_id"])
+        self.assertIsNone(entry["attempt_started_at"])
 
     def test_ledger_with_items_validates_against_the_schema(self) -> None:
         payload = self.ledger.record_item(self.items[0], state="Generated", receipt_id="rec-1")
@@ -250,6 +422,99 @@ class ItemTrackingTests(unittest.TestCase):
     def test_marking_an_item_pending_is_not_counted_as_an_attempt(self) -> None:
         payload = self.ledger.record_item(self.items[0], state="Pending")
         self.assertEqual(payload["items"][0]["attempts"], 0)
+
+
+class ApprovalTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = LedgerFixture()
+        self.addCleanup(self.fixture.cleanup)
+        self.ledger = self.fixture.ledger()
+        self.ledger.write(job_ledger.new_job("portrait-study"))
+
+    def test_approval_is_bound_to_exact_plan_and_count(self) -> None:
+        self.ledger.bind_plan("a" * 64, 1, 2)
+        self.ledger.record_approval("a" * 64, 1, 2, "run_approve_flag")
+        self.assertTrue(self.ledger.approval_matches("a" * 64, 1, 2))
+        self.assertFalse(self.ledger.approval_matches("b" * 64, 1, 2))
+        self.assertFalse(self.ledger.approval_matches("a" * 64, 1, 1))
+
+    def test_binding_a_different_plan_clears_current_but_preserves_history(self) -> None:
+        self.ledger.bind_plan("a" * 64, 1, 2)
+        self.ledger.record_approval("a" * 64, 1, 2, "run_approve_flag")
+        payload = self.ledger.bind_plan("b" * 64, 2, 1)
+        self.assertIsNone(payload["approval"]["current"])
+        self.assertEqual(len(payload["approval"]["history"]), 1)
+        self.assertEqual(
+            payload["batch"],
+            {
+                "batch_id": "portrait-study",
+                "round": 2,
+                "plan_sha256": "b" * 64,
+                "image_count": 1,
+            },
+        )
+
+    def test_approval_source_must_be_the_cli_flag(self) -> None:
+        self.ledger.bind_plan("a" * 64, 1, 2)
+        with self.assertRaises(ValueError):
+            self.ledger.record_approval("a" * 64, 1, 2, "conversation")
+
+    def test_approval_must_match_the_bound_batch(self) -> None:
+        self.ledger.bind_plan("a" * 64, 1, 2)
+        with self.assertRaises(ValueError):
+            self.ledger.record_approval("b" * 64, 1, 2, "run_approve_flag")
+        self.assertFalse(self.ledger.approval_matches("b" * 64, 1, 2))
+        self.assertEqual(self.ledger.read()["approval"]["history"], [])
+
+    def test_approval_count_is_remaining_calls_not_bound_plan_total(self) -> None:
+        self.ledger.bind_plan("a" * 64, 1, 3)
+        payload = self.ledger.record_approval("a" * 64, 1, 1, "run_approve_flag")
+        self.assertEqual(payload["batch"]["image_count"], 3)
+        self.assertEqual(payload["approval"]["current"]["image_count"], 1)
+        self.assertTrue(self.ledger.approval_matches("a" * 64, 1, 1))
+        self.assertFalse(self.ledger.approval_matches("a" * 64, 1, 3))
+
+
+class EvaluationAndOptimizationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = LedgerFixture()
+        self.addCleanup(self.fixture.cleanup)
+        self.ledger = self.fixture.ledger()
+        self.ledger.write(job_ledger.new_job("portrait-study"))
+        self.ledger.bind_plan("a" * 64, 1, 2)
+        for state in (job_ledger.JobState.PLAN_VALIDATED, job_ledger.JobState.APPROVED,
+                      job_ledger.JobState.RUNNING, job_ledger.JobState.COMPLETED):
+            self.ledger.transition(state)
+
+    def test_evaluation_evidence_is_recorded(self) -> None:
+        payload = self.ledger.record_evaluation("b" * 64, "fail")
+        self.assertEqual(payload["state"], "Evaluated")
+        self.assertEqual(payload["evaluation"]["scores_sha256"], "b" * 64)
+        self.assertRegex(payload["evaluation"]["evaluated_at"], ISO)
+
+    def test_record_evaluation_final_is_one_revision_and_one_history_entry(self) -> None:
+        before = self.ledger.read()
+        after = self.ledger.record_evaluation_final("a" * 64, "pass")
+        self.assertEqual(after["state"], "Accepted")
+        self.assertEqual(after["revision"], before["revision"] + 1)
+        self.assertEqual(len(after["history"]), len(before["history"]) + 1)
+        self.assertEqual(after["history"][-1]["from_state"], "Completed")
+        self.assertEqual(after["history"][-1]["to_state"], "Accepted")
+
+    def test_pending_evaluation_finalizes_directly(self) -> None:
+        after = self.ledger.record_evaluation_final("b" * 64, "pending_approval")
+        self.assertEqual(after["state"], "PendingApproval")
+
+    def test_failed_evaluation_finalizes_as_evaluated(self) -> None:
+        after = self.ledger.record_evaluation_final("c" * 64, "fail")
+        self.assertEqual(after["state"], "Evaluated")
+
+    def test_optimization_records_next_plan_and_clears_current_approval(self) -> None:
+        self.ledger.record_evaluation("b" * 64, "fail")
+        payload = self.ledger.record_optimization("c" * 64, 2)
+        self.assertEqual(payload["state"], "Optimized")
+        self.assertEqual(payload["optimization"]["next_plan_sha256"], "c" * 64)
+        self.assertIsNone(payload["approval"]["current"])
 
 
 class UsageLimitTests(unittest.TestCase):
@@ -282,180 +547,6 @@ class UsageLimitTests(unittest.TestCase):
                 payload = job_ledger.new_job("portrait-study")
                 payload["error_category"] = category
                 self.assertEqual(schema_lite.validate(payload, JOB_SCHEMA), [], category)
-
-
-class ApprovalBindingTests(unittest.TestCase):
-    """An approval authorizes one plan, one round, and one call count — nothing else."""
-
-    def setUp(self) -> None:
-        self.fixture = LedgerFixture()
-        self.addCleanup(self.fixture.cleanup)
-        self.ledger = self.fixture.ledger()
-        self.ledger.write(job_ledger.new_job("portrait-study"))
-
-    def test_approval_is_bound_to_exact_plan_and_count(self) -> None:
-        self.ledger.record_approval("a" * 64, 1, 2, "run_approve_flag")
-        self.assertTrue(self.ledger.approval_matches("a" * 64, 1, 2))
-        self.assertFalse(self.ledger.approval_matches("b" * 64, 1, 2))
-        self.assertFalse(self.ledger.approval_matches("a" * 64, 1, 1))
-        self.assertFalse(self.ledger.approval_matches("a" * 64, 2, 2))
-
-    def test_a_job_without_approval_matches_nothing(self) -> None:
-        self.assertFalse(self.ledger.approval_matches("a" * 64, 1, 2))
-
-    def test_only_a_provable_source_is_accepted(self) -> None:
-        with self.assertRaises(ValueError):
-            self.ledger.record_approval("a" * 64, 1, 2, "trust_me")
-
-    def test_approval_history_accumulates_and_current_follows(self) -> None:
-        self.ledger.record_approval("a" * 64, 1, 2, "run_approve_flag")
-        payload = self.ledger.record_approval("b" * 64, 2, 1, "run_approve_flag")
-        self.assertEqual(len(payload["approval"]["history"]), 2)
-        self.assertEqual(payload["approval"]["current"]["plan_hash"], "b" * 64)
-
-    def test_binding_a_different_plan_clears_current_and_keeps_history(self) -> None:
-        self.ledger.record_approval("a" * 64, 1, 2, "run_approve_flag")
-        payload = self.ledger.bind_plan("b" * 64, 2, 1)
-        self.assertIsNone(payload["approval"]["current"])
-        self.assertEqual(len(payload["approval"]["history"]), 1)
-        self.assertFalse(self.ledger.approval_matches("a" * 64, 1, 2))
-
-    def test_binding_the_same_plan_keeps_the_approval(self) -> None:
-        self.ledger.record_approval("a" * 64, 1, 2, "run_approve_flag")
-        payload = self.ledger.bind_plan("a" * 64, 1, 2)
-        self.assertTrue(self.ledger.approval_matches("a" * 64, 1, 2))
-        self.assertEqual(payload["batch"]["image_count"], 2)
-
-    def test_binding_stores_only_identity_and_count(self) -> None:
-        payload = self.ledger.bind_plan("a" * 64, 1, 2)
-        self.assertEqual(
-            sorted(payload["batch"]),
-            ["batch_id", "image_count", "plan_hash", "round"],
-        )
-        self.assertEqual(payload["batch"]["batch_id"], payload["job_id"])
-
-    def test_a_bound_ledger_validates_against_the_schema(self) -> None:
-        self.ledger.bind_plan("a" * 64, 1, 2)
-        self.ledger.record_approval("a" * 64, 1, 2, "run_approve_flag")
-        payload = self.ledger.read()
-        self.assertEqual(schema_lite.validate(payload, JOB_SCHEMA), [])
-
-
-class AttemptLifecycleTests(unittest.TestCase):
-    """An attempt is a fact about a call that may have happened, so it is counted once."""
-
-    def setUp(self) -> None:
-        self.fixture = LedgerFixture()
-        self.addCleanup(self.fixture.cleanup)
-        self.ledger = self.fixture.ledger()
-        self.ledger.write(job_ledger.new_job("portrait-study"))
-        self.item = make_item("item-01")
-
-    def test_attempt_is_counted_once_when_it_starts(self) -> None:
-        started = self.ledger.start_attempt(self.item, "attempt-1")
-        completed = self.ledger.complete_attempt(self.item, "attempt-1", "receipt-1")
-        self.assertEqual(started["items"][0]["attempts"], 1)
-        self.assertEqual(completed["items"][0]["attempts"], 1)
-
-    def test_starting_records_the_attempt_identity_and_time(self) -> None:
-        payload = self.ledger.start_attempt(self.item, "attempt-1")
-        entry = payload["items"][0]
-        self.assertEqual(entry["state"], "Attempting")
-        self.assertEqual(entry["attempt_id"], "attempt-1")
-        self.assertRegex(entry["attempt_started_at"], ISO)
-
-    def test_unknown_attempt_is_never_pending(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
-        self.ledger.mark_attempt_unknown(self.item.id, "attempt-1")
-        self.assertEqual(self.ledger.pending_items((self.item,)), [])
-
-    def test_an_interrupted_item_is_never_started_again(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
-        with self.assertRaises(job_ledger.InvalidTransitionError):
-            self.ledger.start_attempt(self.item, "attempt-2")
-
-    def test_a_generated_item_is_never_started_again(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
-        self.ledger.complete_attempt(self.item, "attempt-1", "receipt-1")
-        with self.assertRaises(job_ledger.InvalidTransitionError):
-            self.ledger.start_attempt(self.item, "attempt-2")
-
-    def test_completing_with_a_stale_attempt_id_is_refused(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
-        with self.assertRaises(job_ledger.InvalidTransitionError):
-            self.ledger.complete_attempt(self.item, "attempt-2", "receipt-1")
-
-    def test_failing_records_the_error_category(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
-        payload = self.ledger.fail_attempt(self.item, "attempt-1", "timeout")
-        entry = payload["items"][0]
-        self.assertEqual(entry["state"], "Failed")
-        self.assertEqual(entry["error_category"], "timeout")
-        self.assertEqual(entry["attempts"], 1)
-
-    def test_failing_with_a_stale_attempt_id_is_refused(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
-        with self.assertRaises(job_ledger.InvalidTransitionError):
-            self.ledger.fail_attempt(self.item, "attempt-2", "timeout")
-
-    def test_completing_requires_a_receipt_id(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
-        with self.assertRaises(ValueError):
-            self.ledger.complete_attempt(self.item, "attempt-1", "")
-
-    def test_an_unknown_category_is_refused(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
-        with self.assertRaises(ValueError):
-            self.ledger.fail_attempt(self.item, "attempt-1", "not_a_category")
-
-    def test_a_lifecycle_ledger_validates_against_the_schema(self) -> None:
-        self.ledger.start_attempt(self.item, "attempt-1")
-        self.ledger.mark_attempt_unknown(self.item.id, "attempt-1")
-        self.assertEqual(schema_lite.validate(self.ledger.read(), JOB_SCHEMA), [])
-
-
-class StateMachineSafetyTests(unittest.TestCase):
-    """No transition may return a settled job to spending without a fresh approval."""
-
-    def setUp(self) -> None:
-        self.fixture = LedgerFixture()
-        self.addCleanup(self.fixture.cleanup)
-
-    def locked(self, state: str) -> job_ledger.JobLedger:
-        ledger = self.fixture.ledger()
-        payload = job_ledger.new_job("portrait-study")
-        payload["state"] = state
-        ledger.write(payload)
-        return ledger
-
-    def test_settled_states_cannot_return_to_running(self) -> None:
-        for state in ("PlanValidated", "Unknown", "Completed"):
-            with self.subTest(state=state):
-                ledger = self.locked(state)
-                with self.assertRaises(job_ledger.InvalidTransitionError):
-                    ledger.transition(job_ledger.JobState.RUNNING)
-
-    def test_evaluated_may_move_to_the_next_cycle(self) -> None:
-        for target in ("PendingApproval", "Accepted", "Optimized"):
-            with self.subTest(target=target):
-                ledger = self.locked("Evaluated")
-                payload = ledger.transition(target)
-                self.assertEqual(payload["state"], target)
-
-    def test_accepted_and_failed_are_terminal(self) -> None:
-        for state in ("Accepted", "Failed"):
-            with self.subTest(state=state):
-                ledger = self.locked(state)
-                for target in ("Running", "PlanValidated", "PendingApproval", "Approved"):
-                    with self.subTest(state=state, target=target):
-                        with self.assertRaises(job_ledger.InvalidTransitionError):
-                            ledger.transition(target)
-
-    def test_running_is_reachable_only_through_approval(self) -> None:
-        ledger = self.locked("PlanValidated")
-        ledger.transition(job_ledger.JobState.PENDING_APPROVAL)
-        ledger.transition(job_ledger.JobState.APPROVED)
-        self.assertEqual(ledger.transition(job_ledger.JobState.RUNNING)["state"], "Running")
 
 
 if __name__ == "__main__":

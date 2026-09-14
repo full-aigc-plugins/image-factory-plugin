@@ -1,6 +1,6 @@
 # Codex Image Factory 0.1.2 Production Hardening Design Specification
 
-> Status: approved for implementation planning; not implemented. 2026-09-14.
+> Status: implemented as a locally verified 0.1.2 release candidate; external publication, remote CI, parity, clean-install, fresh-session, and paid-canary gates remain pending. Not production-ready. 2026-09-14.
 
 ## Goal
 
@@ -155,8 +155,12 @@ stateDiagram-v2
     Running --> Partial
     Running --> Unknown
     Running --> Failed
-    Completed --> Evaluated
-    Partial --> Evaluated: no pending calls
+    Completed --> Evaluated: failed evaluation
+    Completed --> PendingApproval: approval remains
+    Completed --> Accepted: evaluation passes
+    Partial --> Evaluated: failed evaluation, no pending calls
+    Partial --> PendingApproval: approval remains, no pending calls
+    Partial --> Accepted: evaluation passes, no pending calls
     Partial --> PlanValidated: pending calls and fresh quote
     Unknown --> Completed: receipt reconciliation proves all results
     Unknown --> Partial: reconciliation proves a partial result
@@ -164,7 +168,9 @@ stateDiagram-v2
     Evaluated --> PendingApproval
     Evaluated --> Accepted
     Evaluated --> Optimized
-    PendingApproval --> Evaluated: labels supplied
+    PendingApproval --> Evaluated: labels reject
+    PendingApproval --> PendingApproval: labels incomplete
+    PendingApproval --> Accepted: labels approve
     Optimized --> PlanValidated
     Accepted --> [*]
     Failed --> [*]
@@ -184,9 +190,10 @@ Additional rules:
   ambiguous and becomes `Unknown`. A definite producer rejection, quota event, or
   deterministic collection failure becomes `Failed`; neither state is retried
   automatically.
-- `evaluate` performs `Completed/Partial -> Evaluated`, then maps `pass` to
-  `Accepted`, `pending_approval` to `PendingApproval`, and leaves a deterministic
-  or human rejection in `Evaluated` for explicit optimization.
+- `evaluate` records one direct transition from `Completed`, `Partial`, or
+  `PendingApproval`: `pass` becomes `Accepted`, `pending_approval` becomes
+  `PendingApproval`, and deterministic or human rejection becomes `Evaluated`
+  for explicit optimization.
 - `optimize` requires the job, scores, and current plan to agree before performing
   `Evaluated -> Optimized`.
 
@@ -207,6 +214,55 @@ Recovery follows this evidence order:
 6. Mark an unmatched stale `Attempting` item `Unknown`.
 7. Rebuild the aggregate manifest from verified receipts.
 8. Derive `Completed`, `Partial`, or `Unknown` without making a generation call.
+
+## Path and evaluation commit safety
+
+- Every mutating command canonicalizes its participating input and output paths
+  before the first write. A file output may not alias the job ledger, plan,
+  scores input, labels, advisory input, rewrite input, or destination directory
+  used by that command.
+- Alias checks use absolute resolved paths with `strict=False`, so `..`,
+  symlinked parents, and alternative relative spellings cannot bypass them.
+- Mutating-command preflight runs before acquiring the job lock, so a refused
+  command does not create or alter even the lock sidecar. `run` checks its
+  effective default or explicit Codex home, generation directory, and binary.
+- For `run` and `recover`, preflight performs read-only plan validation and then
+  closes over every deterministic write target: lock, compatibility manifest,
+  per-item receipt tree, work and last-message trees, and current-round artifact
+  directories/files. An input file may not be equal to or descend from any tree
+  the command can create, replace, or write.
+- Every current-plan reference image is a protected input. For an approved run,
+  each pending item's references are copied under the predeclared immutable
+  reference-snapshot tree before its attempt is recorded. Snapshot and source
+  hashes must still equal the plan-bound reference hashes after copying, and
+  Codex receives only those snapshots. Recovery validates references but never
+  creates snapshots or invokes generation.
+- Refusal happens before any participating file or ledger byte changes.
+- Evaluation writes the scores document atomically, then records the evaluation
+  evidence and its final batch state in one atomic ledger mutation.
+- The single evaluation ledger mutation maps `fail` to `Evaluated`, `pass` to
+  `Accepted`, and `pending_approval` to `PendingApproval`.
+- If execution stops after scores publication but before the ledger mutation,
+  the unchanged source batch state can safely repeat evaluation. There is no
+  intermediate persisted `Evaluated` state for a pass or pending decision.
+
+## Definite failed-item disposition
+
+- A `Partial` job is evaluable only when every current-plan item has a durable
+  terminal row and no current item is `Pending`, `Attempting`, or `Unknown`.
+- `Generated` rows require the exact verified current-plan receipt already
+  defined by the evaluation contract.
+- Terminal-row eligibility and contradictory-receipt checks happen before the
+  scores file or job ledger can be mutated, so refusals preserve both byte for
+  byte.
+- `Failed` and `Skipped` rows are evaluated without a receipt and therefore
+  produce the deterministic `missing_artifact` gate failure. Their original
+  ledger error category and attempt history remain unchanged.
+- A batch containing a `Failed` or `Skipped` current item finalizes directly to
+  `Evaluated` with decision `fail`.
+- Optimization may then create a new round only after the user supplies an
+  explicit rewrite or explicit `retry-unchanged` instruction for each failed
+  item. No failed item becomes pending and no generation retry is automatic.
 
 ## Crash matrix
 

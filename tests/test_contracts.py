@@ -104,6 +104,15 @@ class SchemaContractTests(unittest.TestCase):
         self.assertEqual(limits["required"], ["max_images", "max_rounds", "require_approval_before_run"])
         self.assertEqual(limits["properties"]["require_approval_before_run"], {"const": True})
 
+    def test_image_plan_1_1_requires_both_human_gates(self) -> None:
+        schema = load_schema("image_batch.schema.json")
+        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.1.0")
+        limits = schema["$defs"]["batchLimits"]
+        policy = schema["$defs"]["judgePolicy"]
+        self.assertEqual(limits["properties"]["require_approval_before_run"], {"const": True})
+        self.assertIn("require_human_labels", policy["required"])
+        self.assertEqual(policy["properties"]["require_human_labels"], {"const": True})
+
     def test_artifact_receipt_shape(self) -> None:
         schema = load_schema("artifact_receipt.schema.json")
         props = schema["properties"]
@@ -149,10 +158,10 @@ class SchemaContractTests(unittest.TestCase):
             [
                 "Draft",
                 "PlanValidated",
-                "PendingApproval",
                 "Approved",
                 "Running",
                 "Evaluated",
+                "PendingApproval",
                 "Optimized",
                 "Accepted",
                 "Completed",
@@ -184,18 +193,7 @@ class SchemaContractTests(unittest.TestCase):
         self.assertEqual(props["revision"]["minimum"], 1)
         self.assertEqual(props["schema_version"]["const"], "1.1.0")
 
-    def test_image_plan_1_1_requires_both_human_gates(self) -> None:
-        """A 1.1.0 plan cannot be constructed that skips approval or human labels."""
-        schema = load_schema("image_batch.schema.json")
-        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.1.0")
-        limits = schema["$defs"]["batchLimits"]
-        policy = schema["$defs"]["judgePolicy"]
-        self.assertEqual(limits["properties"]["require_approval_before_run"], {"const": True})
-        self.assertIn("require_human_labels", policy["required"])
-        self.assertEqual(policy["properties"]["require_human_labels"], {"const": True})
-
     def test_factory_job_1_1_exposes_transaction_fields(self) -> None:
-        """The 1.1.0 job records approval history and an explicit attempt lifecycle."""
         schema = load_schema("factory_job.schema.json")
         self.assertEqual(schema["properties"]["schema_version"]["const"], "1.1.0")
         self.assertIn("PendingApproval", schema["properties"]["state"]["enum"])
@@ -205,6 +203,27 @@ class SchemaContractTests(unittest.TestCase):
         self.assertIn("Unknown", item["properties"]["state"]["enum"])
         self.assertIn("attempt_id", item["required"])
         self.assertFalse(schema["$defs"]["approvalRecord"]["additionalProperties"])
+
+    def test_factory_job_transaction_records_are_closed_and_typed(self) -> None:
+        schema = load_schema("factory_job.schema.json")
+        for name in (
+            "batchRecord",
+            "approvalRecord",
+            "approvalLedger",
+            "evaluationRecord",
+            "optimizationRecord",
+            "jobItem",
+        ):
+            with self.subTest(definition=name):
+                self.assertIs(schema["$defs"][name]["additionalProperties"], False)
+        self.assertEqual(
+            schema["$defs"]["batchRecord"]["properties"]["plan_sha256"]["pattern"],
+            "^[0-9a-f]{64}$",
+        )
+        self.assertEqual(
+            schema["$defs"]["approvalRecord"]["properties"]["approved_at"]["format"],
+            "date-time",
+        )
 
     def test_scores_shape(self) -> None:
         schema = load_schema("scores.schema.json")

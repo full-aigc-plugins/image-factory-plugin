@@ -18,9 +18,11 @@ assert exactly how Codex was invoked.
 
 import json
 import os
+import shutil
+import signal
 import sys
-import tempfile
 import time
+import uuid
 from pathlib import Path
 
 PNG_HEADER = (
@@ -35,25 +37,6 @@ PNG_HEADER = (
 def load_control() -> tuple[dict, Path]:
     control_path = Path(os.environ["FAKE_CODEX_CONTROL"])
     return json.loads(control_path.read_text(encoding="utf-8")), control_path
-
-
-def record_invocation(control: dict, argv: list) -> Path | None:
-    """Write durable proof that this process really ran, before doing any work.
-
-    Written atomically and *before* the configured delay so a test can observe the
-    invocation while the child is still running. This is what makes a concurrency
-    claim checkable: the number of these files is the number of calls that were
-    actually made.
-    """
-    directory = control.get("invocation_dir")
-    if not directory:
-        return None
-    target_dir = Path(directory)
-    target_dir.mkdir(parents=True, exist_ok=True)
-    handle, name = tempfile.mkstemp(dir=str(target_dir), prefix="invocation-", suffix=".json")
-    with os.fdopen(handle, "w", encoding="utf-8") as stream:
-        json.dump({"pid": os.getpid(), "argv": argv}, stream, sort_keys=True)
-    return Path(name)
 
 
 def emit(payload: dict) -> None:
@@ -102,15 +85,27 @@ def main() -> int:
     (control_path.parent / "fake-codex-argv.json").write_text(
         json.dumps({"argv": argv}, indent=2), encoding="utf-8"
     )
+    invocation_dir = control.get("invocation_dir")
+    if invocation_dir:
+        evidence_dir = Path(invocation_dir)
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        evidence = evidence_dir / f"{os.getpid()}-{uuid.uuid4().hex}.json"
+        temporary = evidence.with_suffix(".tmp")
+        with temporary.open("x", encoding="utf-8") as handle:
+            json.dump({"pid": os.getpid(), "argv": argv}, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, evidence)
+    delay = float(control.get("delay_before_result_seconds", 0))
+    if delay:
+        time.sleep(delay)
+
+    if control.get("mode") == "signal":
+        os.kill(os.getpid(), signal.SIGTERM)
 
     mode = control.get("mode", "success")
     session = control.get("session_id", "session-fake")
     call_id = next_call_id(control_path, control.get("call_id"))
-
-    record_invocation(control, argv)
-    delay = float(control.get("delay_before_result_seconds", 0) or 0)
-    if delay > 0:
-        time.sleep(delay)
 
     last_message = None
     if "-o" in argv:

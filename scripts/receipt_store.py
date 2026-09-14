@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Store one verified receipt per produced artifact, and derive the manifest from them.
-
-The aggregate manifest used to be the only record of what a run produced, which
-made it the weakest link: a single write described every artifact, so an
-interruption could lose them all, and nothing re-checked the files it named. Here
-each item's receipt is its own file, written atomically under its idempotency key,
-and the manifest is rebuilt by reading them back.
-
-"Verified" is not a claim about the producer; it is a recheck done on read. A
-receipt is only accepted when it matches the published schema and its artifact
-still matches the recorded hash, byte count, and dimensions. A tampered or missing
-file is reported through `unverified_receipts` rather than being quietly dropped,
-because a caller deciding what to do next needs to tell "not produced" apart from
-"produced and then changed".
-"""
+"""Durable, schema-checked storage for per-item artifact receipts."""
 
 from __future__ import annotations
 
@@ -24,13 +10,12 @@ import artifact_collector
 import atomic_json
 import schema_lite
 
-RECEIPT_SCHEMA_PATH = (
-    Path(__file__).resolve().parents[1] / "schemas" / "artifact_receipt.schema.json"
-)
+
+SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "artifact_receipt.schema.json"
 
 
-class ReceiptError(Exception):
-    """A receipt could not be stored because it is invalid or conflicts with an existing one."""
+class ReceiptStoreError(ValueError):
+    """A receipt is malformed, duplicated, unreadable, or fails artifact verification."""
 
 
 def receipt_directory(job_path: Path) -> Path:
@@ -45,77 +30,114 @@ def manifest_path(job_path: Path) -> Path:
     return Path(str(job_path) + ".receipts.json")
 
 
-def _schema() -> dict:
-    return json.loads(RECEIPT_SCHEMA_PATH.read_text(encoding="utf-8"))
+def _validate(receipt: object, source: Path | None = None) -> dict:
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    violations = schema_lite.validate(receipt, schema)
+    if violations:
+        location = f" at {source}" if source is not None else ""
+        raise ReceiptStoreError(
+            f"receipt{location} does not conform to its schema: {'; '.join(violations)}"
+        )
+    assert isinstance(receipt, dict)
+    return receipt
 
 
 def write_receipt(job_path: Path, receipt: dict) -> Path:
-    """Persist one receipt under its idempotency key.
-
-    Rewriting an identical receipt is a no-op so a resumed run is idempotent. A
-    *different* receipt under the same key is refused: the key identifies the
-    work, so two different receipts for it mean something upstream is confused,
-    and silently overwriting would hide that.
-    """
-    errors = schema_lite.validate(receipt, _schema())
-    if errors:
-        raise ReceiptError("; ".join(errors))
-    key = receipt["idempotency_key"]
-    target = receipt_path(job_path, key)
-    if target.is_file():
-        try:
-            existing = json.loads(target.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
-            raise ReceiptError(f"existing receipt for {key} is unreadable: {error}") from error
-        if existing == receipt:
-            return target
-        raise ReceiptError(f"a different receipt already exists for idempotency key {key}")
-    atomic_json.write_json_atomic(target, receipt)
+    validated = _validate(receipt)
+    target = receipt_path(job_path, validated["idempotency_key"])
+    if target.exists():
+        raise ReceiptStoreError(
+            f"duplicate idempotency key {validated['idempotency_key']!r}"
+        )
+    atomic_json.write_json_atomic(target, validated)
     return target
 
 
-def _scan(job_path: Path, destination_dir: Path) -> tuple[dict, dict]:
-    directory = receipt_directory(job_path)
-    verified: dict[str, dict] = {}
-    rejected: dict[str, tuple[str, ...]] = {}
-    if not directory.is_dir():
-        return verified, rejected
+def _artifact_path(destination_dir: Path, receipt: dict) -> Path:
+    destination = Path(destination_dir).resolve()
+    target = (destination / receipt["path"]).resolve()
+    if target != destination and destination not in target.parents:
+        raise ReceiptStoreError(f"receipt artifact path escapes destination: {receipt['path']!r}")
+    return target
 
-    destination = Path(destination_dir)
-    for path in sorted(directory.glob("*.json")):
-        key = path.stem
-        try:
-            receipt = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
-            rejected[key] = (f"receipt file is unreadable: {error}",)
-            continue
-        structural = list(schema_lite.validate(receipt, _schema()))
-        if structural:
-            rejected[key] = tuple(structural)
-            continue
-        artifact_errors = artifact_collector.verify_receipt(
-            receipt, destination / str(receipt["path"])
+
+def _verify_artifact(receipt: dict, source: Path, destination_dir: Path) -> None:
+    artifact = _artifact_path(destination_dir, receipt)
+    verification = artifact_collector.verify_receipt(receipt, artifact)
+    if verification:
+        raise ReceiptStoreError(
+            f"receipt at {source} failed artifact verification: {'; '.join(verification)}"
         )
-        if artifact_errors:
-            rejected[key] = tuple(artifact_errors)
+
+
+def _load_legacy_manifest(
+    job_path: Path,
+    destination_dir: Path,
+    idempotency_keys: set[str] | None = None,
+) -> dict[str, dict]:
+    source = manifest_path(job_path)
+    if not source.exists():
+        return {}
+    try:
+        decoded = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ReceiptStoreError(f"receipt manifest at {source} could not be read: {error}") from error
+    if not isinstance(decoded, list):
+        raise ReceiptStoreError(f"receipt manifest at {source} must be a JSON array")
+
+    loaded: dict[str, dict] = {}
+    for index, candidate in enumerate(decoded):
+        receipt = _validate(candidate, Path(f"{source}[{index}]"))
+        key = receipt["idempotency_key"]
+        if idempotency_keys is not None and key not in idempotency_keys:
             continue
-        verified[key] = receipt
-    return verified, rejected
+        if key in loaded:
+            raise ReceiptStoreError(f"duplicate idempotency key {key!r} in {source}")
+        _verify_artifact(receipt, source, destination_dir)
+        loaded[key] = receipt
+    return loaded
 
 
-def load_verified_receipts(job_path: Path, destination_dir: Path) -> dict[str, dict]:
-    return _scan(job_path, destination_dir)[0]
+def load_verified_receipts(
+    job_path: Path,
+    destination_dir: Path,
+    idempotency_keys: set[str] | None = None,
+) -> dict[str, dict]:
+    loaded = _load_legacy_manifest(job_path, destination_dir, idempotency_keys)
+    directory = receipt_directory(job_path)
+    if not directory.exists():
+        return loaded
+    if not directory.is_dir():
+        raise ReceiptStoreError(f"receipt store is not a directory: {directory}")
 
-
-def unverified_receipts(job_path: Path, destination_dir: Path) -> dict[str, tuple[str, ...]]:
-    return _scan(job_path, destination_dir)[1]
+    for source in sorted(directory.glob("*.json")):
+        if idempotency_keys is not None and source.stem not in idempotency_keys:
+            continue
+        try:
+            decoded = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise ReceiptStoreError(f"receipt at {source} could not be read: {error}") from error
+        receipt = _validate(decoded, source)
+        key = receipt["idempotency_key"]
+        if source.name != f"{key}.json":
+            raise ReceiptStoreError(
+                f"receipt filename {source.name!r} does not match idempotency key {key!r}"
+            )
+        if key in loaded and loaded[key] != receipt:
+            raise ReceiptStoreError(
+                f"conflicting receipts for idempotency key {key!r}"
+            )
+        _verify_artifact(receipt, source, destination_dir)
+        loaded[key] = receipt
+    return loaded
 
 
 def rebuild_manifest(job_path: Path, receipts: dict[str, dict]) -> Path:
-    rows = sorted(
-        receipts.values(),
-        key=lambda row: (str(row.get("item_id", "")), str(row.get("idempotency_key", ""))),
-    )
+    # The compatibility manifest historically used append order. The verified
+    # loader inserts legacy entries first and newly persisted entries after them.
+    ordered = list(receipts.values())
+    for receipt in ordered:
+        _validate(receipt)
     target = manifest_path(job_path)
-    atomic_json.write_json_atomic(target, rows)
+    atomic_json.write_json_atomic(target, ordered)
     return target

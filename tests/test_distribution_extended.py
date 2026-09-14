@@ -1,6 +1,6 @@
 import json
+import subprocess
 import re
-import sys
 import unittest
 from pathlib import Path
 
@@ -8,6 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ID = "codex-image-factory"
 DISPLAY_NAME = "Codex Image Factory"
+RELEASE_VERSION = "0.1.2"
+PRIOR_RELEASE_SHA = "fff20c9aad9a9cd7893644306c752b2f7231071d"
 
 EXPECTED_SKILLS = (
     "codex-image-factory-use",
@@ -36,14 +38,13 @@ REQUIRED_DOCUMENTS = (
 )
 
 # Gates that cannot be satisfied offline must be declared with their observed status.
-# Gates that need a live account or an installation. The observations recorded
-# against 0.1.0 do not describe the 1.1.0 contracts, so they are NOT_RUN until they
-# are observed again. Claiming an inherited PASS would be the one thing this
-# evidence structure exists to prevent.
 RUNTIME_GATES = {
-    "runtime_generation_evidence": "NOT_RUN",
+    "remote_ci_matrix": "NOT_RUN",
+    "remote_sha_parity": "NOT_RUN",
+    "fresh_marketplace_install": "NOT_RUN",
+    "fresh_session_no_spend_smoke": "NOT_RUN",
+    "paid_canary": "NOT_RUN",
     "usage_limit_evidence": "NOT_RUN",
-    "plugin_installation": "NOT_RUN",
 }
 
 MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
@@ -80,6 +81,25 @@ class SkillInventoryTests(unittest.TestCase):
 
 
 class DocumentationTests(unittest.TestCase):
+    def test_release_documents_align_with_the_manifest_version(self) -> None:
+        manifest = json.loads(
+            (ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["version"], RELEASE_VERSION)
+        for relative in (
+            "CHANGELOG.md",
+            "README.md",
+            "README.zh-CN.md",
+            "docs/Codex-Image-Factory-Plugin-Architecture.md",
+            "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
+            "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
+            "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
+            "docs/verification/runtime.md",
+        ):
+            with self.subTest(document=relative):
+                text = (ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn(RELEASE_VERSION, text)
+
     def test_bilingual_pairs_exist(self) -> None:
         for english, chinese in BILINGUAL_PAIRS:
             with self.subTest(pair=english):
@@ -111,7 +131,7 @@ class DocumentationTests(unittest.TestCase):
             with self.subTest(document=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
                 self.assertIn("0.1.2", text)
-                self.assertIn("2026-09-14", text)
+                self.assertIn("release candidate", text.lower())
 
     def test_no_document_names_an_image_model(self) -> None:
         """The platform chooses the model; claiming one would mislead the reader."""
@@ -131,29 +151,19 @@ class DocumentationTests(unittest.TestCase):
                 with self.subTest(document=path.name, model=model):
                     self.assertNotIn(model, text)
 
-    def test_runtime_evidence_declares_completed_gates(self) -> None:
-        text = (ROOT / "docs/verification/offline.md").read_text(encoding="utf-8")
+    def test_runtime_evidence_is_versioned_and_declares_every_external_gate(self) -> None:
+        text = (ROOT / "docs/verification/runtime.md").read_text(encoding="utf-8")
+        self.assertIn("0.1.2", text)
         for gate, expected_status in RUNTIME_GATES.items():
             with self.subTest(gate=gate):
                 self.assertIn(gate, text)
                 line = next(row for row in text.splitlines() if gate in row and row.startswith("|"))
                 self.assertIn(expected_status, line)
+                status = line.split("|")[2].strip().strip("`")
+                self.assertIn(status, {"PASS", "FAIL", "NOT_RUN"})
 
-        # The earlier observations are preserved, but must be labelled as history
-        # rather than left looking like evidence for the current build.
-        runtime = (ROOT / "docs/verification/runtime.md").read_text(encoding="utf-8")
-        self.assertIn("## Historical evidence", runtime)
-        self.assertIn("not evidence for the 0.1.2 candidate", runtime)
-        for heading in (
-            "## Real two-item generation",
-            "## Marketplace resolution and installation",
-        ):
-            with self.subTest(heading=heading):
-                self.assertIn(heading, runtime)
-        self.assertIn("Status: `PASS`.", runtime)
-        self.assertIn("Installation status: `PASS`.", runtime)
-        self.assertIn("attempted each item exactly once", runtime)
-        self.assertIn("all four exact Skill names as discoverable", runtime)
+        self.assertNotIn(PRIOR_RELEASE_SHA, text)
+        self.assertNotIn("version `0.1.0`", text)
 
 
 class LinkTests(unittest.TestCase):
@@ -189,8 +199,6 @@ class RepositoryStructureTests(unittest.TestCase):
 
     def test_no_build_artifacts_are_tracked(self) -> None:
         """Caches appear in any working tree that has run the suite; what matters is what is committed."""
-        import subprocess
-
         tracked = subprocess.run(
             ["git", "ls-files"], cwd=str(ROOT), capture_output=True, text=True, check=False
         ).stdout.splitlines()
@@ -210,7 +218,11 @@ class RepositoryStructureTests(unittest.TestCase):
     def test_cli_entry_point_is_executable(self) -> None:
         entry = ROOT / "bin/image-factory"
         self.assertTrue(entry.is_file())
-        self.assertTrue(entry.stat().st_mode & 0o111, "bin/image-factory must be executable")
+        tracked = subprocess.run(
+            ["git", "ls-files", "-s", "--", "bin/image-factory"],
+            cwd=str(ROOT), capture_output=True, text=True, check=True,
+        ).stdout.split()
+        self.assertEqual(tracked[0], "100755", "bin/image-factory must be executable in the Git index")
 
     def test_manifest_asset_paths_exist(self) -> None:
         manifest = json.loads((ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
@@ -229,142 +241,6 @@ class RepositoryStructureTests(unittest.TestCase):
             schema = json.loads(path.read_text(encoding="utf-8"))
             with self.subTest(schema=path.name):
                 self.assertEqual(schema["$id"], f"{repository}/schemas/{path.name}")
-
-
-
-class ContinuousIntegrationTests(unittest.TestCase):
-    """The CI workflow is asserted as text: the suite stays standard-library only."""
-
-    def workflow(self) -> str:
-        path = ROOT / ".github" / "workflows" / "ci.yml"
-        self.assertTrue(path.is_file(), "the CI workflow must exist")
-        return path.read_text(encoding="utf-8")
-
-    def test_the_matrix_covers_every_supported_host(self) -> None:
-        text = self.workflow()
-        for host in ("ubuntu-latest", "macos-latest", "windows-latest"):
-            with self.subTest(host=host):
-                self.assertIn(host, text)
-
-    def test_the_matrix_covers_both_python_versions(self) -> None:
-        text = self.workflow()
-        for version in ('"3.11"', '"3.13"'):
-            with self.subTest(version=version):
-                self.assertIn(version, text)
-
-    def test_every_job_runs_the_offline_gates(self) -> None:
-        text = self.workflow()
-        for command in (
-            "python -m compileall -q scripts tests",
-            "python -m unittest discover -s tests -v",
-            "python scripts/validate_distribution.py .",
-            "git diff --check",
-        ):
-            with self.subTest(command=command):
-                self.assertIn(command, text)
-
-    def test_no_job_installs_a_dependency(self) -> None:
-        """A job that installed anything would stop being evidence that none is needed."""
-        lowered = self.workflow().lower()
-        for forbidden in ("pip install", "npm install", "poetry install", "requirements"):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, lowered)
-
-
-class RuntimeEvidenceTests(unittest.TestCase):
-    """External gates must be declared per version, never inherited from an older one."""
-
-    GATES = (
-        "remote_ci_matrix",
-        "remote_sha_parity",
-        "fresh_marketplace_install",
-        "fresh_session_no_spend_smoke",
-        "paid_canary",
-    )
-
-    def evidence(self) -> str:
-        return (ROOT / "docs" / "verification" / "runtime.md").read_text(encoding="utf-8")
-
-    def test_every_external_gate_has_an_explicit_status(self) -> None:
-        rows = {
-            line.split("`")[1]: line
-            for line in self.evidence().splitlines()
-            if line.startswith("| `")
-        }
-        for gate in self.GATES:
-            with self.subTest(gate=gate):
-                self.assertIn(gate, rows, f"{gate} is not declared")
-                self.assertRegex(rows[gate], r"PASS|FAIL|NOT_RUN")
-
-    def test_an_unobserved_gate_is_not_reported_as_passing(self) -> None:
-        rows = {
-            line.split("`")[1]: line
-            for line in self.evidence().splitlines()
-            if line.startswith("| `")
-        }
-        for gate in self.GATES:
-            if gate in rows:
-                with self.subTest(gate=gate):
-                    self.assertIn("NOT_RUN", rows[gate], f"{gate} claims a result it cannot show")
-
-    def test_the_earlier_version_evidence_is_labelled_historical(self) -> None:
-        text = self.evidence()
-        self.assertIn("Historical evidence", text)
-        self.assertIn("not evidence for the 0.1.2 candidate", text)
-
-
-
-RELEASE_VERSION = "0.1.2"
-
-RELEASE_ARTIFACTS = (
-    "CHANGELOG.md",
-    "docs/Codex-Image-Factory-Plugin-Architecture.md",
-    "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
-    "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
-    "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
-    "docs/verification/runtime.md",
-)
-
-SHA40 = re.compile(r"\b[0-9a-f]{40}\b")
-
-
-class ReleaseAlignmentTests(unittest.TestCase):
-    """One version, stated identically everywhere, with no inherited evidence."""
-
-    def test_the_manifest_declares_the_release_version(self) -> None:
-        manifest = json.loads((ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["version"], RELEASE_VERSION)
-
-    def test_every_release_artifact_names_the_release_version(self) -> None:
-        for relative in RELEASE_ARTIFACTS:
-            with self.subTest(artifact=relative):
-                text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn(RELEASE_VERSION, text)
-
-    def test_the_distribution_validator_prints_the_release_version(self) -> None:
-        import subprocess
-
-        result = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "validate_distribution.py"), "."],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(RELEASE_VERSION, result.stdout)
-
-    def test_the_candidate_evidence_claims_no_inherited_commit(self) -> None:
-        """A prior run's SHA must never appear as evidence for the current candidate."""
-        text = (ROOT / "docs/verification/runtime.md").read_text(encoding="utf-8")
-        split = text.index("## Historical evidence")
-        candidate_section = text[:split]
-        self.assertEqual(
-            SHA40.findall(candidate_section),
-            [],
-            "the candidate section must not carry a commit hash it did not observe",
-        )
-        self.assertNotIn("Observed remote head", candidate_section)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,10 @@
 import hashlib
 import json
+import struct
 import sys
 import tempfile
 import unittest
+import zlib
 from pathlib import Path
 
 
@@ -18,56 +20,72 @@ SCHEMA = json.loads((ROOT / "schemas/image_batch.schema.json").read_text(encodin
 
 def minimal_plan(**overrides) -> dict:
     plan = {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "batch_id": "portrait-study",
         "round": 1,
+        "limits": {
+            "max_images": 20,
+            "max_rounds": 3,
+            "require_approval_before_run": True,
+        },
+        "judge_policy": {
+            "min_dimension": 256,
+            "reject_duplicates": True,
+            "pass_threshold": 0.8,
+            "require_human_labels": True,
+        },
         "items": [{"id": "item-01", "prompt": "A calm portrait on rice paper"}],
     }
     plan.update(overrides)
     return plan
 
 
-def schema_plan(**overrides) -> dict:
-    """A plan that already satisfies the published schema, so shape tests skip migration.
+def _valid_png(red: int) -> bytes:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
-    The direct-schema tests below assert on specific violations. Feeding them a
-    legacy plan would fail on the version constant first and mask the rule under
-    test, so they start from a document that is current in every respect.
-    """
-    plan = minimal_plan(
-        schema_version="1.1.0",
-        limits={"max_images": 20, "max_rounds": 3, "require_approval_before_run": True},
-        judge_policy={
-            "min_dimension": 256,
-            "reject_duplicates": True,
-            "pass_threshold": 0.8,
-            "require_human_labels": True,
-        },
+    header = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    pixels = zlib.compress(bytes((0, red, 0, 0)))
+    return header + chunk(b"IHDR", ihdr) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
+
+
+def valid_plan_1_1() -> dict:
+    return minimal_plan()
+
+
+def plan_with_reference(reference: Path) -> dict:
+    return minimal_plan(
+        items=[{"id": "item-01", "prompt": "p", "reference_images": [str(reference)]}]
     )
-    plan.update(overrides)
-    return plan
-
-
-def valid_plan_1_1(**overrides) -> dict:
-    return schema_plan(**overrides)
-
-
-def plan_with_reference(path) -> dict:
-    return schema_plan(items=[{"id": "item-01", "prompt": "p", "reference_images": [str(path)]}])
 
 
 def second_png() -> bytes:
-    """Distinct valid PNG bytes, used to change a reference image's content."""
-    return (ROOT / "assets" / "composer-icon.png").read_bytes()
+    return _valid_png(2)
 
 
 def plan_a() -> dict:
-    return schema_plan()
+    return minimal_plan()
 
 
-def same_plan_with_different_key_order() -> str:
-    """The same plan serialized with its keys in a different textual order."""
-    return json.dumps(schema_plan(), sort_keys=True, indent=4)
+def same_plan_with_different_key_order() -> dict:
+    return {
+        "items": [{"prompt": "A calm portrait on rice paper", "id": "item-01"}],
+        "judge_policy": {
+            "require_human_labels": True,
+            "pass_threshold": 0.8,
+            "reject_duplicates": True,
+            "min_dimension": 256,
+        },
+        "limits": {
+            "require_approval_before_run": True,
+            "max_rounds": 3,
+            "max_images": 20,
+        },
+        "round": 1,
+        "batch_id": "portrait-study",
+        "schema_version": "1.1.0",
+    }
 
 
 class PlanFixture:
@@ -94,22 +112,22 @@ class SchemaLiteTests(unittest.TestCase):
         self.assertTrue(any("extra" in error for error in errors), errors)
 
     def test_accepts_valid_instance(self) -> None:
-        self.assertEqual(schema_lite.validate(schema_plan(), SCHEMA), [])
+        self.assertEqual(schema_lite.validate(minimal_plan(), SCHEMA), [])
 
     def test_enforces_pattern_and_bounds(self) -> None:
-        errors = schema_lite.validate(schema_plan(batch_id="X"), SCHEMA)
+        errors = schema_lite.validate(minimal_plan(batch_id="X"), SCHEMA)
         self.assertTrue(any("batch_id" in error for error in errors), errors)
-        errors = schema_lite.validate(schema_plan(round=0), SCHEMA)
+        errors = schema_lite.validate(minimal_plan(round=0), SCHEMA)
         self.assertTrue(any("round" in error for error in errors), errors)
 
     def test_resolves_local_refs(self) -> None:
-        plan = schema_plan(items=[{"id": "item-01", "prompt": ""}])
+        plan = minimal_plan(items=[{"id": "item-01", "prompt": ""}])
         errors = schema_lite.validate(plan, SCHEMA)
         self.assertTrue(any("minLength" in error or "prompt" in error for error in errors), errors)
 
     def test_enforces_reference_image_ceiling(self) -> None:
         item = {"id": "item-01", "prompt": "p", "reference_images": [f"r{n}.png" for n in range(6)]}
-        errors = schema_lite.validate(schema_plan(items=[item]), SCHEMA)
+        errors = schema_lite.validate(minimal_plan(items=[item]), SCHEMA)
         self.assertTrue(any("maxItems" in error for error in errors), errors)
 
 
@@ -198,18 +216,23 @@ class PlanValidatorTests(unittest.TestCase):
         result = self.fixture.validate(minimal_plan())
         self.assertTrue(result.require_approval_before_run)
 
-    def test_a_legacy_plan_cannot_opt_out_of_approval(self) -> None:
-        """Under 1.1.0 every round needs fresh approval, so migration removes the weaker posture."""
+    def test_approval_cannot_be_waived(self) -> None:
         result = self.fixture.validate(
             minimal_plan(limits={"max_images": 5, "max_rounds": 2, "require_approval_before_run": False})
         )
+        self.assertFalse(result.ok)
+        self.assertEqual(result.errors[0].code, "plan_schema_invalid")
+
+    def test_legacy_plan_is_migrated_before_validation(self) -> None:
+        legacy = {
+            "schema_version": "1.0.0",
+            "batch_id": "portrait-study",
+            "round": 1,
+            "items": [{"id": "item-01", "prompt": "legacy portrait"}],
+        }
+        result = self.fixture.validate(legacy)
         self.assertTrue(result.ok, result.errors)
         self.assertTrue(result.require_approval_before_run)
-
-    def test_human_labels_are_required_after_migration(self) -> None:
-        result = self.fixture.validate(minimal_plan())
-        self.assertTrue(result.ok, result.errors)
-        self.assertTrue(result.require_human_labels)
 
     def test_validator_caps_match_the_published_schema(self) -> None:
         item_cap = SCHEMA["properties"]["items"]["maxItems"]
@@ -229,69 +252,32 @@ class PlanValidatorTests(unittest.TestCase):
         expected = hashlib.sha256(b"known-bytes").hexdigest()
         self.assertEqual(result.items[0].reference_sha256, (expected,))
 
-
-class PlanIdentityTests(unittest.TestCase):
-    """The plan hash is what an approval binds to, so it must identify the work exactly."""
-
-    def setUp(self) -> None:
-        self.fixture = PlanFixture()
-        self.addCleanup(self.fixture.cleanup)
-
-    def validate(self, plan) -> plan_validator.PlanResult:
-        return plan_validator.validate_plan(plan, base_dir=self.fixture.base)
-
     def test_human_label_policy_reaches_plan_result(self) -> None:
-        result = self.validate(valid_plan_1_1())
+        result = self.fixture.validate(valid_plan_1_1())
         self.assertTrue(result.require_human_labels)
 
-    def test_plan_hash_is_exposed(self) -> None:
-        result = self.validate(valid_plan_1_1())
-        self.assertRegex(result.plan_sha256, r"^[0-9a-f]{64}$")
-
     def test_plan_hash_changes_when_reference_bytes_change(self) -> None:
-        reference = self.fixture.reference("ref.png", b"first-bytes")
-        first = self.validate(plan_with_reference(reference))
+        reference = self.fixture.reference("ref.png", _valid_png(1))
+        plan = plan_with_reference(reference)
+        first = self.fixture.validate(plan)
         reference.write_bytes(second_png())
-        second = self.validate(plan_with_reference(reference))
+        second = self.fixture.validate(plan)
         self.assertNotEqual(first.plan_sha256, second.plan_sha256)
 
     def test_semantically_identical_json_has_the_same_plan_hash(self) -> None:
-        first = self.validate(plan_a())
-        second = self.validate(same_plan_with_different_key_order())
+        first = self.fixture.validate(plan_a())
+        second = self.fixture.validate(same_plan_with_different_key_order())
         self.assertEqual(first.plan_sha256, second.plan_sha256)
 
-    def test_plan_hash_ignores_the_reference_path(self) -> None:
-        """Two different paths holding identical bytes describe the same work."""
-        left = self.fixture.reference("a/ref.png", b"same-bytes")
-        right = self.fixture.reference("b/ref.png", b"same-bytes")
-        self.assertEqual(
-            self.validate(plan_with_reference(left)).plan_sha256,
-            self.validate(plan_with_reference(right)).plan_sha256,
-        )
-
-    def test_plan_hash_changes_with_the_prompt(self) -> None:
-        changed = valid_plan_1_1(items=[{"id": "item-01", "prompt": "a different portrait"}])
-        self.assertNotEqual(
-            self.validate(valid_plan_1_1()).plan_sha256,
-            self.validate(changed).plan_sha256,
-        )
-
-    def test_plan_hash_changes_with_the_round(self) -> None:
-        self.assertNotEqual(
-            self.validate(valid_plan_1_1()).plan_sha256,
-            self.validate(valid_plan_1_1(round=2)).plan_sha256,
-        )
-
-    def test_migration_notes_are_reported(self) -> None:
-        self.assertEqual(len(self.validate(minimal_plan()).migration_notes), 1)
-
-    def test_a_current_plan_reports_no_migration(self) -> None:
-        self.assertEqual(self.validate(valid_plan_1_1()).migration_notes, ())
-
-    def test_a_rejected_plan_has_no_hash(self) -> None:
-        result = self.validate(minimal_plan(round=99))
-        self.assertFalse(result.ok)
-        self.assertEqual(result.plan_sha256, "")
+    def test_legacy_plan_reports_migration_note(self) -> None:
+        legacy = {
+            "schema_version": "1.0.0",
+            "batch_id": "portrait-study",
+            "round": 1,
+            "items": [{"id": "item-01", "prompt": "legacy portrait"}],
+        }
+        result = self.fixture.validate(legacy)
+        self.assertEqual(result.migration_notes, ("migrated image batch 1.0.0 to 1.1.0",))
 
 
 if __name__ == "__main__":

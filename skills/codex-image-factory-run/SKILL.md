@@ -24,7 +24,12 @@ details in the background unless the user asks for them.
 When a user describes a batch but has no plan yet, read
 [prompt preparation](references/prompt-preparation.md). Use the bundled
 template search to prepare prompts and a valid batch plan before validation.
-For an already approved plan, preserve its prompts and proceed directly.
+When an approval record already exists, preserve the prompts but do not treat
+the record alone as permission to proceed. Verify that it still matches the
+exact currently displayed plan, round, and remaining generation-call count.
+If it does not, show the current card and require fresh approval. In normal user
+copy, say which visible plan detail changed without exposing hashes or ledger
+internals.
 
 1Step 1. **Validate the plan before anything else.**
 
@@ -47,23 +52,17 @@ For an already approved plan, preserve its prompts and proceed directly.
    Report the image count and make clear that each item costs one generation call
    against the Codex account's image allowance. Quoting itself spends nothing.
 
-   The quote also reports the plan hash. An approval is bound to that hash, to the
-   round, and to the number of calls that are still outstanding, so resuming a
-   partly finished batch quotes the *remaining* calls and needs a fresh approval
-   for exactly that smaller number. An approval for the original batch does not
-   authorize the remaining work.
-
 3Step 3. **Obtain approval for this exact round.** Show the creation confirmation
    card and quote first. Run only when the user has agreed to generate these
    images. If the plan sets `require_approval_before_run`, the command refuses to
    start without `--approve`. Approval from an earlier round does not apply.
+   For a safe `Partial` resume, quote the exact remaining generation-call count
+   and obtain fresh approval for those pending items before continuing.
+   Bind that approval to the exact plan, round, and remaining generation-call
+   count shown on the card. If a prompt, reference image, item, policy, round, or
+   count changes, the approval is invalid and a new card and approval are required.
 
-4Step 4. **Check for an unfinished run before starting one.** If the ledger is in
-   `Running` or `Unknown`, do not run: hand off to `codex-image-factory-recover`,
-   which settles the interrupted items from the receipts already on disk. `run`
-   refuses those states rather than starting a second attempt.
-
-5. **Run it.**
+4Step 4. **Run it.**
 
    ```bash
    bin/image-factory run --plan plan.json --job job.json --destination out/ --approve --json
@@ -107,8 +106,10 @@ State these to the user rather than working around them:
   guidance instead of retrying.
 - `quota_exceeded` — the account's image allowance is exhausted. Report the reset
   time and stop.
-- `artifact_missing`, `timeout`, `generation_failed` — recorded per item. The
-  batch continues with the remaining items.
+- `artifact_missing`, `timeout`, `generation_failed` — recorded per item. A
+  timeout or success without durable artifact evidence is ambiguous `Unknown`;
+  stop later calls and recover without generating. Definite failures are
+  recorded as `Failed` and are not silently retried.
 
 ## Gotchas
 

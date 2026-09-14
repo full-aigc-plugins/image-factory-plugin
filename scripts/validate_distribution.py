@@ -14,7 +14,17 @@ SECRET_PATTERNS = (
     re.compile(rb"AIza[0-9A-Za-z_-]{20,}"),
     re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 )
+CI_MATRIX_PATTERN = re.compile(r"(?m)^ {6}matrix:\s*\n((?: {8}[^\n]+\n?)+)")
+CI_DEPENDENCY_INSTALLER_PATTERN = re.compile(
+    r"(?i)\b(?:"
+    r"(?:python(?:3)?\s+-m\s+)?pip(?:3)?\s+install|"
+    r"pipx\s+install|uv\s+(?:sync|add)|poetry\s+(?:install|add)|"
+    r"(?:conda|mamba)\s+install|npm\s+(?:install|ci)|"
+    r"(?:yarn|pnpm|bun)\s+(?:install|add)"
+    r")\b"
+)
 REQUIRED_FILES = (
+    ".github/workflows/ci.yml",
     "README.md",
     "README.zh-CN.md",
     "LICENSE",
@@ -23,6 +33,8 @@ REQUIRED_FILES = (
     "TERMS.md",
     "THIRD_PARTY_NOTICES.md",
     "docs/portable-migration.md",
+    "docs/verification/offline.md",
+    "docs/verification/runtime.md",
 )
 REQUIRED_DIRECTORIES = ("assets", "skills", "schemas", "scripts", "tests")
 
@@ -86,6 +98,72 @@ def validate(root: Path) -> list[str]:
     for filename in REQUIRED_FILES:
         if not (root / filename).is_file():
             errors.append(f"missing required file: {filename}")
+
+    workflow_path = root / ".github" / "workflows" / "ci.yml"
+    if workflow_path.is_file():
+        workflow = workflow_path.read_text(encoding="utf-8")
+        for required in (
+            "ubuntu-latest",
+            "macos-latest",
+            "windows-latest",
+            '"3.11"',
+            '"3.13"',
+            "python -m compileall -q scripts tests",
+            "python -m unittest discover -s tests -v",
+            "python scripts/validate_distribution.py .",
+            "git diff --check",
+        ):
+            if required not in workflow:
+                errors.append(f"CI workflow missing required contract: {required}")
+        matrix_match = CI_MATRIX_PATTERN.search(workflow)
+        matrix: dict[str, list[str]] = {}
+        if matrix_match is not None:
+            for line in matrix_match.group(1).splitlines():
+                key, separator, raw_values = line.strip().partition(":")
+                if (
+                    not separator
+                    or not raw_values.strip().startswith("[")
+                    or not raw_values.strip().endswith("]")
+                ):
+                    matrix = {}
+                    break
+                matrix[key] = [
+                    value.strip().strip('"\'')
+                    for value in raw_values.strip()[1:-1].split(",")
+                    if value.strip()
+                ]
+        expected_matrix = {
+            "os": ["ubuntu-latest", "macos-latest", "windows-latest"],
+            "python-version": ["3.11", "3.13"],
+        }
+        if matrix != expected_matrix:
+            errors.append(
+                "CI matrix must contain exactly os and python-version with the supported values"
+            )
+        if CI_DEPENDENCY_INSTALLER_PATTERN.search(workflow):
+            errors.append("CI workflow must not install dependencies")
+
+    runtime_evidence_path = root / "docs" / "verification" / "runtime.md"
+    if runtime_evidence_path.is_file():
+        runtime_evidence = runtime_evidence_path.read_text(encoding="utf-8")
+        if "0.1.2" not in runtime_evidence:
+            errors.append("runtime evidence must identify release candidate 0.1.2")
+        for gate in (
+            "remote_ci_matrix",
+            "remote_sha_parity",
+            "fresh_marketplace_install",
+            "fresh_session_no_spend_smoke",
+            "paid_canary",
+            "usage_limit_evidence",
+        ):
+            rows = [
+                line
+                for line in runtime_evidence.splitlines()
+                if line.startswith("|") and gate in line
+            ]
+            status = rows[0].split("|")[2].strip().strip("`") if len(rows) == 1 else ""
+            if status not in {"PASS", "FAIL", "NOT_RUN"}:
+                errors.append(f"runtime evidence missing explicit status for {gate}")
     if (root / "plugin.json").exists() or (root / "mcp.json").exists():
         errors.append("portable manifests must remain inactive during compatibility-first scaffolding")
 

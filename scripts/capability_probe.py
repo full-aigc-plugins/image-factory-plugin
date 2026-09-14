@@ -50,6 +50,8 @@ INSTALL_GUIDANCE = (
     "This plugin does not install Codex for you."
 )
 
+WINDOWS_NATIVE_EXECUTABLE_EXTENSIONS = (".com", ".exe")
+
 
 @dataclass(frozen=True)
 class Capability:
@@ -80,16 +82,33 @@ def _default_codex_home() -> Path:
     return Path.home() / ".codex"
 
 
+def _is_executable_file(candidate: Path, platform_name: str | None = None) -> bool:
+    """Apply the host platform's executable-file contract without executing the file."""
+    selected_platform = os.name if platform_name is None else platform_name
+    if not candidate.is_file():
+        return False
+    if selected_platform == "nt":
+        return candidate.suffix.lower() in WINDOWS_NATIVE_EXECUTABLE_EXTENSIONS
+    return os.access(candidate, os.X_OK)
+
+
+def _candidate_paths(base: Path, platform_name: str | None = None) -> tuple[Path, ...]:
+    selected_platform = os.name if platform_name is None else platform_name
+    if selected_platform != "nt" or base.suffix:
+        return (base,)
+    return tuple(base.with_suffix(suffix) for suffix in WINDOWS_NATIVE_EXECUTABLE_EXTENSIONS)
+
+
 def _find_binary(search_path: tuple[str, ...], codex_home: Path) -> tuple[Path | None, str | None]:
     for directory in search_path:
         if not directory:
             continue
-        candidate = Path(directory).expanduser() / BINARY_NAME
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate, "path"
-    bundled = codex_home / APPSERVER_RELATIVE
-    if bundled.is_file() and os.access(bundled, os.X_OK):
-        return bundled, "codex_home_appserver"
+        for candidate in _candidate_paths(Path(directory).expanduser() / BINARY_NAME):
+            if _is_executable_file(candidate):
+                return candidate, "path"
+    for bundled in _candidate_paths(codex_home / APPSERVER_RELATIVE):
+        if _is_executable_file(bundled):
+            return bundled, "codex_home_appserver"
     return None, None
 
 
@@ -135,11 +154,15 @@ def probe(
 
     if binary_override is not None:
         candidate = Path(binary_override)
-        if not (candidate.is_file() and os.access(candidate, os.X_OK)):
+        if not _is_executable_file(candidate):
             return Capability(
                 verdict="unavailable",
                 reasons=("codex_binary_missing",),
-                guidance=f"the binary given explicitly is not executable: {candidate}",
+                guidance=(
+                    f"the binary given explicitly is not executable: {candidate}. "
+                    "On Windows, provide a native .exe or .com Codex binary; "
+                    "script launchers such as .cmd, .bat, .py, and .js are not executed."
+                ),
                 codex_home=home,
                 generation_dir=generation_dir,
             )

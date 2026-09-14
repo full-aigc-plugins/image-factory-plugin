@@ -1,6 +1,6 @@
 # Codex Image Factory Plugin Technical Solution
 
-> Implemented technical proposal for version 0.1.2. Updated 2026-09-14. Describes what the code does today, not what it might do.
+> Implemented technical solution for the 0.1.2 release candidate. Updated 2026-09-14. External release gates remain unrun.
 
 [English](Codex-Image-Factory-Plugin-Technical-Solution.md) | [简体中文](Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 
@@ -39,7 +39,9 @@ scripts/
   prompt_library.py                offline attributed prompt discovery
   generation_runner.py             one Codex call per item
   artifact_collector.py            locate, verify, publish, receipt
-  job_ledger.py                    durable state machine
+  job_ledger.py                    durable state machine and schema migration
+  job_lock.py                      cross-platform process lock
+  receipt_store.py                 atomic per-item receipt source of truth
   evaluator.py                     deterministic gates, advisory, labels
   optimizer.py                     next round planning
   image_factory_cli.py             subcommand wiring and the spend gate
@@ -47,7 +49,7 @@ scripts/
 skills/                            four Agent Skills
 data/                              attributed templates and source indexes
 vendor/upstream/                   inactive pinned upstream snapshots
-tests/                             241 tests, stdlib unittest
+tests/                             351 tests, stdlib unittest
 docs/                              this document and its pair
 ```
 
@@ -101,9 +103,8 @@ asked for.
   driven by a JSON control file, so every classification path — success,
   generation, failure, usage limit, timeout, silent exit — is exercised
   deterministically.
-- **Fake adapter shim.** A one-line `sh` shim makes the fake an executable, one
-  per test module because macOS evaluates a newly written executable on first
-  run.
+- **Portable fake adapter shim.** Tests create a `sh` launcher on Unix and a
+  `.cmd` launcher on Windows, then execute it to prove arguments reach the fake.
 - **Real artifacts.** Brand assets are real PNGs, so dimension, hash, and
   duplicate detection are tested against genuine files rather than fabricated
   bytes.
@@ -113,11 +114,33 @@ asked for.
 Run everything with:
 
 ```bash
+python3 -m compileall -q scripts tests
 python3 -m unittest discover -s tests -v
 python3 scripts/validate_distribution.py .
+git diff --check
 ```
 
-## 6. Failure model
+GitHub Actions runs the same gates in six cells: Ubuntu, macOS, and Windows on
+Python 3.11 and 3.13. No job installs runtime dependencies.
+
+## 6. Transaction and recovery guarantees
+
+- `run --approve` records an approval bound to the validated plan SHA-256,
+  current round, and remaining item count.
+- A job-path-derived process lock is held from approval binding through the
+  final state transition. A losing writer fails before external invocation.
+- Each call is preceded by an atomic `Attempting` reservation with an
+  `attempt_id`. An interruption after that point is ambiguous.
+- A schema-valid, hash-verifying per-item receipt is the completion source of
+  truth; the aggregate manifest is rebuilt from those receipts.
+- Recovery invokes no generator. It promotes only receipt-proven work and marks
+  unresolved attempts `Unknown`, which ordinary run refuses to retry.
+- Legacy 1.0.0 plans and jobs migrate deterministically to schema 1.1.0 without
+  manufacturing approval evidence.
+- When human labels are required, missing labels force `pending_approval`; model
+  assessment cannot override that gate.
+
+## 7. Failure model
 
 Stable failure codes, equal-width, comma-separated:
 
@@ -130,11 +153,11 @@ Stable failure codes, equal-width, comma-separated:
 `plan_missing_reference_image`, `plan_schema_invalid`, `plan_unparseable`,
 `quota_exceeded`, `timeout`, `unknown`.
 
-Per-item failures never abort a batch; the run continues and the ledger ends in
-`Partial`. A quota failure aborts the batch by design. No failure code leads to
-an automatic retry of anything.
+Definite per-item failures can continue and leave the ledger `Partial`. A quota
+failure stops the batch, while an interrupted or otherwise ambiguous call stops
+later work and leaves `Unknown`. No outcome leads to an automatic retry.
 
-## 7. Platform facts and what follows from them
+## 8. Platform facts and what follows from them
 
 Measured from the Codex source and from the installed binaries on the development
 machine (2026-09-12). Each fact drives a specific decision.
@@ -148,7 +171,7 @@ machine (2026-09-12). Each fact drives a specific decision.
 | Generation draws on the account's image allowance | Quote, then explicit approval, then run; a limit stops the batch |
 | An edit accepts at most five references | The schema caps `reference_images` at five |
 
-## 8. Clean-room rule
+## 9. Clean-room rule
 
 This repository was written from the public Codex source tree, the published
 plugin conventions, and the JSON Schemas in `schemas/`. It vendors no vendor
@@ -156,47 +179,3 @@ source code, no private endpoints, and no credentials, and it does not inspect o
 reimplement Codex's internal image pipeline. Interoperability rests entirely on
 the documented `codex exec` command line and on files Codex writes to the
 user's own disk.
-
-## 9. Transaction ordering
-
-`run` performs one item at a time in a fixed order, and the order is the design:
-
-```text
-lock the job
-  -> prepare: pending items, runnable state, bind plan, record approval, enter Running
-  -> for each pending item:
-       start_attempt(item, attempt_id)          # reserve before the call
-       outcome = run_item(...)                  # the single external call
-       on success:
-         collect_artifact(...)
-         write_receipt(...)                     # receipt first
-         complete_attempt(..., receipt_id)      # ledger second
-       on timeout or missing artifact:
-         mark_attempt_unknown(...)              # then stop the batch
-       on any other failure:
-         fail_attempt(..., category)
-  -> rebuild the manifest from verified receipts
-  -> settle to Completed, Partial, or Unknown
-unlock the job
-```
-
-Receipt before ledger, not the other way round: a receipt without a ledger entry is
-recoverable, while a ledger entry naming a receipt that was never persisted is not.
-
-`recover` is the counterpart for everything this ordering cannot finish. It takes
-the same lock, reads the receipts that already verify, settles each interrupted item
-to `Generated` or leaves it `Unknown`, rebuilds the manifest, and never calls the
-generator. If anything remains unknown it exits with the recovery-required code and
-offers no automatic repeat.
-
-## 10. Trust boundaries of the evidence
-
-- The lock is advisory, so it excludes cooperating processes rather than hostile
-  ones; it is a correctness tool for concurrent runs, not a security control.
-- A receipt is verified on read, not trusted on write: its hash, byte count, and
-  dimensions are recomputed from the file it names, and a tampered artifact is
-  reported through the unverified channel instead of being silently dropped.
-- The scores file is hashed when it is written and that hash is recorded, so
-  optimizing against a substituted document is refused.
-- The ledger refuses credential-like keys on read and write, which keeps it safe
-  to share as evidence.
