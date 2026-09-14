@@ -223,6 +223,9 @@ Recovery follows this evidence order:
   used by that command.
 - Alias checks use absolute resolved paths with `strict=False`, so `..`,
   symlinked parents, and alternative relative spellings cannot bypass them.
+- Mutating-command preflight runs before acquiring the job lock, so a refused
+  command does not create or alter even the lock sidecar. `run` checks its
+  effective default or explicit Codex home, generation directory, and binary.
 - Refusal happens before any participating file or ledger byte changes.
 - Evaluation writes the scores document atomically, then records the evaluation
   evidence and its final batch state in one atomic ledger mutation.

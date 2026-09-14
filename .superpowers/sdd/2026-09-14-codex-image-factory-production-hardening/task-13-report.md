@@ -132,3 +132,46 @@ exit 0
 ```
 
 No push, tag, installation, canary, or progress-ledger edit was performed.
+
+## Fix round 2/5
+
+The second review found two remaining preflight gaps: default `run` paths were
+not included unless their flags were explicit, and handler-level validation ran
+after `JobLock` had already created its sidecar.
+
+### Added behavior
+
+- A shared `mutating_command_paths`/`preflight_mutating_command_paths` path is
+  now invoked by `run_cli` before lock acquisition and again at every mutating
+  handler entry.
+- `run` resolves and caches the effective Codex home, generation directory, and
+  Codex binary even when all three CLI flags are omitted. The same values are
+  reused by execution rather than resolved a second time.
+- `recover`, `evaluate`, and `optimize` retain their complete role sets through
+  the shared preflight.
+- Collision refusal now creates no lock sidecar. Existing lock contention and
+  serialization tests remain green for non-colliding commands.
+
+### RED evidence
+
+The three new/strengthened behavior tests produced eight expected failures:
+the exact run/recover cases created lock sidecars, and omitted-default cases
+reached capability probing instead of refusing their effective aliases.
+
+### GREEN and renewed verification evidence
+
+```text
+lock-before-side-effect and default-path regression: Ran 3 tests ... OK
+python3 -m unittest tests.test_cli tests.test_recovery tests.test_ledger -v
+Ran 131 tests ... OK
+python3 -m unittest discover -s tests -v
+Ran 376 tests ... OK
+python3 -m compileall -q scripts tests
+exit 0
+python3 scripts/validate_distribution.py .
+validated codex-image-factory compatibility foundation 0.1.2
+git diff --check
+exit 0
+```
+
+No push, tag, installation, canary, or progress-ledger edit was performed.

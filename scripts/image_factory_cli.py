@@ -89,6 +89,50 @@ def refuse_path_aliases(named_paths: dict[str, Path]) -> None:
         seen[resolved] = role
 
 
+def mutating_command_paths(args: argparse.Namespace) -> dict[str, Path]:
+    """Return every effective filesystem role used by a mutating command."""
+    common = {
+        "plan": Path(args.plan),
+        "job": Path(args.job),
+        "destination": Path(args.destination),
+    }
+    if args.command == "run":
+        home = getattr(args, "_effective_codex_home", None) or _resolve_codex_home(args)
+        generation_dir = getattr(args, "_effective_generation_dir", None) or (
+            Path(args.generation_dir) if args.generation_dir else home / "generated_images"
+        )
+        binary = getattr(args, "_effective_codex_binary", None) or generation_runner.resolved_binary(
+            args.codex_bin
+        )
+        args._effective_codex_home = Path(home)
+        args._effective_generation_dir = Path(generation_dir)
+        args._effective_codex_binary = str(binary)
+        return {
+            **common,
+            "codex_home": Path(home),
+            "generation_dir": Path(generation_dir),
+            "codex_bin": Path(binary),
+        }
+    if args.command == "evaluate":
+        paths = {**common, "scores": Path(args.scores)}
+        if args.labels:
+            paths["labels"] = Path(args.labels)
+        if args.advisory:
+            paths["advisory"] = Path(args.advisory)
+        return paths
+    if args.command == "optimize":
+        paths = {**common, "scores": Path(args.scores), "out": Path(args.out)}
+        if args.rewrites:
+            paths["rewrites"] = Path(args.rewrites)
+        return paths
+    return common
+
+
+def preflight_mutating_command_paths(args: argparse.Namespace) -> None:
+    """Reject path aliases before a command lock or any other side effect."""
+    refuse_path_aliases(mutating_command_paths(args))
+
+
 def _resolve_codex_home(args: argparse.Namespace) -> Path:
     if args.codex_home:
         return Path(args.codex_home)
@@ -288,24 +332,13 @@ def prepare_run(
 
 
 def command_run(args: argparse.Namespace) -> tuple[int, str]:
-    participating_paths = {
-        "plan": Path(args.plan),
-        "job": Path(args.job),
-        "destination": Path(args.destination),
-    }
-    if args.codex_home:
-        participating_paths["codex_home"] = Path(args.codex_home)
-    if args.generation_dir:
-        participating_paths["generation_dir"] = Path(args.generation_dir)
-    if args.codex_bin:
-        participating_paths["codex_bin"] = Path(args.codex_bin)
     try:
-        refuse_path_aliases(participating_paths)
+        preflight_mutating_command_paths(args)
     except ValueError as error:
         return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
 
-    home = _resolve_codex_home(args)
-    generation_dir = _resolve_generation_dir(args, home)
+    home = args._effective_codex_home
+    generation_dir = args._effective_generation_dir
     destination = Path(args.destination)
     job_path = Path(args.job)
 
@@ -319,7 +352,7 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         payload = {"ok": False, "stage": "capability", **capability_probe.as_report(capability)}
         return EXIT_CAPABILITY_UNAVAILABLE, _emit(payload, args.json)
 
-    codex_binary = str(binary) if binary else generation_runner.resolved_binary(None)
+    codex_binary = args._effective_codex_binary
 
     ledger = job_ledger.JobLedger(job_path)
     if job_path.is_file():
@@ -461,13 +494,7 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
 def command_recover(args: argparse.Namespace) -> tuple[int, str]:
     """Reconcile verified receipts into the ledger without invoking Codex."""
     try:
-        refuse_path_aliases(
-            {
-                "plan": Path(args.plan),
-                "job": Path(args.job),
-                "destination": Path(args.destination),
-            }
-        )
+        preflight_mutating_command_paths(args)
     except ValueError as error:
         return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
 
@@ -630,18 +657,8 @@ def current_rows_by_key(payload: dict, current_keys: set[str]) -> dict[str, dict
 
 
 def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
-    participating_paths = {
-        "job": Path(args.job),
-        "plan": Path(args.plan),
-        "scores": Path(args.scores),
-        "destination": Path(args.destination),
-    }
-    if args.labels:
-        participating_paths["labels"] = Path(args.labels)
-    if args.advisory:
-        participating_paths["advisory"] = Path(args.advisory)
     try:
-        refuse_path_aliases(participating_paths)
+        preflight_mutating_command_paths(args)
     except ValueError as error:
         return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
 
@@ -733,17 +750,8 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
 
 
 def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
-    participating_paths = {
-        "job": Path(args.job),
-        "plan": Path(args.plan),
-        "scores": Path(args.scores),
-        "out": Path(args.out),
-        "destination": Path(args.destination),
-    }
-    if args.rewrites:
-        participating_paths["rewrites"] = Path(args.rewrites)
     try:
-        refuse_path_aliases(participating_paths)
+        preflight_mutating_command_paths(args)
     except ValueError as error:
         return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
 
@@ -994,6 +1002,10 @@ def run_cli(argv: list[str]) -> tuple[int, str]:
     handler = HANDLERS[args.command]
     try:
         if args.command in {"run", "evaluate", "optimize", "recover"}:
+            try:
+                preflight_mutating_command_paths(args)
+            except ValueError as error:
+                return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
             job_path = Path(args.job) if hasattr(args, "job") else Path(args.plan)
             with job_lock.JobLock(job_path):
                 return handler(args)

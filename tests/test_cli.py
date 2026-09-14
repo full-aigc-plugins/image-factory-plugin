@@ -267,8 +267,6 @@ class RunCommandTests(unittest.TestCase):
                     "job_is_plan": fixture.plan_path,
                     "job_is_destination": fixture.destination,
                 }[alias_name]
-                with job_lock.JobLock(job_argument):
-                    pass
                 before = snapshot_tree(fixture.base)
                 with patch.object(
                     cli.capability_probe,
@@ -288,6 +286,54 @@ class RunCommandTests(unittest.TestCase):
                 self.assertEqual(code, cli.EXIT_USAGE, output)
                 self.assertIn("path collision", json.loads(output)["error"])
                 self.assertEqual(snapshot_tree(fixture.base), before)
+                self.assertFalse(job_lock.lock_path_for(job_argument).exists())
+                self.assertFalse((fixture.base / "fake-codex-argv.json").exists())
+
+    def test_run_preflights_effective_default_paths_before_creating_the_lock(self) -> None:
+        for alias_name in ("default_home", "default_generation", "resolved_binary"):
+            with self.subTest(alias=alias_name):
+                fixture = CliFixture()
+                self.addCleanup(fixture.cleanup)
+                fixture.write_plan()
+                fixture.control()
+                nested = fixture.base / "nested"
+                nested.mkdir()
+                generation_alias = fixture.base / "generation-alias"
+                generation_alias.symlink_to(fixture.generation_dir, target_is_directory=True)
+                codex_home = {
+                    "default_home": fixture.job_path,
+                    "default_generation": fixture.codex_home,
+                    "resolved_binary": fixture.codex_home,
+                }[alias_name]
+                destination = (
+                    generation_alias
+                    if alias_name == "default_generation"
+                    else fixture.destination
+                )
+                resolved_binary = (
+                    nested / ".." / fixture.plan_path.name
+                    if alias_name == "resolved_binary"
+                    else SHIM
+                )
+                before = snapshot_tree(fixture.base)
+                with patch.dict(os.environ, {"CODEX_HOME": str(codex_home)}), patch.object(
+                    cli.generation_runner,
+                    "resolved_binary",
+                    return_value=str(resolved_binary),
+                ), patch.object(
+                    cli.capability_probe,
+                    "probe",
+                    side_effect=AssertionError("default path refusal must precede capability probe"),
+                ):
+                    code, output = fixture.run_cli(
+                        "run", "--plan", str(fixture.plan_path), "--job", str(fixture.job_path),
+                        "--destination", str(destination), "--approve", "--json",
+                    )
+                self.assertEqual(code, cli.EXIT_USAGE, output)
+                self.assertIn("path collision", json.loads(output)["error"])
+                self.assertEqual(snapshot_tree(fixture.base), before)
+                self.assertFalse(job_lock.lock_path_for(fixture.job_path).exists())
+                self.assertFalse(fixture.job_path.exists())
                 self.assertFalse((fixture.base / "fake-codex-argv.json").exists())
 
     def test_run_without_approval_stops_before_spending(self) -> None:

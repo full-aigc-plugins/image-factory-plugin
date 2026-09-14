@@ -80,8 +80,6 @@ class RecoveryCommandTests(unittest.TestCase):
                     "job_is_destination": fixture.destination,
                     "relative_symlink_job": alias_parent / "nested" / ".." / fixture.plan_path.name,
                 }[alias_name]
-                with cli.job_lock.JobLock(job_argument):
-                    pass
                 before = snapshot_tree(fixture.base)
                 with patch.object(
                     cli.receipt_store,
@@ -99,6 +97,7 @@ class RecoveryCommandTests(unittest.TestCase):
                 self.assertEqual(code, cli.EXIT_USAGE, output)
                 self.assertIn("path collision", json.loads(output)["error"])
                 self.assertEqual(snapshot_tree(fixture.base), before)
+                self.assertFalse(cli.job_lock.lock_path_for(job_argument).exists())
                 self.assertEqual(fixture.read_job()["state"], "Running")
 
     def test_attempting_with_verified_receipt_becomes_generated(self) -> None:
