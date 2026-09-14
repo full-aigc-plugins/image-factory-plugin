@@ -923,11 +923,11 @@ git commit -m "feat: reconcile interrupted image jobs safely"
 - Produces: natural-language approval mapped only to the displayed plan and round
 - Preserves: recommendation-first and at-most-three-directions behavior
 
-- [ ] **Step 1: Write failing conversation assertions**
+- [x] **Step 1: Write failing conversation assertions**
 
 Require the shared contract to name plan-bound approval, remaining generation calls, approval invalidation after plan changes, `PendingApproval`, `Accepted`, `Unknown`, and non-spending recovery. Require all four Skills to route to the shared contract.
 
-- [ ] **Step 2: Run conversation tests and verify RED**
+- [x] **Step 2: Run conversation tests and verify RED**
 
 ```bash
 python3 -m unittest tests.test_conversation_workflow tests.test_skills -v
@@ -935,7 +935,7 @@ python3 -m unittest tests.test_conversation_workflow tests.test_skills -v
 
 Expected: existing dialogue documents lack the new transaction and recovery terms.
 
-- [ ] **Step 3: Update the shared conversation workflow**
+- [x] **Step 3: Update the shared conversation workflow**
 
 Specify this user-visible sequence:
 
@@ -949,11 +949,11 @@ Specify this user-visible sequence:
 
 Keep file-lock, schema-version, hash, and receipt-directory details out of normal user copy.
 
-- [ ] **Step 4: Update examples, anti-patterns, FAQ, and four Skills**
+- [x] **Step 4: Update examples, anti-patterns, FAQ, and four Skills**
 
 Include a first round, a partial approval, a changed plan that invalidates approval, and an interrupted job with an unresolved item. Preserve exact natural-language forms such as `整组批准` and `第 3 张改成更温暖`.
 
-- [ ] **Step 5: Run focused, distribution, and full tests**
+- [x] **Step 5: Run focused, distribution, and full tests**
 
 ```bash
 python3 -m unittest tests.test_conversation_workflow tests.test_skills tests.test_distribution_extended tests.test_ownership_boundary -v
@@ -962,7 +962,7 @@ python3 -m unittest discover -s tests -v
 
 Expected: all tests pass; documentation retains the image-only ownership boundary.
 
-- [ ] **Step 6: Commit the transactional conversation**
+- [x] **Step 6: Commit the transactional conversation**
 
 ```bash
 git add skills/codex-image-factory-use skills/codex-image-factory-run/SKILL.md skills/codex-image-factory-judge/SKILL.md skills/codex-image-factory-recover/SKILL.md tests/test_conversation_workflow.py tests/test_skills.py

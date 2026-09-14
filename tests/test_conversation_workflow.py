@@ -93,5 +93,38 @@ class ConversationWorkflowTests(unittest.TestCase):
         self.assertIn("团队", faq)
 
 
+    def test_contract_names_the_approval_binding_and_recovery_terms(self) -> None:
+        """The conversation must be able to describe what the ledger actually enforces."""
+        contract = (
+            SKILLS / "codex-image-factory-use" / "references" / "conversation-workflow.md"
+        ).read_text(encoding="utf-8")
+        for term in (
+            "计划哈希",
+            "剩余生成调用",
+            "PendingApproval",
+            "Accepted",
+            "Unknown",
+            "不调用任何生成",
+        ):
+            with self.subTest(term=term):
+                self.assertIn(term, contract)
+
+    def test_contract_states_that_a_changed_plan_invalidates_approval(self) -> None:
+        contract = (
+            SKILLS / "codex-image-factory-use" / "references" / "conversation-workflow.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("计划一旦改变", contract)
+        self.assertIn("批准失效", contract)
+
+    def test_examples_preserve_the_natural_language_decisions(self) -> None:
+        examples = (
+            SKILLS / "codex-image-factory-use" / "references" / "conversation-examples.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("整组批准", examples)
+        self.assertIn("第 3 张改成更温暖", examples)
+        self.assertIn("计划改变", examples)
+        self.assertIn("未决", examples)
+
+
 if __name__ == "__main__":
     unittest.main()
