@@ -48,6 +48,28 @@ def schema_plan(**overrides) -> dict:
     return plan
 
 
+def valid_plan_1_1(**overrides) -> dict:
+    return schema_plan(**overrides)
+
+
+def plan_with_reference(path) -> dict:
+    return schema_plan(items=[{"id": "item-01", "prompt": "p", "reference_images": [str(path)]}])
+
+
+def second_png() -> bytes:
+    """Distinct valid PNG bytes, used to change a reference image's content."""
+    return (ROOT / "assets" / "composer-icon.png").read_bytes()
+
+
+def plan_a() -> dict:
+    return schema_plan()
+
+
+def same_plan_with_different_key_order() -> str:
+    """The same plan serialized with its keys in a different textual order."""
+    return json.dumps(schema_plan(), sort_keys=True, indent=4)
+
+
 class PlanFixture:
     def __init__(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -206,6 +228,70 @@ class PlanValidatorTests(unittest.TestCase):
         self.assertTrue(result.ok, result.errors)
         expected = hashlib.sha256(b"known-bytes").hexdigest()
         self.assertEqual(result.items[0].reference_sha256, (expected,))
+
+
+class PlanIdentityTests(unittest.TestCase):
+    """The plan hash is what an approval binds to, so it must identify the work exactly."""
+
+    def setUp(self) -> None:
+        self.fixture = PlanFixture()
+        self.addCleanup(self.fixture.cleanup)
+
+    def validate(self, plan) -> plan_validator.PlanResult:
+        return plan_validator.validate_plan(plan, base_dir=self.fixture.base)
+
+    def test_human_label_policy_reaches_plan_result(self) -> None:
+        result = self.validate(valid_plan_1_1())
+        self.assertTrue(result.require_human_labels)
+
+    def test_plan_hash_is_exposed(self) -> None:
+        result = self.validate(valid_plan_1_1())
+        self.assertRegex(result.plan_sha256, r"^[0-9a-f]{64}$")
+
+    def test_plan_hash_changes_when_reference_bytes_change(self) -> None:
+        reference = self.fixture.reference("ref.png", b"first-bytes")
+        first = self.validate(plan_with_reference(reference))
+        reference.write_bytes(second_png())
+        second = self.validate(plan_with_reference(reference))
+        self.assertNotEqual(first.plan_sha256, second.plan_sha256)
+
+    def test_semantically_identical_json_has_the_same_plan_hash(self) -> None:
+        first = self.validate(plan_a())
+        second = self.validate(same_plan_with_different_key_order())
+        self.assertEqual(first.plan_sha256, second.plan_sha256)
+
+    def test_plan_hash_ignores_the_reference_path(self) -> None:
+        """Two different paths holding identical bytes describe the same work."""
+        left = self.fixture.reference("a/ref.png", b"same-bytes")
+        right = self.fixture.reference("b/ref.png", b"same-bytes")
+        self.assertEqual(
+            self.validate(plan_with_reference(left)).plan_sha256,
+            self.validate(plan_with_reference(right)).plan_sha256,
+        )
+
+    def test_plan_hash_changes_with_the_prompt(self) -> None:
+        changed = valid_plan_1_1(items=[{"id": "item-01", "prompt": "a different portrait"}])
+        self.assertNotEqual(
+            self.validate(valid_plan_1_1()).plan_sha256,
+            self.validate(changed).plan_sha256,
+        )
+
+    def test_plan_hash_changes_with_the_round(self) -> None:
+        self.assertNotEqual(
+            self.validate(valid_plan_1_1()).plan_sha256,
+            self.validate(valid_plan_1_1(round=2)).plan_sha256,
+        )
+
+    def test_migration_notes_are_reported(self) -> None:
+        self.assertEqual(len(self.validate(minimal_plan()).migration_notes), 1)
+
+    def test_a_current_plan_reports_no_migration(self) -> None:
+        self.assertEqual(self.validate(valid_plan_1_1()).migration_notes, ())
+
+    def test_a_rejected_plan_has_no_hash(self) -> None:
+        result = self.validate(minimal_plan(round=99))
+        self.assertFalse(result.ok)
+        self.assertEqual(result.plan_sha256, "")
 
 
 if __name__ == "__main__":

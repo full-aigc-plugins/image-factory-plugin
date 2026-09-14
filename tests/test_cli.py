@@ -137,6 +137,9 @@ class ValidatePlanCommandTests(unittest.TestCase):
         payload = json.loads(output)
         self.assertEqual([row["item_id"] for row in payload["items"]], ["item-01", "item-02"])
         self.assertTrue(payload["require_approval_before_run"])
+        self.assertTrue(payload["require_human_labels"])
+        self.assertRegex(payload["plan_sha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(payload["migration_notes"], ["migrated image batch 1.0.0 to 1.1.0"])
 
     def test_invalid_plan_exits_with_usage_error(self) -> None:
         self.fixture.write_plan(valid_plan(round=999))
@@ -157,6 +160,8 @@ class QuoteCommandTests(unittest.TestCase):
         payload = json.loads(output)
         self.assertEqual(payload["image_count"], 2)
         self.assertTrue(payload["approval_required"])
+        self.assertTrue(payload["require_human_labels"])
+        self.assertRegex(payload["plan_sha256"], r"^[0-9a-f]{64}$")
         self.assertFalse(payload["spends_allowance_on_quote"])
 
 

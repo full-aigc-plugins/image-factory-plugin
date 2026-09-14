@@ -299,7 +299,7 @@ git commit -m "feat: define Image Factory transaction contracts"
 - Extends: `PlanResult.migration_notes: tuple[str, ...]`
 - Consumed later by: approval recording, run validation, evaluation, and status
 
-- [ ] **Step 1: Write failing plan-hash and policy tests**
+- [x] **Step 1: Write failing plan-hash and policy tests**
 
 ```python
 def test_human_label_policy_reaches_plan_result(self) -> None:
@@ -325,7 +325,7 @@ Each helper returns a complete schema-valid 1.1.0 dictionary;
 `plan_with_reference` accepts a path and `second_png` returns distinct valid PNG
 bytes.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 ```bash
 python3 -m unittest tests.test_plan tests.test_cli.ValidatePlanCommandTests tests.test_cli.QuoteCommandTests -v
@@ -333,7 +333,7 @@ python3 -m unittest tests.test_plan tests.test_cli.ValidatePlanCommandTests test
 
 Expected: `PlanResult` lacks the new fields and CLI output lacks the hash and human-label policy.
 
-- [ ] **Step 3: Implement semantic plan hashing**
+- [x] **Step 3: Implement semantic plan hashing**
 
 ```python
 def canonical_plan_sha256(result_fields: dict) -> str:
@@ -348,13 +348,13 @@ def canonical_plan_sha256(result_fields: dict) -> str:
 
 Hash batch id, round, limits, judge policy, and each ordered item's id, prompt, reference hashes, and idempotency key. Do not hash JSON whitespace, local absolute reference paths, or migration-note prose.
 
-- [ ] **Step 4: Extend validation and read-only CLI output**
+- [x] **Step 4: Extend validation and read-only CLI output**
 
 Read the migrated document already produced by Task 1. Add the three new frozen
 fields to `PlanResult`. Expose `plan_sha256`, `require_human_labels`, and migration
 notes from `validate-plan` and `quote` without writing a ledger.
 
-- [ ] **Step 5: Run focused and full tests**
+- [x] **Step 5: Run focused and full tests**
 
 ```bash
 python3 -m unittest tests.test_plan tests.test_cli.ValidatePlanCommandTests tests.test_cli.QuoteCommandTests -v
@@ -363,7 +363,7 @@ python3 -m unittest discover -s tests -v
 
 Expected: all tests pass and existing reference-image argument/idempotency tests remain green.
 
-- [ ] **Step 6: Commit the plan identity**
+- [x] **Step 6: Commit the plan identity**
 
 ```bash
 git add scripts/plan_validator.py scripts/image_factory_cli.py tests/test_plan.py tests/test_cli.py

@@ -127,9 +127,12 @@ def command_validate_plan(args: argparse.Namespace) -> tuple[int, str]:
         "ok": True,
         "batch_id": result.batch_id,
         "round": result.round,
+        "plan_sha256": result.plan_sha256,
         "max_images": result.max_images,
         "max_rounds": result.max_rounds,
         "require_approval_before_run": result.require_approval_before_run,
+        "require_human_labels": result.require_human_labels,
+        "migration_notes": list(result.migration_notes),
         "items": [
             {
                 "item_id": item.id,
@@ -150,9 +153,12 @@ def command_quote(args: argparse.Namespace) -> tuple[int, str]:
         "ok": True,
         "batch_id": result.batch_id,
         "round": result.round,
+        "plan_sha256": result.plan_sha256,
         "image_count": len(result.items),
         "max_images": result.max_images,
         "approval_required": result.require_approval_before_run,
+        "require_human_labels": result.require_human_labels,
+        "migration_notes": list(result.migration_notes),
         # Quoting is free: it reads the plan and spends nothing.
         "spends_allowance_on_quote": False,
         "note": (
@@ -162,6 +168,7 @@ def command_quote(args: argparse.Namespace) -> tuple[int, str]:
     }
     summary = [
         f"batch: {result.batch_id} (round {result.round})",
+        f"plan hash: {result.plan_sha256}",
         f"images to generate: {len(result.items)}",
         f"approval required: {result.require_approval_before_run}",
         "this quote spends nothing",
