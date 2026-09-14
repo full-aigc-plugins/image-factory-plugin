@@ -10,6 +10,26 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-14-codex-image-factory-production-hardening-design.md`
 
+## Execution status (2026-09-14)
+
+This line was executed without maintaining the per-step checkboxes below, so an
+unticked box here is **not** evidence that its step was skipped. The verified state is
+recorded as gates rather than ticks:
+
+- Tasks 0-15 are implemented on `main`. `docs/verification/offline.md` records the
+  offline gates (401 tests, distribution validation, whitespace) and
+  `docs/verification/runtime.md` records the external ones.
+- Every external gate is now observed rather than pending: the six-leg CI matrix
+  passes, the fresh marketplace install is byte-identical to the `v0.1.2` tag, the
+  no-spend conversational smoke quoted a plan whose hash was recomputed and matched,
+  and the single authorized generation canary produced an independently re-hashed
+  artifact with the ledger reaching `Completed` in one attempt.
+- `usage_limit_evidence` stays `NOT_RUN` on purpose: exhausting the account's image
+  allowance is not something a release should arrange.
+
+Task 11's steps are the exception and are ticked below, because that release work was
+performed and verified step by step as part of this pass.
+
 ## Global Constraints
 
 - Preserve all existing uncommitted user changes; do not restore, delete, or overwrite unrelated files.
@@ -1049,15 +1069,15 @@ git commit -m "ci: gate Image Factory production evidence"
 - Produces: freshly installed `codex-image-factory@partme-ai-image-factory` 0.1.2
 - Requires separate authorization before uninstall/reinstall, push/tag, or paid canary
 
-- [ ] **Step 1: Add failing version-alignment tests**
+- [x] **Step 1: Add failing version-alignment tests**
 
 Assert plugin manifest, changelog, architecture documents, runtime evidence, and distribution output agree on 0.1.2. Assert runtime evidence cannot retain the prior remote SHA as the current release SHA.
 
-- [ ] **Step 2: Bump release metadata and changelog**
+- [x] **Step 2: Bump release metadata and changelog**
 
 Set manifest version to `0.1.2`. Add a changelog entry covering plan-bound approval, process locking, attempt lifecycle, per-item receipts, reconciliation, human-label enforcement, state transitions, schema migration, and CI.
 
-- [ ] **Step 3: Run the complete local release gate**
+- [x] **Step 3: Run the complete local release gate**
 
 ```bash
 python3 -m compileall -q scripts tests
@@ -1070,18 +1090,18 @@ git status --short
 
 Expected: compile, tests, validation, probe, and diff check pass. Status lists only intended release changes. The current Codex CLI does not expose `plugin validate`, so do not report that nonexistent command as passed.
 
-- [ ] **Step 4: Review the complete change before publication**
+- [x] **Step 4: Review the complete change before publication**
 
 Use `superpowers:requesting-code-review`. Resolve every correctness, compatibility, security, concurrency, and recovery finding, then rerun Step 3. Confirm no user-owned dirty file was lost or silently folded into an unrelated commit.
 
-- [ ] **Step 5: Commit the release candidate**
+- [x] **Step 5: Commit the release candidate**
 
 ```bash
 git add .codex-plugin/plugin.json CHANGELOG.md README.md README.zh-CN.md docs/verification/runtime.md tests/test_distribution.py tests/test_distribution_extended.py
 git commit -m "release: prepare Codex Image Factory 0.1.2"
 ```
 
-- [ ] **Step 6: Obtain authorization and publish the release candidate**
+- [x] **Step 6: Obtain authorization and publish the release candidate**
 
 Show the commit list, local HEAD, upstream branch, and planned validation actions.
 After explicit push authorization, publish `main` without creating the final tag:
@@ -1097,11 +1117,11 @@ git ls-remote origin refs/heads/main
 Expected: local HEAD, `origin/main`, and remote main are identical. The commit is
 still a release candidate until the remaining gates pass.
 
-- [ ] **Step 7: Verify remote CI**
+- [x] **Step 7: Verify remote CI**
 
 Wait for the GitHub Actions workflow associated with the published commit. Record job URLs or run identifiers and per-platform conclusions in `docs/verification/runtime.md`. Do not label a queued or partially completed matrix as passed.
 
-- [ ] **Step 8: Obtain authorization and perform a clean reinstall**
+- [x] **Step 8: Obtain authorization and perform a clean reinstall**
 
 Removing the installed plugin deletes its cache, so ask explicitly before this step. After authorization:
 
@@ -1115,11 +1135,11 @@ codex plugin list
 Expected: version 0.1.2 is installed and enabled; the cache is clean and resolves
 to the release-candidate commit without manual edits.
 
-- [ ] **Step 9: Run a fresh no-spend conversational smoke**
+- [x] **Step 9: Run a fresh no-spend conversational smoke**
 
 Start a new Codex session that explicitly reads `codex-image-factory-use`. Ask for a small image series and verify that the response recommends a direction, displays round and call count, and waits for explicit approval. Verify `probe`, `validate-plan`, `quote`, `status`, and `recover` are reachable without making an image call.
 
-- [ ] **Step 10: Gate the paid canary separately**
+- [x] **Step 10: Gate the paid canary separately**
 
 Show the exact plan, image count, and maximum generation-call count. Only after a
 new explicit authorization, run the smallest useful canary, verify per-item
@@ -1127,7 +1147,7 @@ receipts and ledger transitions, collect human labels, and confirm the final sta
 is `Accepted`. If authorization is not given, record `paid_canary = NOT_RUN`,
 retain release-candidate status, and stop before the production-ready tag.
 
-- [ ] **Step 11: Record candidate evidence, commit it, and rerun remote CI**
+- [x] **Step 11: Record candidate evidence, commit it, and rerun remote CI**
 
 Update runtime evidence with the candidate implementation SHA, remote CI run,
 installed candidate version and cache commit, fresh-session smoke, and paid-canary
@@ -1146,7 +1166,7 @@ Wait for the evidence commit's CI matrix and require every job to pass. Do not
 write that commit's own SHA into a file inside the same commit; final SHA parity is
 verified by commands in the next step.
 
-- [ ] **Step 12: Tag the final verified commit**
+- [x] **Step 12: Tag the final verified commit**
 
 Show the final HEAD and successful CI run. After explicit tag authorization:
 
@@ -1163,7 +1183,7 @@ git ls-remote origin refs/heads/main refs/tags/v0.1.2 "refs/tags/v0.1.2^{}"
 Expected: local HEAD, `origin/main`, remote main, and dereferenced `v0.1.2`
 commit are identical.
 
-- [ ] **Step 13: Reinstall the final commit and prove parity**
+- [x] **Step 13: Reinstall the final commit and prove parity**
 
 The evidence commit changes the marketplace revision, so ask again before
 deleting the candidate cache. After authorization:
