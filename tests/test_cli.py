@@ -83,6 +83,37 @@ class CliFixture:
     def run_cli(self, *args: str) -> tuple[int, str]:
         return cli.run_cli(list(args))
 
+    def read_job(self) -> dict:
+        return json.loads(self.job_path.read_text(encoding="utf-8"))
+
+    def run_approved_batch(self) -> tuple[int, str]:
+        return self.run_cli(
+            "run",
+            "--plan",
+            str(self.plan_path),
+            "--job",
+            str(self.job_path),
+            "--codex-bin",
+            str(SHIM),
+            *self.base_args(),
+            "--approve",
+            "--json",
+        )
+
+    def evaluate_batch(self, *extra: str) -> tuple[int, str]:
+        return self.run_cli(
+            "evaluate",
+            "--plan",
+            str(self.plan_path),
+            "--job",
+            str(self.job_path),
+            "--scores",
+            str(self.base / "scores.json"),
+            *self.base_args(),
+            "--json",
+            *extra,
+        )
+
     def base_args(self) -> list[str]:
         return [
             "--codex-home",
@@ -305,131 +336,148 @@ class StatusCommandTests(unittest.TestCase):
 
 
 class EvaluateAndOptimizeCommandTests(unittest.TestCase):
+    """Evaluation and optimization are driven through the real handlers, not fakes."""
+
     def setUp(self) -> None:
         self.fixture = CliFixture()
         self.addCleanup(self.fixture.cleanup)
         self.fixture.write_plan()
         self.fixture.control()
-        self.scores_path = self.fixture.base / "scores.json"
-        self.fixture.run_cli(
-            "run",
-            "--plan",
-            str(self.fixture.plan_path),
-            "--job",
-            str(self.fixture.job_path),
-            "--codex-bin",
-            str(SHIM),
-            *self.fixture.base_args(),
-            "--approve",
-            "--json",
-        )
 
-    def test_evaluate_writes_a_scores_document(self) -> None:
-        code, output = self.fixture.run_cli(
-            "evaluate",
-            "--plan",
-            str(self.fixture.plan_path),
-            "--job",
-            str(self.fixture.job_path),
-            "--scores",
-            str(self.scores_path),
-            *self.fixture.base_args(),
-            "--json",
+    def test_a_labeled_passing_batch_is_accepted(self) -> None:
+        """1.1.0 requires human labels, so "pass" is only reachable once they exist."""
+        self.fixture.run_approved_batch()
+        labels = self.fixture.base / "labels.json"
+        labels.write_text(
+            json.dumps({"item-01": "approved", "item-02": "approved"}), encoding="utf-8"
         )
+        code, output = self.fixture.evaluate_batch("--labels", str(labels))
         self.assertEqual(code, 0, output)
-        scores = json.loads(self.scores_path.read_text(encoding="utf-8"))
-        self.assertEqual(scores["decision"], "pass")
-        self.assertTrue(scores["deterministic_gates"]["all_passed"])
+        payload = json.loads(output)
+        self.assertEqual(payload["decision"], "pass")
+        self.assertEqual(payload["state"], "Accepted")
+        self.assertEqual(self.fixture.read_job()["state"], "Accepted")
 
-    def test_optimize_reports_completion_when_everything_passed(self) -> None:
-        self.fixture.run_cli(
-            "evaluate",
-            "--plan",
-            str(self.fixture.plan_path),
-            "--job",
-            str(self.fixture.job_path),
-            "--scores",
-            str(self.scores_path),
-            *self.fixture.base_args(),
-            "--json",
-        )
-        next_plan = self.fixture.base / "next.json"
-        code, output = self.fixture.run_cli(
+    def test_the_recorded_evaluation_carries_the_scores_hash(self) -> None:
+        self.fixture.run_approved_batch()
+        _code, output = self.fixture.evaluate_batch()
+        recorded = self.fixture.read_job()["evaluation"]
+        self.assertEqual(recorded["scores_sha256"], json.loads(output)["scores_sha256"])
+        self.assertRegex(recorded["scores_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_required_human_labels_cannot_pass_unlabeled(self) -> None:
+        self.fixture.run_approved_batch()
+        code, output = self.fixture.evaluate_batch()
+        self.assertEqual(code, 0, output)
+        self.assertEqual(json.loads(output)["decision"], "pending_approval")
+        self.assertEqual(self.fixture.read_job()["state"], "PendingApproval")
+
+    def test_whole_batch_approval_passes(self) -> None:
+        self.fixture.run_approved_batch()
+        labels = self.fixture.base / "labels.json"
+        labels.write_text(json.dumps({"item-01": "approved", "item-02": "approved"}), encoding="utf-8")
+        code, output = self.fixture.evaluate_batch("--labels", str(labels))
+        self.assertEqual(code, 0, output)
+        self.assertEqual(json.loads(output)["decision"], "pass")
+        self.assertEqual(self.fixture.read_job()["state"], "Accepted")
+
+    def test_partial_labels_stay_pending(self) -> None:
+        self.fixture.run_approved_batch()
+        labels = self.fixture.base / "labels.json"
+        labels.write_text(json.dumps({"item-01": "approved"}), encoding="utf-8")
+        code, output = self.fixture.evaluate_batch("--labels", str(labels))
+        self.assertEqual(code, 0, output)
+        self.assertEqual(json.loads(output)["decision"], "pending_approval")
+        self.assertEqual(self.fixture.read_job()["state"], "PendingApproval")
+
+    def test_one_rejection_fails_the_batch_despite_a_perfect_advisory_score(self) -> None:
+        self.fixture.run_approved_batch()
+        labels = self.fixture.base / "labels.json"
+        labels.write_text(json.dumps({"item-01": "rejected", "item-02": "approved"}), encoding="utf-8")
+        advisory = self.fixture.base / "advisory.json"
+        advisory.write_text(json.dumps({"item-01": [1.0, "flawless"]}), encoding="utf-8")
+        code, output = self.fixture.evaluate_batch("--labels", str(labels), "--advisory", str(advisory))
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(json.loads(output)["decision"], "fail")
+        self.assertEqual(self.fixture.read_job()["state"], "Evaluated")
+
+    def test_a_deterministic_failure_leaves_the_job_evaluated(self) -> None:
+        self.fixture.control(mode="failure")
+        self.fixture.run_approved_batch()
+        code, output = self.fixture.evaluate_batch()
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertEqual(json.loads(output)["decision"], "fail")
+        self.assertEqual(self.fixture.read_job()["state"], "Evaluated")
+
+    def test_optimize_requires_a_job_argument(self) -> None:
+        code, _output = self.fixture.run_cli(
             "optimize",
             "--plan",
             str(self.fixture.plan_path),
             "--scores",
-            str(self.scores_path),
+            str(self.fixture.base / "scores.json"),
             "--out",
-            str(next_plan),
+            str(self.fixture.base / "next.json"),
             "--json",
         )
-        self.assertEqual(code, 0, output)
-        self.assertTrue(json.loads(output)["complete"])
-        self.assertFalse(next_plan.exists())
+        self.assertEqual(code, cli.EXIT_USAGE)
 
-    def test_optimize_requires_an_instruction_for_each_item_needing_rework(self) -> None:
-        scores = json.loads(
-            (ROOT / "schemas/scores.schema.json").read_text(encoding="utf-8")
-        )  # shape reference only; build a failing document below
-        failing = {
-            "schema_version": "1.0.0",
-            "batch_id": "portrait-study",
-            "round": 1,
-            "pass_threshold": 0.8,
-            "deterministic_gates": {
-                "all_passed": False,
-                "per_item": [
-                    {"item_id": "item-01", "passed": False, "failures": ["not_a_png"]},
-                    {"item_id": "item-02", "passed": True, "failures": []},
-                ],
-            },
-            "advisory": {"enabled": False, "items": []},
-            "human_labels": [],
-            "decision": "fail",
-        }
-        self.scores_path.write_text(json.dumps(failing), encoding="utf-8")
+    def test_optimize_refuses_a_job_that_was_not_evaluated(self) -> None:
+        self.fixture.run_approved_batch()
         code, output = self.fixture.run_cli(
             "optimize",
             "--plan",
             str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
             "--scores",
-            str(self.scores_path),
+            str(self.fixture.base / "scores.json"),
             "--out",
             str(self.fixture.base / "next.json"),
             "--json",
         )
         self.assertEqual(code, cli.EXIT_FAILURE, output)
-        self.assertEqual(json.loads(output)["errors"][0]["code"], "optimizer_missing_instruction")
-        self.assertTrue(scores["required"])
+        self.assertEqual(json.loads(output)["error_category"], "recovery_required")
 
-    def test_optimize_with_a_rewrite_writes_the_next_round(self) -> None:
-        failing = {
-            "schema_version": "1.0.0",
-            "batch_id": "portrait-study",
-            "round": 1,
-            "pass_threshold": 0.8,
-            "deterministic_gates": {
-                "all_passed": False,
-                "per_item": [
-                    {"item_id": "item-01", "passed": False, "failures": ["not_a_png"]},
-                    {"item_id": "item-02", "passed": True, "failures": []},
-                ],
-            },
-            "advisory": {"enabled": False, "items": []},
-            "human_labels": [],
-            "decision": "fail",
-        }
-        self.scores_path.write_text(json.dumps(failing), encoding="utf-8")
+    def test_optimize_refuses_scores_that_are_not_the_recorded_ones(self) -> None:
+        self.fixture.control(mode="failure")
+        self.fixture.run_approved_batch()
+        self.fixture.evaluate_batch()
+        substitute = self.fixture.base / "substitute.json"
+        substitute.write_text(json.dumps({"batch_id": "portrait-study"}), encoding="utf-8")
+        code, output = self.fixture.run_cli(
+            "optimize",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
+            "--scores",
+            str(substitute),
+            "--out",
+            str(self.fixture.base / "next.json"),
+            "--json",
+        )
+        self.assertEqual(code, cli.EXIT_FAILURE, output)
+        self.assertIn("not the ones recorded", json.loads(output)["error"])
+
+    def test_optimize_writes_the_next_round_and_records_it(self) -> None:
+        self.fixture.control(mode="failure")
+        self.fixture.run_approved_batch()
+        self.fixture.evaluate_batch()
         rewrites = self.fixture.base / "rewrites.json"
-        rewrites.write_text(json.dumps({"item-01": "a calmer portrait"}), encoding="utf-8")
+        rewrites.write_text(
+            json.dumps({"item-01": "a calmer portrait", "item-02": "a calmer second portrait"}),
+            encoding="utf-8",
+        )
         next_plan = self.fixture.base / "next.json"
         code, output = self.fixture.run_cli(
             "optimize",
             "--plan",
             str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
             "--scores",
-            str(self.scores_path),
+            str(self.fixture.base / "scores.json"),
             "--rewrites",
             str(rewrites),
             "--out",
@@ -437,9 +485,14 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
             "--json",
         )
         self.assertEqual(code, 0, output)
+        payload = json.loads(output)
+        self.assertEqual(payload["state"], "Optimized")
         document = json.loads(next_plan.read_text(encoding="utf-8"))
+        self.assertEqual(document["schema_version"], "1.1.0")
         self.assertEqual(document["round"], 2)
-        self.assertEqual(document["items"], [{"id": "item-01", "prompt": "a calmer portrait"}])
+        job = self.fixture.read_job()
+        self.assertEqual(job["optimization"]["round"], 2)
+        self.assertEqual(job["optimization"]["plan_hash"] if "plan_hash" in job["optimization"] else payload["plan_sha256"], payload["plan_sha256"])
 
 
 class NoCertificateFilesTests(unittest.TestCase):

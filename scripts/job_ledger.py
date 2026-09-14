@@ -540,3 +540,63 @@ class JobLedger:
         payload["updated_at"] = _timestamp()
         self.write(payload)
         return payload
+
+    # ------------------------------------------------------- evaluation and result
+
+    def record_evaluation(
+        self,
+        scores_sha256: str,
+        decision: str,
+        *,
+        all_gates_passed: bool,
+        scores_path: str | None = None,
+    ) -> dict:
+        """Record the verdict, hashed so the scores document can be re-identified."""
+        _require_sha256(scores_sha256)
+        if decision not in ("pass", "fail", "pending_approval"):
+            raise ValueError(f"unknown decision {decision!r}")
+        payload = self.read()
+        payload["evaluation"] = {
+            "decision": decision,
+            "all_gates_passed": bool(all_gates_passed),
+            "evaluated_at": _timestamp(),
+            "scores_sha256": scores_sha256,
+            "scores_path": scores_path,
+        }
+        payload["revision"] = payload["revision"] + 1
+        payload["updated_at"] = _timestamp()
+        self.write(payload)
+        return payload
+
+    def record_optimization(
+        self,
+        plan_sha256: str,
+        round_number: int,
+        *,
+        carried_forward=(),
+        rework=(),
+        next_plan_path: str | None = None,
+    ) -> dict:
+        _require_sha256(plan_sha256)
+        _require_positive_int(round_number, "round")
+        payload = self.read()
+        payload["optimization"] = {
+            "round": round_number,
+            "carried_forward": [str(value) for value in carried_forward],
+            "rework": [str(value) for value in rework],
+            "optimized_at": _timestamp(),
+            "next_plan_path": next_plan_path,
+        }
+        # The approval covered the previous round's calls; a new round needs its own.
+        approvals = payload.setdefault("approval", {"current": None, "history": []})
+        approvals["current"] = None
+        payload["batch"] = {
+            "batch_id": payload["job_id"],
+            "round": round_number,
+            "plan_hash": plan_sha256,
+            "image_count": max(1, len(payload["optimization"]["rework"])),
+        }
+        payload["revision"] = payload["revision"] + 1
+        payload["updated_at"] = _timestamp()
+        self.write(payload)
+        return payload

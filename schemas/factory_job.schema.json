@@ -116,11 +116,12 @@
     "evaluationRecord": {
       "type": ["object", "null"],
       "additionalProperties": false,
-      "required": ["decision", "all_gates_passed", "evaluated_at"],
+      "required": ["decision", "all_gates_passed", "evaluated_at", "scores_sha256"],
       "properties": {
         "decision": {"enum": ["pass", "fail", "pending_approval"]},
         "all_gates_passed": {"type": "boolean"},
         "evaluated_at": {"$ref": "#/$defs/timestamp"},
+        "scores_sha256": {"$ref": "#/$defs/sha256"},
         "scores_path": {"type": ["string", "null"]}
       }
     },

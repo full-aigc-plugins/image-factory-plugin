@@ -23,6 +23,7 @@ import uuid
 from pathlib import Path
 
 import artifact_collector
+import atomic_json
 import capability_probe
 import evaluator
 import generation_runner
@@ -462,7 +463,6 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
 def _evaluate_locked(
     args: argparse.Namespace, result: plan_validator.PlanResult
 ) -> tuple[int, str]:
-
     # Evaluation reads only receipts that still verify against the artifacts they
     # name, so a file changed after collection cannot be scored as if it were the
     # collected one.
@@ -485,20 +485,42 @@ def _evaluate_locked(
         reject_duplicates=result.reject_duplicates,
         pass_threshold=result.pass_threshold,
         advisory_enabled=result.advisory_enabled,
-        require_human_labels=False,
+        # The plan's own policy decides whether an unlabeled batch may pass.
+        require_human_labels=result.require_human_labels,
         advisory=advisory,
         human_labels=labels,
     )
+
     scores_path = Path(args.scores)
-    scores_path.write_text(evaluator.render_scores(evaluation) + "\n", encoding="utf-8")
+    atomic_json.write_json_atomic(scores_path, evaluation.scores)
+    scores_sha256 = artifact_collector.file_sha256(scores_path)
+
+    ledger = job_ledger.JobLedger(Path(args.job))
+    state = job_ledger.JobState(ledger.read()["state"])
+    decision = evaluation.scores["decision"]
+    if state in (job_ledger.JobState.COMPLETED, job_ledger.JobState.PARTIAL):
+        ledger.transition(job_ledger.JobState.EVALUATED)
+    ledger.record_evaluation(
+        scores_sha256,
+        decision,
+        all_gates_passed=evaluation.scores["deterministic_gates"]["all_passed"],
+        scores_path=str(scores_path),
+    )
+    # The decision, not the evaluator, drives where the job goes next.
+    if decision == "pass":
+        ledger.transition(job_ledger.JobState.ACCEPTED)
+    elif decision == "pending_approval":
+        ledger.transition(job_ledger.JobState.PENDING_APPROVAL)
 
     payload = {
         "ok": evaluation.ok,
-        "decision": evaluation.scores["decision"],
+        "decision": decision,
         "all_gates_passed": evaluation.scores["deterministic_gates"]["all_passed"],
         "scores": str(scores_path),
+        "scores_sha256": scores_sha256,
+        "state": ledger.read()["state"],
     }
-    code = EXIT_FAILURE if evaluation.scores["decision"] == "fail" else EXIT_OK
+    code = EXIT_FAILURE if decision == "fail" else EXIT_OK
     return code, _emit(payload, args.json)
 
 
@@ -510,11 +532,50 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
 
 
 def _optimize_locked(args: argparse.Namespace) -> tuple[int, str]:
+    # Preconditions first: a job that has nothing to optimize from should be told
+    # so before any of its inputs are read.
+    job_path = Path(args.job)
+    try:
+        payload = job_ledger.load_ledger(job_path)
+    except job_ledger.LedgerCorruptError as error:
+        return EXIT_FAILURE, _emit({"ok": False, "error": str(error)}, args.json)
+
+    state = job_ledger.JobState(payload["state"])
+    if state is not job_ledger.JobState.EVALUATED:
+        return EXIT_FAILURE, _emit(
+            {
+                "ok": False,
+                "error_category": "recovery_required",
+                "error": f"a job in state {state.value} has no evaluation to optimize from",
+            },
+            args.json,
+        )
+
     plan = _load_json(Path(args.plan))
     scores = _load_json(Path(args.scores))
     rewrites = _load_json(Path(args.rewrites)) if args.rewrites else {}
     if not isinstance(rewrites, dict):
         return EXIT_USAGE, _emit({"ok": False, "error": "rewrites must be a JSON object"}, args.json)
+
+    batch = payload.get("batch") or {}
+    if batch.get("batch_id") != plan.get("batch_id") or batch.get("round") != plan.get("round"):
+        return EXIT_FAILURE, _emit(
+            {
+                "ok": False,
+                "error": "the plan does not describe the round this job evaluated",
+            },
+            args.json,
+        )
+
+    # Optimizing from scores that are not the ones this job recorded would let a
+    # caller substitute evidence, so the file must be the recorded document.
+    recorded = payload.get("evaluation") or {}
+    scores_sha256 = artifact_collector.file_sha256(Path(args.scores))
+    if recorded.get("scores_sha256") is not None and recorded["scores_sha256"] != scores_sha256:
+        return EXIT_FAILURE, _emit(
+            {"ok": False, "error": "the supplied scores are not the ones recorded for this job"},
+            args.json,
+        )
 
     outcome = optimizer.plan_next_round(
         current_plan=plan,
@@ -523,50 +584,122 @@ def _optimize_locked(args: argparse.Namespace) -> tuple[int, str]:
         retry_unchanged=set(args.retry_unchanged or []),
     )
     if outcome.errors:
-        payload = {
+        payload_out = {
             "ok": False,
             "errors": [
                 {"code": error.code, "message": error.message, "item_id": error.item_id}
                 for error in outcome.errors
             ],
         }
-        return EXIT_FAILURE, _emit(payload, args.json)
+        return EXIT_FAILURE, _emit(payload_out, args.json)
 
     if outcome.complete:
-        payload = {"ok": True, "complete": True, "carried_forward": list(outcome.carried_forward)}
-        return EXIT_OK, _emit(payload, args.json)
+        payload_out = {
+            "ok": True,
+            "complete": True,
+            "carried_forward": list(outcome.carried_forward),
+        }
+        return EXIT_OK, _emit(payload_out, args.json)
 
     assert outcome.next_plan is not None
-    Path(args.out).write_text(
-        json.dumps(outcome.next_plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    next_path = Path(args.out)
+    atomic_json.write_json_atomic(next_path, outcome.next_plan)
+
+    validation = plan_validator.validate_plan(
+        outcome.next_plan, base_dir=next_path.parent
     )
-    payload = {
+    if not validation.ok:
+        next_path.unlink(missing_ok=True)
+        return EXIT_FAILURE, _emit(
+            {
+                "ok": False,
+                "errors": [
+                    {"code": error.code, "message": error.message, "item_id": error.item_id}
+                    for error in validation.errors
+                ],
+            },
+            args.json,
+        )
+
+    ledger = job_ledger.JobLedger(job_path)
+    ledger.record_optimization(
+        validation.plan_sha256,
+        outcome.next_plan["round"],
+        carried_forward=outcome.carried_forward,
+        rework=outcome.rework,
+        next_plan_path=str(next_path),
+    )
+    ledger.transition(job_ledger.JobState.OPTIMIZED)
+
+    payload_out = {
         "ok": True,
         "complete": False,
         "round": outcome.next_plan["round"],
+        "plan_sha256": validation.plan_sha256,
         "rework": list(outcome.rework),
         "carried_forward": list(outcome.carried_forward),
-        "plan": str(args.out),
+        "plan": str(next_path),
+        "state": ledger.read()["state"],
     }
-    return EXIT_OK, _emit(payload, args.json)
+    return EXIT_OK, _emit(payload_out, args.json)
 
 
 # ---------------------------------------------------------------------- status
 
 
 def command_status(args: argparse.Namespace) -> tuple[int, str]:
+    """Report the job's condition without disclosing what it contains.
+
+    Prompts, reference paths, and environment paths are deliberately absent: a
+    status report is routinely pasted into a conversation, and it should not carry
+    the material the ledger was designed to leave out.
+    """
     try:
         payload = job_ledger.load_ledger(Path(args.job))
     except job_ledger.LedgerCorruptError as error:
         return EXIT_FAILURE, _emit({"ok": False, "error": str(error)}, args.json)
+
+    items = payload.get("items", [])
+    counts = {"generated": 0, "failed": 0, "pending": 0, "unknown": 0, "attempting": 0}
+    for row in items:
+        state = row.get("state")
+        if state == "Generated":
+            counts["generated"] += 1
+        elif state == "Failed":
+            counts["failed"] += 1
+        elif state == "Unknown":
+            counts["unknown"] += 1
+        elif state == "Attempting":
+            counts["attempting"] += 1
+        else:
+            counts["pending"] += 1
+
+    approvals = payload.get("approval") or {"current": None, "history": []}
+    current = approvals.get("current")
+    approval_summary = (
+        None
+        if not isinstance(current, dict)
+        else {
+            "plan_hash": current.get("plan_hash"),
+            "round": current.get("round"),
+            "remaining_count": current.get("remaining_count"),
+            "approved_at": current.get("approved_at"),
+        }
+    )
+
     report = {
         "ok": True,
         "job_id": payload["job_id"],
         "state": payload["state"],
         "revision": payload["revision"],
-        "error_category": payload["error_category"],
-        "usage_limit": payload["usage_limit"],
-        "items": payload["items"],
+        "batch": payload.get("batch"),
+        "approval": approval_summary,
+        "approval_history_count": len(approvals.get("history", [])),
+        "items": counts,
+        "evaluation": payload.get("evaluation"),
+        "optimization": payload.get("optimization"),
+        "usage_limit": payload.get("usage_limit"),
+        "error_category": payload.get("error_category"),
     }
     return EXIT_OK, _emit(report, args.json)
 
@@ -615,6 +748,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     optimize = subparsers.add_parser("optimize", parents=[shared])
     optimize.add_argument("--plan", required=True)
+    optimize.add_argument("--job", required=True)
     optimize.add_argument("--scores", required=True)
     optimize.add_argument("--out", required=True)
     optimize.add_argument("--rewrites", default=None)

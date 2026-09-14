@@ -785,7 +785,7 @@ git commit -m "feat: make generation calls crash safe"
 - Extends: `optimize --job JOB`
 - Extends: `status` with plan, approval, counts, evaluation, and optimization
 
-- [ ] **Step 1: Write the failing human-label propagation test**
+- [x] **Step 1: Write the failing human-label propagation test**
 
 Extend `CliFixture` with `run_approved_batch`, `evaluate_without_labels`, and
 `read_job` helpers. They must call the real CLI handler, parse JSON output, and
@@ -803,11 +803,11 @@ def test_required_human_labels_cannot_pass_unlabeled(self) -> None:
 
 Also test whole-batch approval, partial labels remaining pending, and one rejection causing `fail` regardless of advisory score.
 
-- [ ] **Step 2: Write failing evaluate/optimize state tests**
+- [x] **Step 2: Write failing evaluate/optimize state tests**
 
 Assert that evaluation writes scores atomically and stores their hash; deterministic failure leaves `Evaluated`; fully approved passing work becomes `Accepted`; optimize requires `--job`; mismatched batch/round/plan is refused; successful optimization stores the next-plan hash and enters `Optimized`.
 
-- [ ] **Step 3: Run focused tests and verify RED**
+- [x] **Step 3: Run focused tests and verify RED**
 
 ```bash
 python3 -m unittest tests.test_cli.EvaluateAndOptimizeCommandTests tests.test_evaluator tests.test_optimizer -v
@@ -815,11 +815,11 @@ python3 -m unittest tests.test_cli.EvaluateAndOptimizeCommandTests tests.test_ev
 
 Expected: evaluation hardcodes human labels off, no ledger state changes, and optimize has no job argument.
 
-- [ ] **Step 4: Propagate human policy and persist scores atomically**
+- [x] **Step 4: Propagate human policy and persist scores atomically**
 
 Pass `result.require_human_labels` to `evaluate_batch`. Write scores through `atomic_json.write_json_atomic`, hash the persisted bytes, and record evaluation under the job lock. Map `pass` to `Accepted`, `pending_approval` to `PendingApproval`, and `fail` to `Evaluated`.
 
-- [ ] **Step 5: Bind optimization to job evidence**
+- [x] **Step 5: Bind optimization to job evidence**
 
 Add:
 
@@ -833,11 +833,11 @@ Verify that the supplied scores file hash equals `evaluation.scores_sha256`.
 Build the next plan from the migrated 1.1.0 current plan so every optimizer output
 also declares schema version 1.1.0.
 
-- [ ] **Step 6: Expand status without leaking content**
+- [x] **Step 6: Expand status without leaking content**
 
 Return batch hash and round, current approval summary and history count, generated/failed/pending/unknown counts, evaluation, optimization, limit, and error category. Do not return raw prompts, reference paths, environment paths, or full approval history by default.
 
-- [ ] **Step 7: Run focused and full tests**
+- [x] **Step 7: Run focused and full tests**
 
 ```bash
 python3 -m unittest tests.test_cli tests.test_evaluator tests.test_optimizer tests.test_ledger -v
@@ -846,7 +846,7 @@ python3 -m unittest discover -s tests -v
 
 Expected: all tests pass and required-human-label work cannot pass unlabeled.
 
-- [ ] **Step 8: Commit the state loop**
+- [x] **Step 8: Commit the state loop**
 
 ```bash
 git add scripts/image_factory_cli.py scripts/evaluator.py scripts/optimizer.py tests/test_cli.py tests/test_evaluator.py tests/test_optimizer.py tests/test_ledger.py
