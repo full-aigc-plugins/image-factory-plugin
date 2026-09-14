@@ -38,9 +38,11 @@ REQUIRED_DOCUMENTS = (
 )
 
 # Gates that cannot be satisfied offline must be declared with their observed status.
+# Updated only when a gate is actually observed; the test holds the document to the
+# status recorded here, so a stale document fails rather than passing quietly.
 RUNTIME_GATES = {
-    "remote_ci_matrix": "NOT_RUN",
-    "remote_sha_parity": "NOT_RUN",
+    "remote_ci_matrix": "PASS",
+    "remote_sha_parity": "PASS",
     "fresh_marketplace_install": "NOT_RUN",
     "fresh_session_no_spend_smoke": "NOT_RUN",
     "paid_canary": "NOT_RUN",

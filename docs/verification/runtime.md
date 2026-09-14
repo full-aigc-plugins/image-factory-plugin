@@ -12,8 +12,8 @@ Allowed status values are `PASS`, `FAIL`, and `NOT_RUN`.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| `remote_ci_matrix` | `NOT_RUN` | No 0.1.2 candidate has been pushed; all six remote jobs remain unobserved. |
-| `remote_sha_parity` | `NOT_RUN` | Local, tracking, remote-main, and tag parity is a Task 11 publication gate. |
+| `remote_ci_matrix` | `PASS` | Run 34831417381 on `05674dc`: all six legs green (ubuntu/macos/windows x Python 3.11/3.13). The first two pushes failed on Windows 3.11 only; the causes and fixes are in the commits `d93748e` and `05674dc`. |
+| `remote_sha_parity` | `PASS` | `main` is at `05674dc` locally and on `origin`. Tag parity is not yet claimed: it requires the `v0.1.2` tag, which the release step adds. |
 | `fresh_marketplace_install` | `NOT_RUN` | Removing or installing a plugin requires separate authorization. |
 | `fresh_session_no_spend_smoke` | `NOT_RUN` | It must target a freshly installed 0.1.2 candidate. |
 | `paid_canary` | `NOT_RUN` | No allowance-spending run is authorized by Task 10. |
