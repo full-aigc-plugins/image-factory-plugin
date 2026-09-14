@@ -20,7 +20,7 @@ DELEGATES = tuple(name for name in EXPECTED if name != ROUTER)
 COMMANDS = {
     "codex-image-factory-run": "run",
     "codex-image-factory-judge": "evaluate",
-    "codex-image-factory-recover": "status",
+    "codex-image-factory-recover": "recover",
 }
 
 FORBIDDEN_PHRASES = (

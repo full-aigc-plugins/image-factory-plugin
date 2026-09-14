@@ -20,6 +20,7 @@ import argparse
 import json
 import sys
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 import artifact_collector
@@ -644,6 +645,97 @@ def _optimize_locked(args: argparse.Namespace) -> tuple[int, str]:
     return EXIT_OK, _emit(payload_out, args.json)
 
 
+# --------------------------------------------------------------------- recover
+
+
+@dataclass(frozen=True)
+class RecoveryReport:
+    state: str
+    reconciled: tuple[str, ...]
+    unknown: tuple[str, ...]
+    pending_count: int
+    remaining_generation_calls: int
+
+
+def command_recover(args: argparse.Namespace) -> tuple[int, str]:
+    result, _plan_path = _validated_plan(args)
+    if not result.ok:
+        return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)
+    return _under_lock(Path(args.job), args, lambda: _recover_locked(args, result))
+
+
+def _recover_locked(
+    args: argparse.Namespace, result: plan_validator.PlanResult
+) -> tuple[int, str]:
+    """Settle interrupted items from evidence on disk. Never generates anything.
+
+    This is the only supported way out of an unresolved job, and it deliberately
+    cannot spend: it reads the receipts that already exist and decides what each
+    interrupted item actually became. An item with no evidence stays `Unknown`
+    rather than being quietly re-queued, because the call may have happened.
+    """
+    job_path = Path(args.job)
+    destination = Path(args.destination)
+    if not job_path.is_file():
+        return EXIT_FAILURE, _emit(
+            {"ok": False, "error": f"no ledger at {job_path}"}, args.json
+        )
+
+    ledger = job_ledger.JobLedger(job_path)
+    ledger.read()
+    verified = receipt_store.load_verified_receipts(job_path, destination)
+    by_key = {receipt["idempotency_key"]: receipt for receipt in verified.values()}
+
+    reconciled: list[str] = []
+    unknown: list[str] = []
+    for row in ledger.read()["items"]:
+        if row["state"] not in ("Attempting", "Unknown"):
+            continue
+        key = row.get("idempotency_key")
+        receipt = by_key.get(key) if key else None
+        if receipt is not None:
+            ledger.reconcile_item(
+                row["item_id"], state="Generated", receipt_id=receipt["artifact_id"]
+            )
+            reconciled.append(row["item_id"])
+        else:
+            ledger.reconcile_item(row["item_id"], state="Unknown")
+            unknown.append(row["item_id"])
+
+    verified = receipt_store.load_verified_receipts(job_path, destination)
+    if verified:
+        receipt_store.rebuild_manifest(job_path, verified)
+
+    payload = ledger.read()
+    if payload["state"] in ("Running", "Unknown"):
+        if unknown:
+            final = job_ledger.JobState.UNKNOWN
+        elif any(row["state"] == "Failed" for row in payload["items"]):
+            final = job_ledger.JobState.PARTIAL
+        else:
+            final = job_ledger.JobState.COMPLETED
+        ledger.reconcile_settled(final)
+
+    pending = ledger.pending_items(result.items)
+    report = RecoveryReport(
+        state=ledger.read()["state"],
+        reconciled=tuple(reconciled),
+        unknown=tuple(unknown),
+        pending_count=len(pending),
+        remaining_generation_calls=len(pending),
+    )
+    out = {
+        "ok": not report.unknown,
+        "state": report.state,
+        "reconciled": list(report.reconciled),
+        "unknown": list(report.unknown),
+        "pending_count": report.pending_count,
+        "remaining_generation_calls": report.remaining_generation_calls,
+    }
+    code = EXIT_RECOVERY_REQUIRED if report.unknown else EXIT_OK
+    return code, _emit(out, args.json)
+
+
 # ---------------------------------------------------------------------- status
 
 
@@ -754,6 +846,10 @@ def build_parser() -> argparse.ArgumentParser:
     optimize.add_argument("--rewrites", default=None)
     optimize.add_argument("--retry-unchanged", action="append", default=None)
 
+    recover = subparsers.add_parser("recover", parents=[shared])
+    recover.add_argument("--plan", required=True)
+    recover.add_argument("--job", required=True)
+
     status = subparsers.add_parser("status", parents=[shared])
     status.add_argument("--job", required=True)
 
@@ -768,6 +864,7 @@ HANDLERS = {
     "run": command_run,
     "evaluate": command_evaluate,
     "optimize": command_optimize,
+    "recover": command_recover,
     "status": command_status,
 }
 

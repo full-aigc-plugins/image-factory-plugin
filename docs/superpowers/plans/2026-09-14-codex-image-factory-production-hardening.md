@@ -868,11 +868,11 @@ git commit -m "feat: persist evaluation and human decisions"
 - Consumes: job lock, plan hash, receipt verification, and ledger attempt records
 - Makes: zero Codex calls
 
-- [ ] **Step 1: Write failing recovery tests**
+- [x] **Step 1: Write failing recovery tests**
 
 Cover `Attempting` plus valid receipt becoming `Generated`; `Attempting` without receipt becoming `Unknown`; `Unknown` plus valid receipt becoming `Generated`; manifest rebuild; tampered receipt refusal; unresolved unknown blocking run; and zero fake invocation evidence.
 
-- [ ] **Step 2: Run recovery tests and verify RED**
+- [x] **Step 2: Run recovery tests and verify RED**
 
 ```bash
 python3 -m unittest tests.test_recovery -v
@@ -880,15 +880,15 @@ python3 -m unittest tests.test_recovery -v
 
 Expected: `recover` and `RecoveryReport` do not exist.
 
-- [ ] **Step 3: Implement `recover`**
+- [x] **Step 3: Implement `recover`**
 
 Under the job lock, validate the plan, load verified receipts, reconcile item records, rebuild the manifest, and derive `Completed`, `Partial`, or `Unknown`. If any item remains unknown, return `EXIT_RECOVERY_REQUIRED`. Never call `generation_runner`.
 
-- [ ] **Step 4: Update recovery and run Skills**
+- [x] **Step 4: Update recovery and run Skills**
 
 The recovery Skill calls `status`, `validate-plan`, then `recover`. It reports completed, failed, pending, and unknown counts plus one legal next action. Remove the direct-resume instruction for stale `Running`. The run Skill quotes remaining calls and obtains fresh approval before a safe partial resume.
 
-- [ ] **Step 5: Run focused and full tests**
+- [x] **Step 5: Run focused and full tests**
 
 ```bash
 python3 -m unittest tests.test_recovery tests.test_skills tests.test_cli -v
@@ -897,7 +897,7 @@ python3 -m unittest discover -s tests -v
 
 Expected: all tests pass and recovery creates no invocation evidence.
 
-- [ ] **Step 6: Commit non-spending recovery**
+- [x] **Step 6: Commit non-spending recovery**
 
 ```bash
 git add scripts/image_factory_cli.py tests/test_recovery.py skills/codex-image-factory-recover/SKILL.md skills/codex-image-factory-run/SKILL.md tests/test_skills.py

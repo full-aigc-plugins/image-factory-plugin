@@ -600,3 +600,39 @@ class JobLedger:
         payload["updated_at"] = _timestamp()
         self.write(payload)
         return payload
+
+    def reconcile_item(
+        self,
+        item_id: str,
+        *,
+        state: str,
+        receipt_id: str | None = None,
+    ) -> dict:
+        """Settle an interrupted item from evidence rather than from a new call.
+
+        Only items whose outcome is unresolved may be reconciled, and only into a
+        settled state. This is how a job returns from `Attempting` or `Unknown`
+        without pretending a call happened or forgetting that one might have.
+        """
+        if state not in ("Generated", "Unknown", "Failed"):
+            raise ValueError(f"a reconciled state must be settled, got {state!r}")
+        payload = self.read()
+        entry = _entry_for(payload, item_id)
+        if entry["state"] not in ("Attempting", "Unknown"):
+            raise InvalidTransitionError(
+                f"item {item_id} is {entry['state']}; only an unresolved item can be reconciled"
+            )
+        entry["state"] = state
+        entry["receipt_id"] = receipt_id
+        payload["revision"] = payload["revision"] + 1
+        payload["updated_at"] = _timestamp()
+        self.write(payload)
+        return payload
+
+    def reconcile_settled(self, final_state: "JobState") -> dict:
+        """Move a job to the settled state the evidence supports, if it differs."""
+        payload = self.read()
+        current = JobState(payload["state"])
+        if current is final_state:
+            return payload
+        return self.transition(final_state)

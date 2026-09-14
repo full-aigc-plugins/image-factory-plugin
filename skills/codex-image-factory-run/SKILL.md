@@ -47,12 +47,23 @@ For an already approved plan, preserve its prompts and proceed directly.
    Report the image count and make clear that each item costs one generation call
    against the Codex account's image allowance. Quoting itself spends nothing.
 
+   The quote also reports the plan hash. An approval is bound to that hash, to the
+   round, and to the number of calls that are still outstanding, so resuming a
+   partly finished batch quotes the *remaining* calls and needs a fresh approval
+   for exactly that smaller number. An approval for the original batch does not
+   authorize the remaining work.
+
 3Step 3. **Obtain approval for this exact round.** Show the creation confirmation
    card and quote first. Run only when the user has agreed to generate these
    images. If the plan sets `require_approval_before_run`, the command refuses to
    start without `--approve`. Approval from an earlier round does not apply.
 
-4Step 4. **Run it.**
+4Step 4. **Check for an unfinished run before starting one.** If the ledger is in
+   `Running` or `Unknown`, do not run: hand off to `codex-image-factory-recover`,
+   which settles the interrupted items from the receipts already on disk. `run`
+   refuses those states rather than starting a second attempt.
+
+5. **Run it.**
 
    ```bash
    bin/image-factory run --plan plan.json --job job.json --destination out/ --approve --json
