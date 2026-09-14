@@ -1,5 +1,7 @@
 # Codex Image Factory 插件
 
+![Codex × Image Factory — 生产可核验的批量图片](assets/image-factory-hero.png)
+
 <img src="assets/logo.png" alt="Codex Image Factory 图标" width="128">
 
 > 面向 Codex 的批量图像生产，每件产物都有可核验的回执。

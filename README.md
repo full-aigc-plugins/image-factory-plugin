@@ -1,5 +1,7 @@
 # Codex Image Factory Plugin
 
+![Codex × Image Factory — Produce image batches you can verify](assets/image-factory-hero.png)
+
 <img src="assets/logo.png" alt="Codex Image Factory logo" width="128">
 
 > Batch image production for Codex, with a verified receipt for every artifact.
