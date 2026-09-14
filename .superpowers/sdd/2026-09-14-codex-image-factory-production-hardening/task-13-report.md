@@ -133,6 +133,42 @@ exit 0
 
 No push, tag, installation, canary, or progress-ledger edit was performed.
 
+## Fix round 3/5
+
+The third review found that default binary preflight and capability validation
+could observe different executables: preflight cached the resolved binary, but
+`command_run` passed `None` to the capability probe when `--codex-bin` was
+omitted.
+
+The production run path now passes `Path(args._effective_codex_binary)` to the
+capability probe unconditionally and continues to pass the same cached string to
+the generation invocation. A regression changes `PATH` during probe execution
+and configures a second resolver result that must never be consumed; it proves:
+
+- binary discovery occurs exactly once;
+- the probe receives the cached path;
+- every item invocation receives the identical cached path.
+
+### RED and GREEN evidence
+
+```text
+new regression before fix: Ran 1 test ... FAILED (failures=1)
+new regression after fix: Ran 1 test ... OK
+python3 -m unittest tests.test_cli.RunCommandTests -v
+Ran 21 tests ... OK
+python3 -m unittest discover -s tests -v
+Ran 377 tests ... OK
+python3 -m compileall -q scripts tests
+exit 0
+python3 scripts/validate_distribution.py .
+validated codex-image-factory compatibility foundation 0.1.2
+git diff --check
+exit 0
+```
+
+Existing path-collision, pre-lock refusal, and non-colliding JobLock tests remain
+green. No push, tag, installation, canary, or progress-ledger edit was performed.
+
 ## Fix round 2/5
 
 The second review found two remaining preflight gaps: default `run` paths were

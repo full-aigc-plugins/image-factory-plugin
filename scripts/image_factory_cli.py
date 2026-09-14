@@ -346,7 +346,7 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
     if not result.ok:
         return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)
 
-    binary = Path(args.codex_bin) if args.codex_bin else None
+    binary = Path(args._effective_codex_binary)
     capability = capability_probe.probe(codex_home=home, binary_override=binary)
     if not capability.is_available:
         payload = {"ok": False, "stage": "capability", **capability_probe.as_report(capability)}

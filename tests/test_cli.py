@@ -336,6 +336,43 @@ class RunCommandTests(unittest.TestCase):
                 self.assertFalse(fixture.job_path.exists())
                 self.assertFalse((fixture.base / "fake-codex-argv.json").exists())
 
+    def test_run_probe_and_invocation_share_one_cached_effective_binary(self) -> None:
+        original_probe = cli.capability_probe.probe
+        original_run_item = cli.generation_runner.run_item
+        observed_invocation_binaries: list[str] = []
+
+        def probe_with_changed_path(**kwargs):
+            self.assertEqual(kwargs["binary_override"], SHIM)
+            os.environ["PATH"] = str(self.fixture.base / "changed-after-preflight")
+            return original_probe(**kwargs)
+
+        def run_with_cached_binary(**kwargs):
+            observed_invocation_binaries.append(kwargs["binary"])
+            return original_run_item(**kwargs)
+
+        with patch.dict(os.environ, {"CODEX_HOME": str(self.fixture.codex_home)}), patch.object(
+            cli.generation_runner,
+            "resolved_binary",
+            side_effect=(str(SHIM), str(self.fixture.base / "wrong-second-discovery")),
+        ) as resolver, patch.object(
+            cli.capability_probe,
+            "probe",
+            side_effect=probe_with_changed_path,
+        ), patch.object(
+            cli.generation_runner,
+            "run_item",
+            side_effect=run_with_cached_binary,
+        ):
+            code, output = self.fixture.run_cli(
+                "run", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+                "--destination", str(self.fixture.destination),
+                "--generation-dir", str(self.fixture.generation_dir), "--approve", "--json",
+            )
+
+        self.assertEqual(code, cli.EXIT_OK, output)
+        self.assertEqual(resolver.call_count, 1)
+        self.assertEqual(observed_invocation_binaries, [str(SHIM), str(SHIM)])
+
     def test_run_without_approval_stops_before_spending(self) -> None:
         code, output = self.run_batch()
         self.assertEqual(code, cli.EXIT_APPROVAL_REQUIRED, output)
