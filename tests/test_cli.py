@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import image_factory_cli as cli  # noqa: E402
+import job_lock  # noqa: E402
 
 
 FAKE = ROOT / "tests" / "fakes" / "fake_codex.py"
@@ -451,6 +452,66 @@ class NoCertificateFilesTests(unittest.TestCase):
                 cli.EXIT_CAPABILITY_UNAVAILABLE,
             ),
             (0, 1, 2, 3, 4),
+        )
+
+
+class JobContentionTests(unittest.TestCase):
+    """A second writer must be refused before it can decide anything, let alone spend."""
+
+    def setUp(self) -> None:
+        self.fixture = CliFixture()
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.write_plan()
+        self.fixture.control()
+
+    def run_batch(self, *extra: str) -> tuple[int, str]:
+        return self.fixture.run_cli(
+            "run",
+            "--plan",
+            str(self.fixture.plan_path),
+            "--job",
+            str(self.fixture.job_path),
+            "--codex-bin",
+            str(SHIM),
+            *self.fixture.base_args(),
+            "--approve",
+            "--json",
+            *extra,
+        )
+
+    def test_a_locked_job_refuses_the_run_and_spends_nothing(self) -> None:
+        with job_lock.JobLock(self.fixture.job_path):
+            code, output = self.run_batch()
+        self.assertEqual(code, cli.EXIT_JOB_LOCKED, output)
+        self.assertEqual(json.loads(output)["error_category"], "job_already_running")
+        self.assertEqual(len(list(self.fixture.generation_dir.rglob("*.png"))), 0)
+        self.assertFalse(self.fixture.job_path.exists())
+
+    def test_a_locked_job_refuses_evaluate(self) -> None:
+        with job_lock.JobLock(self.fixture.job_path):
+            code, output = self.fixture.run_cli(
+                "evaluate",
+                "--plan",
+                str(self.fixture.plan_path),
+                "--job",
+                str(self.fixture.job_path),
+                "--scores",
+                str(self.fixture.base / "scores.json"),
+                *self.fixture.base_args(),
+                "--json",
+            )
+        self.assertEqual(code, cli.EXIT_JOB_LOCKED, output)
+        self.assertFalse((self.fixture.base / "scores.json").exists())
+
+    def test_the_job_is_runnable_again_once_the_lock_is_released(self) -> None:
+        with job_lock.JobLock(self.fixture.job_path):
+            self.assertEqual(self.run_batch()[0], cli.EXIT_JOB_LOCKED)
+        code, output = self.run_batch()
+        self.assertEqual(code, 0, output)
+
+    def test_contention_exit_codes_are_distinct(self) -> None:
+        self.assertEqual(
+            (cli.EXIT_JOB_LOCKED, cli.EXIT_RECOVERY_REQUIRED), (5, 6)
         )
 
 

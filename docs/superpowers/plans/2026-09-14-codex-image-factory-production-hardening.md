@@ -481,7 +481,7 @@ git commit -m "feat: persist image receipts atomically"
 - Produces: `lock_path_for(job_path: Path) -> Path`
 - Consumed later by: every mutating CLI command
 
-- [ ] **Step 1: Write the failing process-lock test**
+- [x] **Step 1: Write the failing process-lock test**
 
 Add `spawn_lock_holder(job_path: Path) -> multiprocessing.Process` to create a
 `spawn`-context child that acquires the lock, signals `"locked"` through the
@@ -500,7 +500,7 @@ def test_second_process_cannot_acquire_the_same_job(self) -> None:
         pass
 ```
 
-- [ ] **Step 2: Run lock tests and verify RED**
+- [x] **Step 2: Run lock tests and verify RED**
 
 ```bash
 python3 -m unittest tests.test_job_lock -v
@@ -508,11 +508,11 @@ python3 -m unittest tests.test_job_lock -v
 
 Expected: import failure because `job_lock` does not exist.
 
-- [ ] **Step 3: Implement the standard-library lock adapters**
+- [x] **Step 3: Implement the standard-library lock adapters**
 
 The context manager owns one open `a+b` handle until exit. Ensure the file has at least one byte before Windows locking. Use `fcntl.flock(handle, LOCK_EX | LOCK_NB)` on Unix and `msvcrt.locking(handle.fileno(), LK_NBLCK, 1)` on Windows. Translate only contention errors to `JobAlreadyRunningError`; propagate unrelated I/O errors. Unlock in `__exit__` and always close the handle.
 
-- [ ] **Step 4: Add stable CLI contention behavior**
+- [x] **Step 4: Add stable CLI contention behavior**
 
 ```python
 EXIT_JOB_LOCKED = 5
@@ -521,7 +521,7 @@ EXIT_RECOVERY_REQUIRED = 6
 
 Wrap `run`, `evaluate`, `optimize`, and the later `recover` command in `JobLock`. Return `error_category: job_already_running` and spend zero calls on contention. Leave `status` lock-free because it does not mutate and ledger replacement is atomic.
 
-- [ ] **Step 5: Run lock, CLI, and full tests**
+- [x] **Step 5: Run lock, CLI, and full tests**
 
 ```bash
 python3 -m unittest tests.test_job_lock tests.test_cli -v
@@ -530,7 +530,7 @@ python3 -m unittest discover -s tests -v
 
 Expected: all tests pass on the current host.
 
-- [ ] **Step 6: Commit job serialization**
+- [x] **Step 6: Commit job serialization**
 
 ```bash
 git add scripts/job_lock.py scripts/image_factory_cli.py tests/test_job_lock.py tests/test_cli.py

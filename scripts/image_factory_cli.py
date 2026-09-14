@@ -26,6 +26,7 @@ import capability_probe
 import evaluator
 import generation_runner
 import job_ledger
+import job_lock
 import optimizer
 import plan_validator
 import receipt_store
@@ -36,6 +37,8 @@ EXIT_FAILURE = 1
 EXIT_USAGE = 2
 EXIT_APPROVAL_REQUIRED = 3
 EXIT_CAPABILITY_UNAVAILABLE = 4
+EXIT_JOB_LOCKED = 5
+EXIT_RECOVERY_REQUIRED = 6
 
 DEFAULT_TIMEOUT_SECONDS = generation_runner.DEFAULT_TIMEOUT_SECONDS
 
@@ -56,6 +59,21 @@ def _emit(payload: dict, as_json: bool, summary: list[str] | None = None) -> str
         return json.dumps(payload, indent=2, sort_keys=True)
     lines = summary or [f"{key}: {value}" for key, value in sorted(payload.items())]
     return "\n".join(lines)
+
+
+def _under_lock(job_path: Path, args: argparse.Namespace, action) -> tuple[int, str]:
+    """Run a mutating command while holding the job lock for this state file."""
+    try:
+        with job_lock.JobLock(job_path):
+            return action()
+    except job_lock.JobAlreadyRunningError as error:
+        payload = {
+            "ok": False,
+            "stage": "lock",
+            "error_category": "job_already_running",
+            "message": str(error),
+        }
+        return EXIT_JOB_LOCKED, _emit(payload, args.json)
 
 
 def _load_json(path: Path) -> object:
@@ -212,6 +230,25 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         payload = {"ok": False, "stage": "capability", **capability_probe.as_report(capability)}
         return EXIT_CAPABILITY_UNAVAILABLE, _emit(payload, args.json)
 
+    # The lock is taken before the ledger is touched and held across the whole
+    # spending loop, so a second run cannot decide the same item is pending. The
+    # two free refusal checks above run first, so contention is only reported when
+    # the run would otherwise have proceeded.
+    return _under_lock(
+        job_path,
+        args,
+        lambda: _run_locked(args, result, job_path, destination, generation_dir, binary),
+    )
+
+
+def _run_locked(
+    args: argparse.Namespace,
+    result: plan_validator.PlanResult,
+    job_path: Path,
+    destination: Path,
+    generation_dir: Path,
+    binary: Path | None,
+) -> tuple[int, str]:
     codex_binary = str(binary) if binary else generation_runner.resolved_binary(None)
 
     ledger = job_ledger.JobLedger(job_path)
@@ -331,6 +368,12 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
     result, _plan_path = _validated_plan(args)
     if not result.ok:
         return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)
+    return _under_lock(Path(args.job), args, lambda: _evaluate_locked(args, result))
+
+
+def _evaluate_locked(
+    args: argparse.Namespace, result: plan_validator.PlanResult
+) -> tuple[int, str]:
 
     # Evaluation reads only receipts that still verify against the artifacts they
     # name, so a file changed after collection cannot be scored as if it were the
@@ -375,6 +418,10 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
 
 
 def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
+    return _under_lock(Path(args.plan), args, lambda: _optimize_locked(args))
+
+
+def _optimize_locked(args: argparse.Namespace) -> tuple[int, str]:
     plan = _load_json(Path(args.plan))
     scores = _load_json(Path(args.scores))
     rewrites = _load_json(Path(args.rewrites)) if args.rewrites else {}
