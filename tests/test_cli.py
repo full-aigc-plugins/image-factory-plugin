@@ -293,7 +293,7 @@ class RunCommandTests(unittest.TestCase):
                 self.addCleanup(fixture.cleanup)
                 fixture.write_plan()
                 fixture.control()
-                fixture.destination.mkdir()
+                fixture.destination.mkdir(parents=True, exist_ok=True)
                 (fixture.destination / "existing.bin").write_bytes(b"preserve me")
                 job_argument = {
                     "job_is_plan": fixture.plan_path,
