@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | Implemented for the 0.1.2 release candidate; external release gates remain unrun |
+> | Status | Implemented for the 0.1.2 release candidate; 7 of 9 external gates observed, generation path verified on macOS |
 > | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
 > | Audience | Implementers extending or reviewing this plugin |
 > | Runtime evidence | `docs/verification/` |

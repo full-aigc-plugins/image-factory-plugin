@@ -46,6 +46,9 @@ RUNTIME_GATES = {
     "fresh_marketplace_install": "PASS",
     "fresh_session_no_spend_smoke": "PASS",
     "paid_canary": "PASS",
+    "multi_round_closed_loop": "PASS",
+    "product_surface_paid_run": "PASS",
+    "cross_platform_generation": "NOT_RUN",
     "usage_limit_evidence": "NOT_RUN",
 }
 

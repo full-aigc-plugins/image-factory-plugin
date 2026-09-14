@@ -14,10 +14,13 @@ Allowed status values are `PASS`, `FAIL`, and `NOT_RUN`.
 | --- | --- | --- |
 | `remote_ci_matrix` | `PASS` | Run 34831417381 on `05674dc`: all six legs green (ubuntu/macos/windows x Python 3.11/3.13). The first two pushes failed on Windows 3.11 only; the causes and fixes are in the commits `d93748e` and `05674dc`. |
 | `remote_sha_parity` | `PASS` | The annotated `v0.1.2` tag and `origin/main` resolve to the same commit; `git rev-list -n1 v0.1.2` is authoritative for the tag's target. The tag is dated and carries a message describing the release. |
-| `fresh_marketplace_install` | `PASS` | The `partme-ai-image-factory` snapshot was upgraded, the plugin removed, and `codex plugin add codex-image-factory@partme-ai-image-factory` reinstalled 0.1.2. All 188 files in the cache are byte-identical to the `v0.1.2` tag, checked again after the tag was pushed. |
+| `fresh_marketplace_install` | `PASS` | Reinstalled through the `personal` marketplace on 2026-09-14: `codex plugin add codex-image-factory@personal` installed 0.1.2, and the 194 installed files are byte-identical to the source tree (`diff -rq`, excluding `.git` and caches). |
 | `fresh_session_no_spend_smoke` | `PASS` | A fresh `codex exec` session used the installed plugin to validate and quote a two-item plan and reported the plan hash, image count, and approval requirement. The reported hash `0792c5df...` was recomputed locally from the same plan and matched. The quote reported `spends_allowance_on_quote: false`. |
-| `paid_canary` | `PASS` | One authorized generation call on `be48f5d` (2026-09-14): the same plan was refused with exit code 3 without `--approve`, then ran once with it. Ledger reached `Completed` at revision 10 with one `Generated` item at `attempts: 1`. Artifact 714,394 bytes, 1254x1254, sha256 `68eac3b3...`, independently re-hashed with `shasum -a 256` and matching the receipt. `source.model_reported` is `null`. |
-| `usage_limit_evidence` | `NOT_RUN` | Deliberately exhausting image allowance is neither required nor authorized. |
+| `paid_canary` | `PASS` | Five authorized generation calls on 2026-09-14 across two batches, none retried. Batch A round 1 produced three artifacts (302,076 / 383,074 / 264,860 bytes) and round 2 one artifact (179,848 bytes); the product-surface batch produced one artifact (368,875 bytes). Every artifact is 1254x1254 and every receipt SHA-256 was re-derived with `shasum -a 256`. `source.model_reported` is `null` throughout. |
+| `multi_round_closed_loop` | `PASS` | Round 1 evaluated to `fail` with all deterministic gates passing and one item rejected on measured non-conformance; `optimize` carried the two passing items forward and emitted a round-2 plan containing only the rejected item; round 2 evaluated to `pass` and the job reached `Accepted`. Ledger revision 25, two recorded approvals (3 calls, then 1). |
+| `product_surface_paid_run` | `PASS` | A fresh `codex exec` session, given only the installed plugin and a plan, declared `codex-image-factory-run` as the skill it was using, then ran `validate-plan`, `quote` (reporting plan hash `e0a7ecdc...`), and `run --approve`. It made exactly one call, reported `Completed` and SHA-256 `7ab82026...`, and stated that no retry was made. The plan hash was recomputed and the artifact re-hashed independently; both matched. |
+| `cross_platform_generation` | `NOT_RUN` | The generation path has been driven on macOS 26.6.2 only. CI covers the offline suite and the job lock on three operating systems, but a CI runner has no signed-in account and must not be given one. Procedure in [`../guides/runtime-evidence-collection.md`](../guides/runtime-evidence-collection.md). |
+| `usage_limit_evidence` | `NOT_RUN` | Exhausting the account's image allowance is neither required nor authorized, so this path is covered only by the offline suite against the event shape taken from the Codex source; it has never been observed live. Procedure for an operator who chooses to spend it: [`../guides/runtime-evidence-collection.md`](../guides/runtime-evidence-collection.md). |
 
 ## Evidence recording rules
 
@@ -33,10 +36,57 @@ Allowed status values are `PASS`, `FAIL`, and `NOT_RUN`.
 - A paid canary requires a new explicit approval bound to the exact plan hash,
   round, and remaining call count. It must verify per-item receipts and end with
   required human labels and `Accepted` state.
+- A generation claim is recorded only when the artifact hash has been re-derived
+  with a tool other than the plugin's own code and the pixel size has been read
+  back independently.
 
-The current verdict is **release candidate, not production-ready**. No official
-`codex plugin validate` command is claimed: the currently available Codex CLI
-does not provide one.
+## Measured outcome of the multi-round loop
+
+The round-2 rewrite is worth recording because the change it produced is
+measurable from the pixels. The rejected item moved from an amber-contaminated
+mark with a narrow horizontal margin to a clean emerald mark with roughly double
+the margin:
+
+| Metric | Round 1 | Round 2 |
+| --- | --- | --- |
+| Mean ink RGB | `[98, 119, 44]` (amber-shifted) | `[8, 106, 59]` (deep emerald) |
+| Green advantage (G - max(R,B)) | 21 | 47 |
+| Horizontal margin | 95 / 92 px (7.4%) | 191 / 190 px (15.2%) |
+| Ink bounding box | 1067 x 474 | 873 x 371 |
+
+The rejection was made against the plan's own written requirements ("centred
+with generous empty margin", "deep emerald green"), not against taste, and the
+metrics are reproducible with a standard-library PNG reader.
+
+Two label caveats belong with this result rather than being left implicit:
+
+- The `rejected` label was assigned by an automated reviewer working from those
+  metrics, not by a human looking at the images.
+- The item was not regenerated on a hunch: `optimize` refuses to emit a round
+  without an explicit rewrite for every item it marks as needing rework.
+
+## Host conditions observed while collecting this evidence
+
+Both of these were measured, and both would otherwise look like plugin defects:
+
+- Placing the plan or the job ledger inside the destination tree is refused
+  before anything is spent (`path collision between plan and destination tree`,
+  `path collision between job and destination tree`). Keep `plans/`, `jobs/`,
+  and `out/` as siblings.
+- Wrapping the caller in a restricted sandbox decides whether generation works,
+  because the restriction is inherited by the processes the plugin spawns. With
+  `codex exec -s workspace-write`, `probe` reported
+  `generation_dir_unwritable`, because `~/.codex/generated_images` sits outside
+  the writable workspace; the same action succeeded once that override was
+  removed. `--add-dir <CODEX_HOME>/generated_images` is the narrow fix, and
+  `--dangerously-bypass-approvals-and-sandbox` is not an acceptable one — the
+  plugin forbids that flag on purpose and asserts against it in tests.
+
+The current verdict is **verified on macOS for the generation path, and still a
+release candidate overall**: the generation path has not been exercised on Linux
+or Windows, and the exhausted-allowance path has never been observed live. No
+official `codex plugin validate` command is claimed: the currently available
+Codex CLI does not provide one.
 
 ## Local release-candidate preparation
 
@@ -60,10 +110,10 @@ because it would otherwise look like a plugin failure.
 
 ## Tag history
 
-`v0.1.2` was re-pointed once, before any GitHub Release referenced it. The previous
-target (`98fc6e32`) and the current one differ only in documentation and evidence:
-the audit of each task's declared deliverables and this verification record. No file
-under `scripts/` or `schemas/` changed between them, so the released code is identical
-either way. A consumer that fetched the earlier tag should re-fetch; the annotated
-tag's message and `git rev-list -n1 v0.1.2` are the authoritative statement of what it
-points at.
+`v0.1.2` has been re-pointed twice, both times before any GitHub Release referenced
+it. The first move replaced `98fc6e32`; the second added this verification record,
+the measured multi-round outcome, and the collection runbook. No file under
+`scripts/` or `schemas/` changed across either move, so the released code is identical
+in all three targets. A consumer that fetched an earlier tag should re-fetch; the
+annotated tag's message and `git rev-list -n1 v0.1.2` are the authoritative statement
+of what it points at.

@@ -10,6 +10,7 @@
 - Enforced required human labels before acceptance, with governed evaluation, pending-approval, optimization, and terminal state transitions.
 - Added deterministic 1.0.0-to-1.1.0 plan and job schema migration.
 - Added a dependency-free CI matrix for Linux, macOS, and Windows on Python 3.11 and 3.13, plus distribution and release-evidence gates.
+- Added `docs/guides/runtime-evidence-collection.md`, the procedure for the two release gates that need a human observer, together with the host sandbox and path-placement conditions that decide whether generation can run at all.
 
 ### Changed
 

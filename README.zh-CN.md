@@ -15,7 +15,7 @@
 
 `codex-image-factory` 通过 Codex 本身来跑批量图片：先校验批次计划，再由 Codex 内置图像工具逐项生成，采集每件产物并独立重算哈希，用确定性门禁评测，最后把失败项改写成新一轮 prompt，经你批准后才执行。
 
-版本 `0.1.2` 是已通过本地验证的 **release candidate**（发布候选）。插件自身不出图、不持有任何 API Key，也绝不自动重试。
+版本 `0.1.2` 是 **release candidate**（发布候选），九项外部门禁中已有七项观测通过——包括五次真实出图、一次已验证的多轮「评测→优化→重跑」闭环，以及一次从全新 Codex 会话驱动的付费运行。插件自身不出图、不持有任何 API Key，也绝不自动重试。
 
 ### 适合谁
 
@@ -57,7 +57,7 @@
 |---|---|
 | 插件 ID | `codex-image-factory` |
 | 宿主 | Codex CLI 或 ChatGPT 桌面应用 |
-| 当前版本 | `0.1.2`（release candidate） |
+| 当前版本 | `0.1.2`（release candidate，详见[成熟度](#成熟度)） |
 | 插件清单 | `.codex-plugin/plugin.json` |
 | MCP 配置 | 无——在 MCP 服务器存在之前，清单一律禁止写 MCP 条目 |
 | 主要语言 | Python 3.11+ |
@@ -91,10 +91,10 @@
 | 状态 | 含义 |
 |---|---|
 | 稳定 | 有自动化测试与确定性门禁 |
-| release candidate | 已通过本地验证；下列外部门禁尚未执行 |
+| release candidate | 外部门禁逐条记录，未观测的标为 `NOT_RUN`；生成路径目前仅在 macOS 上验证 |
 | 封锁 / NOT_RUN | 未验证；不得描述为可用 |
 
-`0.1.2` 尚未执行的外部门禁包括：远程 CI、源码/远程/标签一致性、Marketplace 全新安装、全新会话无花费冒烟，以及需要单独授权的付费 canary。故意耗尽出图额度既无必要也未被授权，因此用量上限证据条目保持 `NOT_RUN`。
+`0.1.2` 的九项外部门禁中已有七项观测通过，逐条记录在 [`docs/verification/runtime.md`](docs/verification/runtime.md)：远程 CI、标签一致性、Marketplace 全新安装、无花费冒烟、五次已授权的真实出图、一次已验证的多轮「评测→优化→重跑」闭环，以及一次从全新 Codex 会话驱动的付费运行。仍为 `NOT_RUN` 的有两项：生成路径未在 Linux 或 Windows 上执行过，以及额度耗尽路径从未被实际观测——后者是刻意的，因为故意耗尽出图额度既无必要也未被授权。两项的采集步骤见 [`docs/guides/runtime-evidence-collection.md`](docs/guides/runtime-evidence-collection.md)。
 
 ## 架构与核心流程
 
@@ -136,7 +136,7 @@ flowchart LR
 
 | 插件版本 | 宿主 | 运行环境 | 状态 |
 |---|---|---|---|
-| `0.1.2` | Codex CLI 或 ChatGPT 桌面应用 | CI 矩阵覆盖 Python 3.11 与 3.13；Codex CLI 需在 `PATH` 上或通过 `CODEX_HOME` 可达 | release candidate，已本地验证 |
+| `0.1.2` | Codex CLI 或 ChatGPT 桌面应用 | CI 矩阵覆盖 Python 3.11 与 3.13；Codex CLI 需在 `PATH` 上或通过 `CODEX_HOME` 可达 | release candidate；生成路径已在 macOS 验证 |
 
 CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖包。
 
@@ -298,7 +298,7 @@ python scripts/validate_distribution.py .
 
 仓库中已记录的证据：
 
-- [离线验证](docs/verification/offline.md) 与 [运行期验证](docs/verification/runtime.md)——其中包含 `NOT_RUN` 的用量上限条目与 release candidate 结论。
+- [离线验证](docs/verification/offline.md) 与 [运行期验证](docs/verification/runtime.md)——逐条记录外部门禁的 `PASS`／`NOT_RUN` 状态。
 - [上游快照验证](docs/verification/upstream-snapshots.md)——内置 Skill 快照均有校验和。
 - [提示词参考层](docs/prompt-library.md)——内置模板、案例索引与来源标注。
 - [使用案例](docs/use-cases/README.zh-CN.md)——六类中文案例库。

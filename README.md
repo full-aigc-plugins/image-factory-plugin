@@ -15,7 +15,7 @@
 
 `codex-image-factory` runs image batches through Codex itself. It validates a batch plan, asks Codex's built-in image tool to produce each item, collects every artifact with a recomputed hash, evaluates the batch against deterministic gates, and turns the failures into a new prompt round that you approve before it runs.
 
-Version `0.1.2` is a locally verified **release candidate**. The plugin never generates images itself, holds no API key, and never retries automatically.
+Version `0.1.2` is a **release candidate** with seven of its nine external gates observed — including five real generation calls, a verified multi-round evaluate/optimize/re-run loop, and a paid run driven from a fresh Codex conversation. The plugin never generates images itself, holds no API key, and never retries automatically.
 
 ### Who it is for
 
@@ -57,7 +57,7 @@ Image batch + receipts + evaluation record
 |---|---|
 | Plugin ID | `codex-image-factory` |
 | Host | Codex CLI or ChatGPT desktop app |
-| Current version | `0.1.2` (release candidate) |
+| Current version | `0.1.2` (release candidate — see [Maturity](#maturity)) |
 | Plugin manifest | `.codex-plugin/plugin.json` |
 | MCP configuration | none — the manifest forbids an MCP entry until an MCP server exists |
 | Primary language | Python 3.11+ |
@@ -91,10 +91,10 @@ Image batch + receipts + evaluation record
 | Status | Meaning |
 |---|---|
 | Stable | Automated tests plus a deterministic gate |
-| Release candidate | Locally verified; the external gates below are not yet run |
+| Release candidate | External gates are recorded one by one, with `NOT_RUN` where unobserved; the generation path is verified on macOS only |
 | Blocked / NOT_RUN | Not verified; never present it as available |
 
-External gates that remain unrun for `0.1.2`: remote CI, source/remote/tag parity, a fresh Marketplace install, a fresh-session no-spend smoke, and the separately authorized paid canary. Deliberately exhausting the image allowance is neither required nor authorized, so the usage-limit evidence line stays `NOT_RUN`.
+Seven of the nine external gates for `0.1.2` are observed and recorded in [`docs/verification/runtime.md`](docs/verification/runtime.md): remote CI, tag parity, a clean Marketplace install, a no-spend smoke, five authorized generation calls, a verified multi-round evaluate/optimize/re-run loop, and a paid run driven from a fresh Codex conversation. Two stay `NOT_RUN`: the generation path has not been exercised on Linux or Windows, and the exhausted-allowance path has never been seen live — deliberately, since exhausting the image allowance is neither required nor authorized. [`docs/guides/runtime-evidence-collection.md`](docs/guides/runtime-evidence-collection.md) has the procedure for both.
 
 ## Architecture and core flow
 

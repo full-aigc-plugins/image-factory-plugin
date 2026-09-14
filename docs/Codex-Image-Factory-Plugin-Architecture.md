@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | 0.1.2 release candidate, offline-verified; external release gates are not yet run |
+> | Status | 0.1.2 release candidate; 7 of 9 external gates observed, generation path verified on macOS |
 > | Scope | The implemented batch image core and prompt-discovery layer |
 > | Audience | Maintainers, reviewers, and integrators of this plugin |
 > | Out of scope | Workbench UI, parent project state, and non-image media pipelines |
