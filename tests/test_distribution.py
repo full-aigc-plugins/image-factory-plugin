@@ -72,6 +72,32 @@ class DistributionTests(unittest.TestCase):
             self.assertIn(command, workflow)
         self.assertNotIn("pip install", workflow)
 
+    def test_vendored_upstream_snapshots_disable_git_text_conversion(self) -> None:
+        vendored_files = sorted(
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "vendor" / "upstream").rglob("*")
+            if path.is_file()
+        )
+        self.assertTrue(vendored_files)
+        result = subprocess.run(
+            ["git", "check-attr", "-z", "text", "--", *vendored_files],
+            cwd=ROOT,
+            capture_output=True,
+            check=True,
+        )
+        fields = result.stdout.decode("utf-8").split("\0")
+        self.assertEqual(fields[-1], "")
+        attributes = {
+            path: (attribute, value)
+            for path, attribute, value in zip(
+                fields[0:-1:3], fields[1:-1:3], fields[2:-1:3], strict=True
+            )
+        }
+        self.assertEqual(set(attributes), set(vendored_files))
+        for path in vendored_files:
+            with self.subTest(path=path):
+                self.assertEqual(attributes[path], ("text", "unset"))
+
     def test_validator_rejects_extra_ci_matrix_axes_and_values(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         workflow = workflow.replace(
