@@ -1,6 +1,6 @@
 # Terms of Use
 
-Codex Image Factory is provided under the Apache License 2.0 without warranties or guarantees of compatibility with third-party products.
+Image Factory is provided under the Apache License 2.0 without warranties or guarantees of compatibility with third-party products.
 
 Users are responsible for their batch plans, reference images, prompt content, account permissions, usage charges, and compliance with the terms of any connected application or service. You must hold the rights required to use every reference image you submit.
 

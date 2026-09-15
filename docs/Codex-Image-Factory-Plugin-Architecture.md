@@ -1,4 +1,4 @@
-# Codex Image Factory Plugin Architecture
+# Image Factory Plugin Architecture
 
 > **Document control**
 >

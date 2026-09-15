@@ -1,8 +1,8 @@
-# Codex Image Factory Plugin
+# Image Factory Plugin
 
 ![Codex × Image Factory — Produce image batches you can verify](assets/image-factory-hero.png)
 
-<img src="assets/logo.png" alt="Codex Image Factory logo" width="128">
+<img src="assets/logo.png" alt="Image Factory logo" width="128">
 
 > Turn a reference-driven image task into an auditable production run — validated plan, approved spend, and a hash-verified receipt for every artifact.
 
@@ -161,7 +161,7 @@ Restart Codex or the ChatGPT desktop app, then open a new task so the Skills loa
 
 ```bash
 git clone https://github.com/partme-ai/codex-image-factory-plugin.git
-cd codex-image-factory-plugin
+cd image-factory-plugin
 bin/image-factory probe
 ```
 
@@ -317,7 +317,7 @@ Recorded evidence:
 ## Project structure
 
 ```text
-codex-image-factory-plugin/
+image-factory-plugin/
 ├── .codex-plugin/plugin.json   # identity and presentation metadata
 ├── .agents/plugins/marketplace.json
 ├── bin/image-factory           # CLI entry point
@@ -332,9 +332,9 @@ codex-image-factory-plugin/
 
 - [Architecture](docs/Codex-Image-Factory-Plugin-Architecture.md) · [架构文档](docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 - [Technical solution](docs/Codex-Image-Factory-Plugin-Technical-Solution.md) · [技术方案](docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
-- [Design specification](docs/superpowers/specs/2026-09-12-codex-image-factory-plugin-design.md)
-- [Production hardening design](docs/superpowers/specs/2026-09-14-codex-image-factory-production-hardening-design.md)
-- [Implementation plan](docs/superpowers/plans/2026-09-12-codex-image-factory-plugin-implementation.md)
+- [Design specification](docs/superpowers/specs/2026-09-12-image-factory-plugin-design.md)
+- [Production hardening design](docs/superpowers/specs/2026-09-14-image-factory-production-hardening-design.md)
+- [Implementation plan](docs/superpowers/plans/2026-09-12-image-factory-plugin-implementation.md)
 
 ## Contributing and support
 

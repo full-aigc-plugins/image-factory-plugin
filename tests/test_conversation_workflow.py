@@ -6,10 +6,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 NAMES = (
-    "codex-image-factory-use",
-    "codex-image-factory-run",
-    "codex-image-factory-judge",
-    "codex-image-factory-recover",
+    "image-factory-use",
+    "image-factory-run",
+    "image-factory-judge",
+    "image-factory-recover",
 )
 
 
@@ -18,7 +18,7 @@ class ConversationWorkflowTests(unittest.TestCase):
         return (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
 
     def test_every_workflow_skill_routes_to_one_conversation_contract(self) -> None:
-        contract = SKILLS / "codex-image-factory-use" / "references" / "conversation-workflow.md"
+        contract = SKILLS / "image-factory-use" / "references" / "conversation-workflow.md"
         self.assertTrue(contract.is_file())
         for name in NAMES:
             with self.subTest(skill=name):
@@ -27,7 +27,7 @@ class ConversationWorkflowTests(unittest.TestCase):
     def test_conversation_contract_covers_each_user_decision(self) -> None:
         text = (
             SKILLS
-            / "codex-image-factory-use"
+            / "image-factory-use"
             / "references"
             / "conversation-workflow.md"
         ).read_text(encoding="utf-8")
@@ -47,7 +47,7 @@ class ConversationWorkflowTests(unittest.TestCase):
     def test_confirmation_happens_before_every_spending_round(self) -> None:
         contract = (
             SKILLS
-            / "codex-image-factory-use"
+            / "image-factory-use"
             / "references"
             / "conversation-workflow.md"
         ).read_text(encoding="utf-8")
@@ -58,7 +58,7 @@ class ConversationWorkflowTests(unittest.TestCase):
     def test_approval_is_bound_to_the_displayed_transaction(self) -> None:
         contract = (
             SKILLS
-            / "codex-image-factory-use"
+            / "image-factory-use"
             / "references"
             / "conversation-workflow.md"
         ).read_text(encoding="utf-8")
@@ -75,7 +75,7 @@ class ConversationWorkflowTests(unittest.TestCase):
     def test_conversation_names_transactional_result_and_recovery_states(self) -> None:
         contract = (
             SKILLS
-            / "codex-image-factory-use"
+            / "image-factory-use"
             / "references"
             / "conversation-workflow.md"
         ).read_text(encoding="utf-8")
@@ -88,7 +88,7 @@ class ConversationWorkflowTests(unittest.TestCase):
     def test_examples_cover_partial_rewrite_invalidation_and_unknown_recovery(self) -> None:
         examples = (
             SKILLS
-            / "codex-image-factory-use"
+            / "image-factory-use"
             / "references"
             / "conversation-examples.md"
         ).read_text(encoding="utf-8")
@@ -104,7 +104,7 @@ class ConversationWorkflowTests(unittest.TestCase):
                 self.assertIn(observable, examples)
 
     def test_conversation_is_the_product_surface(self) -> None:
-        text = self.body("codex-image-factory-use")
+        text = self.body("image-factory-use")
         self.assertIn("conversation is the product surface", text.lower())
         self.assertNotRegex(text.lower(), re.compile(r"start .*web|open .*workbench"))
         self.assertIn("推荐方案", text)
@@ -112,7 +112,7 @@ class ConversationWorkflowTests(unittest.TestCase):
         self.assertIn("按推荐继续", text)
 
     def test_conversation_contract_routes_to_progressive_examples_and_safety(self) -> None:
-        references = SKILLS / "codex-image-factory-use" / "references"
+        references = SKILLS / "image-factory-use" / "references"
         contract = (references / "conversation-workflow.md").read_text(encoding="utf-8")
         for filename in (
             "conversation-examples.md",

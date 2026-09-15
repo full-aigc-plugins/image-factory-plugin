@@ -2,11 +2,20 @@
   "name": "codex-image-factory",
   "version": "0.1.2",
   "description": "Batch image production for Codex with attributed prompt discovery, verified receipts, evaluation, and prompt optimization.",
-  "author": {"name": "Full Stack Skills / PartMe.AI", "url": "https://github.com/partme-ai"},
+  "author": {
+    "name": "Full Stack Skills / PartMe.AI",
+    "url": "https://github.com/partme-ai"
+  },
   "homepage": "https://github.com/partme-ai/codex-image-factory-plugin",
   "repository": "https://github.com/partme-ai/codex-image-factory-plugin",
   "license": "Apache-2.0",
-  "keywords": ["image", "batch", "generation", "recipe", "codex"],
+  "keywords": [
+    "image",
+    "batch",
+    "generation",
+    "recipe",
+    "codex"
+  ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex Image Factory",
@@ -14,7 +23,11 @@
     "longDescription": "Discover attributed prompt directions, then run a reference-driven image production loop inside Codex: validate a batch plan, generate through the built-in image tool, collect a hash-verified receipt for every artifact, evaluate against deterministic gates, and optimize prompts into a new round with explicit approval.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "category": "Creativity",
-    "capabilities": ["Interactive", "Read", "Write"],
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
     "websiteURL": "https://github.com/partme-ai/codex-image-factory-plugin",
     "privacyPolicyURL": "https://github.com/partme-ai/codex-image-factory-plugin/blob/main/PRIVACY.md",
     "termsOfServiceURL": "https://github.com/partme-ai/codex-image-factory-plugin/blob/main/TERMS.md",

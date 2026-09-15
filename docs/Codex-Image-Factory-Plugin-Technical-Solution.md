@@ -1,4 +1,4 @@
-# Codex Image Factory Plugin Technical Solution
+# Image Factory Plugin Technical Solution
 
 > **Document control**
 >

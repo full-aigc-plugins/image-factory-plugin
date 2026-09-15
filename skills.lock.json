@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "package": "image-factory-skills",
+      "repo": "https://github.com/full-aigc-skills/image-factory-skills.git",
+      "ref": "v1.0.0",
+      "sha": "611f7626f8b8dcca761da8a2fda87a3c620095df",
+      "skills": [
+        "image-factory-use",
+        "image-factory-run",
+        "image-factory-judge",
+        "image-factory-recover"
+      ],
+      "dest": "skills/",
+      "sha256": {
+        "image-factory-use": "eb8d2cede6d5ae9ea1c57d14a20f8cb59ce9a3f415829ea032c5d95ff46c4e76",
+        "image-factory-run": "3eb524fa5022f6d40d5af96f972bff2f71ff4a7a993966d2de757f1b938c5e8b",
+        "image-factory-judge": "fe4aa4d1f8a75475d105d98849415f0427ddc624a622e8384fe072f02a572932",
+        "image-factory-recover": "ee81d6f506937ab4ed03c1fb0fddd3082afaa598ab4cc23931ea3be25e7e550b"
+      }
+    }
+  ]
+}

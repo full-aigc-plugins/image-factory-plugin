@@ -1,6 +1,6 @@
 ---
-name: codex-image-factory-judge
-description: Use when a batch has been generated and its results need a verdict, when the user asks whether a batch came out right, or when the results should be turned into another round. Runs the deterministic gates, records any advisory score next to the human labels so the two can later be compared, and writes the next round's plan from the items that actually need rework. Use when the user says "check these", "score the batch", or "try again with better prompts". For producing the images in the first place use `codex-image-factory-run`.
+name: image-factory-judge
+description: Use when a batch has been generated and its results need a verdict, when the user asks whether a batch came out right, or when the results should be turned into another round. Runs the deterministic gates, records any advisory score next to the human labels so the two can later be compared, and writes the next round's plan from the items that actually need rework. Use when the user says "check these", "score the batch", or "try again with better prompts". For producing the images in the first place use `image-factory-run`.
 ---
 
 # Evaluate and optimize a batch
@@ -17,7 +17,7 @@ Do not use it to generate images. It never spends the account's allowance.
 ## Workflow
 
 Read and follow
-[the shared conversation workflow](../codex-image-factory-use/references/conversation-workflow.md)
+[the shared conversation workflow](../image-factory-use/references/conversation-workflow.md)
 when presenting numbered results and interpreting whole-batch, partial, or
 single-image decisions. Preserve the user's exact adjustment words as the reason
 for a rewrite.
@@ -117,7 +117,7 @@ never write a prompt whose intent depends on those settings.
 ## Inputs
 
 - The plan for the round that was generated.
-- The job ledger and the receipts from `codex-image-factory-run`.
+- The job ledger and the receipts from `image-factory-run`.
 - Optional advisory scores and human labels.
 
 ## Outputs

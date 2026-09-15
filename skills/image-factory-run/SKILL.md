@@ -1,6 +1,6 @@
 ---
-name: codex-image-factory-run
-description: Use when a batch plan exists and its images have not been produced yet, or when the user asks to generate the images in a plan. Validates the plan, quotes the batch, obtains approval, generates one image per item through Codex, and collects a hash-verified receipt for every artifact. Use when the user says "run this batch" or "generate these". For evaluating results that already exist use `codex-image-factory-judge`; for a run whose state is unclear use `codex-image-factory-recover`.
+name: image-factory-run
+description: Use when a batch plan exists and its images have not been produced yet, or when the user asks to generate the images in a plan. Validates the plan, quotes the batch, obtains approval, generates one image per item through Codex, and collects a hash-verified receipt for every artifact. Use when the user says "run this batch" or "generate these". For evaluating results that already exist use `image-factory-judge`; for a run whose state is unclear use `image-factory-recover`.
 ---
 
 # Run an image batch
@@ -16,7 +16,7 @@ to decide whether the results are good.
 ## Workflow
 
 For a goal expressed in conversation, read and follow
-[the shared conversation workflow](../codex-image-factory-use/references/conversation-workflow.md).
+[the shared conversation workflow](../image-factory-use/references/conversation-workflow.md).
 Keep the visible interaction to direction choices, a compact creation confirmation
 card, the exact generation-call count, and the approval request. Keep JSON and CLI
 details in the background unless the user asks for them.

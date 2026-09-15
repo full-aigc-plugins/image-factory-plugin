@@ -1,6 +1,6 @@
 # Privacy
 
-Codex Image Factory is a local Codex plugin. It does not include telemetry, advertising, or a hosted data service, and it does not ship credentials.
+Image Factory is a local Codex plugin. It does not include telemetry, advertising, or a hosted data service, and it does not ship credentials.
 
 The plugin reads a batch plan and any reference images you explicitly name, and it collects generated images from your local Codex home directory. Batch plans, ledgers, receipts, and scores are written under the job directory you select. Nothing in this repository transmits files or prompts to a service operated by this project.
 

@@ -1,6 +1,6 @@
 # Runtime and release verification: 0.1.2
 
-This file is the evidence ledger for the Codex Image Factory 0.1.2 release
+This file is the evidence ledger for the Image Factory 0.1.2 release
 candidate. It intentionally does not reuse runtime, installation, remote commit,
 or paid-generation results from an earlier version. A gate changes from
 `NOT_RUN` only when it is freshly observed against the exact candidate named by
@@ -18,7 +18,7 @@ Allowed status values are `PASS`, `FAIL`, and `NOT_RUN`.
 | `fresh_session_no_spend_smoke` | `PASS` | A fresh `codex exec` session used the installed plugin to validate and quote a two-item plan and reported the plan hash, image count, and approval requirement. The reported hash `0792c5df...` was recomputed locally from the same plan and matched. The quote reported `spends_allowance_on_quote: false`. |
 | `paid_canary` | `PASS` | Five authorized generation calls on 2026-09-14 across two batches, none retried. Batch A round 1 produced three artifacts (302,076 / 383,074 / 264,860 bytes) and round 2 one artifact (179,848 bytes); the product-surface batch produced one artifact (368,875 bytes). Every artifact is 1254x1254 and every receipt SHA-256 was re-derived with `shasum -a 256`. `source.model_reported` is `null` throughout. |
 | `multi_round_closed_loop` | `PASS` | Round 1 evaluated to `fail` with all deterministic gates passing and one item rejected on measured non-conformance; `optimize` carried the two passing items forward and emitted a round-2 plan containing only the rejected item; round 2 evaluated to `pass` and the job reached `Accepted`. Ledger revision 25, two recorded approvals (3 calls, then 1). |
-| `product_surface_paid_run` | `PASS` | A fresh `codex exec` session, given only the installed plugin and a plan, declared `codex-image-factory-run` as the skill it was using, then ran `validate-plan`, `quote` (reporting plan hash `e0a7ecdc...`), and `run --approve`. It made exactly one call, reported `Completed` and SHA-256 `7ab82026...`, and stated that no retry was made. The plan hash was recomputed and the artifact re-hashed independently; both matched. |
+| `product_surface_paid_run` | `PASS` | A fresh `codex exec` session, given only the installed plugin and a plan, declared `image-factory-run` as the skill it was using, then ran `validate-plan`, `quote` (reporting plan hash `e0a7ecdc...`), and `run --approve`. It made exactly one call, reported `Completed` and SHA-256 `7ab82026...`, and stated that no retry was made. The plan hash was recomputed and the artifact re-hashed independently; both matched. |
 | `cross_platform_generation` | `NOT_RUN` | The generation path has been driven on macOS 26.6.2 only. CI covers the offline suite and the job lock on three operating systems, but a CI runner has no signed-in account and must not be given one. Procedure in [`../guides/runtime-evidence-collection.md`](../guides/runtime-evidence-collection.md). |
 | `usage_limit_evidence` | `NOT_RUN` | Exhausting the account's image allowance is neither required nor authorized, so this path is covered only by the offline suite against the event shape taken from the Codex source; it has never been observed live. Procedure for an operator who chooses to spend it: [`../guides/runtime-evidence-collection.md`](../guides/runtime-evidence-collection.md). |
 
