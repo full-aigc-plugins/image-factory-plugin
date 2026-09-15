@@ -1,8 +1,8 @@
-# Codex Image Factory 插件
+# Image Factory 插件
 
 ![Codex × Image Factory — 生产可核验的批量图片](assets/image-factory-hero.png)
 
-<img src="assets/logo.png" alt="Codex Image Factory 图标" width="128">
+<img src="assets/logo.png" alt="Image Factory 图标" width="128">
 
 > 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
 
@@ -161,7 +161,7 @@ codex plugin add codex-image-factory@partme-ai-image-factory
 
 ```bash
 git clone https://github.com/partme-ai/codex-image-factory-plugin.git
-cd codex-image-factory-plugin
+cd image-factory-plugin
 bin/image-factory probe
 ```
 
@@ -317,7 +317,7 @@ python scripts/validate_distribution.py .
 ## 项目结构
 
 ```text
-codex-image-factory-plugin/
+image-factory-plugin/
 ├── .codex-plugin/plugin.json   # 身份与展示元数据
 ├── .agents/plugins/marketplace.json
 ├── bin/image-factory           # CLI 入口
@@ -332,9 +332,9 @@ codex-image-factory-plugin/
 
 - [Architecture](docs/Codex-Image-Factory-Plugin-Architecture.md) · [架构文档](docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 - [Technical solution](docs/Codex-Image-Factory-Plugin-Technical-Solution.md) · [技术方案](docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
-- [设计规格](docs/superpowers/specs/2026-09-12-codex-image-factory-plugin-design.md)
-- [生产加固设计](docs/superpowers/specs/2026-09-14-codex-image-factory-production-hardening-design.md)
-- [实施计划](docs/superpowers/plans/2026-09-12-codex-image-factory-plugin-implementation.md)
+- [设计规格](docs/superpowers/specs/2026-09-12-image-factory-plugin-design.md)
+- [生产加固设计](docs/superpowers/specs/2026-09-14-image-factory-production-hardening-design.md)
+- [实施计划](docs/superpowers/plans/2026-09-12-image-factory-plugin-implementation.md)
 
 ## 贡献与支持
 

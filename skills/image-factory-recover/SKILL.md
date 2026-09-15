@@ -1,6 +1,6 @@
 ---
-name: codex-image-factory-recover
-description: Use when an image batch was interrupted, when a ledger reports a state the user does not understand, or when the user asks what happened to a batch and whether it is safe to continue. Reads the job ledger, maps the current state to the single legal next step, and reports it without spending anything. Use when the state is `Running`, `Unknown`, or `Partial`, or when a previous attempt stopped unexpectedly. For a batch that has not been started use `codex-image-factory-run`.
+name: image-factory-recover
+description: Use when an image batch was interrupted, when a ledger reports a state the user does not understand, or when the user asks what happened to a batch and whether it is safe to continue. Reads the job ledger, maps the current state to the single legal next step, and reports it without spending anything. Use when the state is `Running`, `Unknown`, or `Partial`, or when a previous attempt stopped unexpectedly. For a batch that has not been started use `image-factory-run`.
 ---
 
 # Recover an image batch
@@ -16,7 +16,7 @@ Do not use it to generate anything, and do not use it to evaluate results.
 ## Workflow
 
 Read and follow
-[the shared conversation workflow](../codex-image-factory-use/references/conversation-workflow.md)
+[the shared conversation workflow](../image-factory-use/references/conversation-workflow.md)
 for the user-facing recovery message. Summarize the state, completed/failed/pending
 counts, remaining generation-call count, and one legal next action in plain language.
 

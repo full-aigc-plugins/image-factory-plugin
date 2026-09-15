@@ -12,10 +12,10 @@ RELEASE_VERSION = "0.1.2"
 PRIOR_RELEASE_SHA = "fff20c9aad9a9cd7893644306c752b2f7231071d"
 
 EXPECTED_SKILLS = (
-    "codex-image-factory-use",
-    "codex-image-factory-run",
-    "codex-image-factory-judge",
-    "codex-image-factory-recover",
+    "image-factory-use",
+    "image-factory-run",
+    "image-factory-judge",
+    "image-factory-recover",
 )
 
 BILINGUAL_PAIRS = (
@@ -33,8 +33,8 @@ BILINGUAL_PAIRS = (
 REQUIRED_DOCUMENTS = (
     "docs/portable-migration.md",
     "docs/verification/offline.md",
-    "docs/superpowers/specs/2026-09-12-codex-image-factory-plugin-design.md",
-    "docs/superpowers/plans/2026-09-12-codex-image-factory-plugin-implementation.md",
+    "docs/superpowers/specs/2026-09-12-image-factory-plugin-design.md",
+    "docs/superpowers/plans/2026-09-12-image-factory-plugin-implementation.md",
 )
 
 # Gates that cannot be satisfied offline must be declared with their observed status.

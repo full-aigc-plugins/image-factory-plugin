@@ -11,19 +11,19 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import job_ledger  # noqa: E402
 
 EXPECTED = (
-    "codex-image-factory-use",
-    "codex-image-factory-run",
-    "codex-image-factory-judge",
-    "codex-image-factory-recover",
+    "image-factory-use",
+    "image-factory-run",
+    "image-factory-judge",
+    "image-factory-recover",
 )
-ROUTER = "codex-image-factory-use"
+ROUTER = "image-factory-use"
 DELEGATES = tuple(name for name in EXPECTED if name != ROUTER)
 
 # The CLI subcommand each workflow skill is responsible for driving.
 COMMANDS = {
-    "codex-image-factory-run": "run",
-    "codex-image-factory-judge": "evaluate",
-    "codex-image-factory-recover": "status",
+    "image-factory-run": "run",
+    "image-factory-judge": "evaluate",
+    "image-factory-recover": "status",
 }
 
 FORBIDDEN_PHRASES = (
@@ -176,28 +176,28 @@ class BodyTests(unittest.TestCase):
         self.assertNotIn("## Implementation", body)
 
     def test_run_skill_requires_explicit_approval(self) -> None:
-        body = self.body("codex-image-factory-run").lower()
+        body = self.body("image-factory-run").lower()
         self.assertIn("approv", body)
         self.assertIn("never retries", body)
 
     def test_run_skill_forbids_bypassing_approvals(self) -> None:
         """Naming the bypass flag as forbidden is the point; using it is what must never happen."""
-        body = self.body("codex-image-factory-run").lower()
+        body = self.body("image-factory-run").lower()
         self.assertIn("never bypass approvals", body)
         self.assertIn("dangerously-bypass-approvals-and-sandbox", body)
 
     def test_judge_skill_treats_the_model_score_as_advisory(self) -> None:
-        body = self.body("codex-image-factory-judge")
+        body = self.body("image-factory-judge")
         self.assertIn("advisory", body.lower())
         self.assertIn("deterministic", body.lower())
 
     def test_judge_skill_keeps_the_human_in_the_loop(self) -> None:
-        body = self.body("codex-image-factory-judge").lower()
+        body = self.body("image-factory-judge").lower()
         self.assertIn("approve", body)
         self.assertIn("reject", body)
 
     def test_judge_skill_distinguishes_definite_failure_from_unknown(self) -> None:
-        body = self.body("codex-image-factory-judge").lower()
+        body = self.body("image-factory-judge").lower()
         self.assertIn("failed` and `skipped", body)
         self.assertIn("missing_artifact", body)
         self.assertIn("unknown", body)
@@ -205,14 +205,14 @@ class BodyTests(unittest.TestCase):
         self.assertIn("retry-unchanged", body)
 
     def test_recover_skill_routes_terminal_partial_items_to_evaluation(self) -> None:
-        body = self.body("codex-image-factory-recover").lower()
+        body = self.body("image-factory-recover").lower()
         self.assertIn("no pending", body)
         self.assertIn("definite failures", body)
         self.assertIn("evaluate", body)
         self.assertIn("explicit rewrite", body)
 
     def test_recover_skill_requires_the_full_optimized_approval_sequence(self) -> None:
-        body = self.body("codex-image-factory-recover").lower()
+        body = self.body("image-factory-recover").lower()
         optimized_row = next(
             line for line in body.splitlines() if line.strip().startswith("| `optimized`")
         )
@@ -227,20 +227,20 @@ class BodyTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
 
     def test_recover_skill_maps_every_ledger_state(self) -> None:
-        body = self.body("codex-image-factory-recover")
+        body = self.body("image-factory-recover")
         for state in job_ledger.JobState:
             with self.subTest(state=state):
                 self.assertIn(f"`{state.value}`", body)
 
     def test_run_skill_never_treats_stale_approval_as_permission_to_proceed(self) -> None:
-        body = self.body("codex-image-factory-run")
+        body = self.body("image-factory-run")
         self.assertNotIn("already approved plan", body.lower())
         self.assertIn("verify", body.lower())
         self.assertIn("displayed plan", body.lower())
         self.assertIn("remaining generation-call", body.lower())
 
     def test_recover_skill_reconciles_before_recommending_a_next_action(self) -> None:
-        body = self.body("codex-image-factory-recover").lower()
+        body = self.body("image-factory-recover").lower()
         self.assertIn("bin/image-factory recover", body)
         self.assertIn("completed", body)
         self.assertIn("failed", body)
@@ -251,16 +251,16 @@ class BodyTests(unittest.TestCase):
         self.assertIn("do not call `recover`", body)
 
     def test_run_skill_requires_a_fresh_approval_for_partial_resume(self) -> None:
-        body = self.body("codex-image-factory-run").lower()
+        body = self.body("image-factory-run").lower()
         self.assertIn("remaining generation", body)
         self.assertIn("fresh approval", body)
 
     def test_all_skills_apply_the_transactional_conversation_contract(self) -> None:
         required = {
-            "codex-image-factory-use": ("displayed plan", "round", "remaining generation-call"),
-            "codex-image-factory-run": ("exact plan", "round", "remaining generation-call"),
-            "codex-image-factory-judge": ("PendingApproval", "Accepted", "new approval"),
-            "codex-image-factory-recover": ("Unknown", "zero generation calls", "do not re-run"),
+            "image-factory-use": ("displayed plan", "round", "remaining generation-call"),
+            "image-factory-run": ("exact plan", "round", "remaining generation-call"),
+            "image-factory-judge": ("PendingApproval", "Accepted", "new approval"),
+            "image-factory-recover": ("Unknown", "zero generation calls", "do not re-run"),
         }
         for name, phrases in required.items():
             body = self.body(name)

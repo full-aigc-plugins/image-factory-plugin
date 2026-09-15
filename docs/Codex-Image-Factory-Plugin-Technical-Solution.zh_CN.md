@@ -1,4 +1,4 @@
-# Codex Image Factory 插件技术方案
+# Image Factory 插件技术方案
 
 > **文档信息**
 >

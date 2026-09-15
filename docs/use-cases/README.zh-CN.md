@@ -1,4 +1,4 @@
-# Codex Image Factory 使用案例目录
+# Image Factory 使用案例目录
 
 本文档集把已收录上游 Skill 的方法转换成 Image Factory 的真实用户场景。案例不是
 复制上游完整提示词，而是说明用户目标如何映射为批次条件、自动处理、交付物和验收。

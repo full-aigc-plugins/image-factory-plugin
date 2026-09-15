@@ -64,7 +64,7 @@
 - **自动处理**：重新执行确定性门禁，将人工标签写入 scores。
 - **交付**：最终图片集、标签、评分和回执。
 - **验收**：每项都是 approved；最终 decision=pass；没有新增生成调用。
-- **参考能力**：`codex-image-factory-judge`。
+- **参考能力**：`image-factory-judge`。
 
 ## E08 生成中断后恢复（当前可用）
 
@@ -73,6 +73,6 @@
 - **自动处理**：先读台账；跳过已有回执项，只计算真正 pending 的调用数。
 - **交付**：状态报告和合法下一步。
 - **验收**：已完成项 attempts 不增加；Failed 项不被自动重试。
-- **参考能力**：`codex-image-factory-recover`。
+- **参考能力**：`image-factory-recover`。
 
 [返回案例目录](README.zh-CN.md)
