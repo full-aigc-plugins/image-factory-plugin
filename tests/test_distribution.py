@@ -12,7 +12,7 @@ from scripts import validate_distribution
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ID = "codex-image-factory"
 DISPLAY_NAME = "Codex Image Factory"
-REPOSITORY = "https://github.com/partme-ai/codex-image-factory-plugin"
+REPOSITORY = "https://github.com/partme-ai/partme-image-factory"
 BRAND_COLOR = "#10B981"
 RELEASE_VERSION = "0.1.2"
 

@@ -6,7 +6,7 @@
 
 > 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
 
-[![版本](https://img.shields.io/badge/version-0.1.2-blue)](https://github.com/partme-ai/codex-image-factory-plugin)
+[![版本](https://img.shields.io/badge/version-0.1.2-blue)](https://github.com/partme-ai/partme-image-factory)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [命令契约](#命令契约) · [故障排查](#故障排查)
@@ -151,7 +151,7 @@ CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖�
 ### 从插件市场安装
 
 ```bash
-codex plugin marketplace add partme-ai/codex-image-factory-plugin --ref main
+codex plugin marketplace add partme-ai/partme-image-factory --ref main
 codex plugin add codex-image-factory@partme-ai-image-factory
 ```
 
@@ -160,7 +160,7 @@ codex plugin add codex-image-factory@partme-ai-image-factory
 ### 从源码安装
 
 ```bash
-git clone https://github.com/partme-ai/codex-image-factory-plugin.git
+git clone https://github.com/partme-ai/partme-image-factory.git
 cd image-factory-plugin
 bin/image-factory probe
 ```
@@ -338,7 +338,7 @@ image-factory-plugin/
 
 ## 贡献与支持
 
-功能问题请提交到 <https://github.com/partme-ai/codex-image-factory-plugin/issues>。提交变更前，请说明你验证所用的 Python 版本、是否改动计划 schema 或台账格式，并附上受影响的门禁。
+功能问题请提交到 <https://github.com/partme-ai/partme-image-factory/issues>。提交变更前，请说明你验证所用的 Python 版本、是否改动计划 schema 或台账格式，并附上受影响的门禁。
 
 ## 许可证
 

@@ -3,7 +3,7 @@
   "version": "0.1.2",
   "description": "Batch image production with attributed prompt discovery, verified receipts, evaluation, and prompt optimization.",
   "author": { "name": "Full Stack Skills / PartMe.AI" },
-  "homepage": "https://github.com/partme-ai/codex-image-factory-plugin",
+  "homepage": "https://github.com/partme-ai/partme-image-factory",
   "license": "Apache-2.0",
   "keywords": ["image", "batch", "receipts"],
   "interface": {
@@ -11,7 +11,7 @@
     "shortDescription": "Batch image production with verified receipts",
     "longDescription": "Batch image production for coding agents: attributed prompt discovery, verified receipts, evaluation, and prompt optimization loop.",
     "developerName": "Full Stack Skills / PartMe.AI",
-    "websiteURL": "https://github.com/partme-ai/codex-image-factory-plugin"
+    "websiteURL": "https://github.com/partme-ai/partme-image-factory"
   },
   "skills": "./skills/",
   "commands": "./commands/",

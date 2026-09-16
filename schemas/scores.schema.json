@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/partme-ai/codex-image-factory-plugin/schemas/scores.schema.json",
+  "$id": "https://github.com/partme-ai/partme-image-factory/schemas/scores.schema.json",
   "title": "BatchScores",
   "description": "Evaluation output for one batch round. Deterministic gates are the primary verdict; the model-authored advisory score is recorded as a signal only, and human labels are captured so the advisory can be calibrated against real decisions.",
   "type": "object",

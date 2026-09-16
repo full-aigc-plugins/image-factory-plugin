@@ -8,7 +8,7 @@
 
 **Tech Stack:** Codex plugin manifest, Agent Skills, Python 3.11+, JSON Schema, stdlib `unittest`, stdlib `tomllib`, `zlib`/`struct` for PNG header reads.
 
-**Spec:** `docs/superpowers/specs/2026-09-12-codex-image-factory-plugin-design.md`
+**Spec:** `docs/superpowers/specs/2026-09-12-partme-image-factory-design.md`
 
 ## Global Constraints
 

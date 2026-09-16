@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/partme-ai/codex-image-factory-plugin/schemas/artifact_receipt.schema.json",
+  "$id": "https://github.com/partme-ai/partme-image-factory/schemas/artifact_receipt.schema.json",
   "title": "ArtifactReceipt",
   "description": "One collected image artifact. Every hash, size, and dimension in this receipt is recomputed from the file on disk by the collector; nothing here is trusted from the producer.",
   "type": "object",

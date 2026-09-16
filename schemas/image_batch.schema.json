@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/partme-ai/codex-image-factory-plugin/schemas/image_batch.schema.json",
+  "$id": "https://github.com/partme-ai/partme-image-factory/schemas/image_batch.schema.json",
   "title": "ImageBatchPlan",
   "description": "A batch of image production items. Differences between items can only come from the prompt and the reference images: the built-in Codex image tool accepts no size, quality, background, count, or model argument.",
   "type": "object",

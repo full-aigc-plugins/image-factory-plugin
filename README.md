@@ -6,7 +6,7 @@
 
 > Turn a reference-driven image task into an auditable production run — validated plan, approved spend, and a hash-verified receipt for every artifact.
 
-[![Version](https://img.shields.io/badge/version-0.1.2-blue)](https://github.com/partme-ai/codex-image-factory-plugin)
+[![Version](https://img.shields.io/badge/version-0.1.2-blue)](https://github.com/partme-ai/partme-image-factory)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [Install](#installation) · [Quick start](#quick-start) · [Command contract](#command-contract) · [Troubleshooting](#troubleshooting)
@@ -151,7 +151,7 @@ CI runs on Linux, macOS, and Windows without installing any package at test time
 ### From the plugin marketplace
 
 ```bash
-codex plugin marketplace add partme-ai/codex-image-factory-plugin --ref main
+codex plugin marketplace add partme-ai/partme-image-factory --ref main
 codex plugin add codex-image-factory@partme-ai-image-factory
 ```
 
@@ -160,7 +160,7 @@ Restart Codex or the ChatGPT desktop app, then open a new task so the Skills loa
 ### From source
 
 ```bash
-git clone https://github.com/partme-ai/codex-image-factory-plugin.git
+git clone https://github.com/partme-ai/partme-image-factory.git
 cd image-factory-plugin
 bin/image-factory probe
 ```
@@ -338,7 +338,7 @@ image-factory-plugin/
 
 ## Contributing and support
 
-Open functional issues at <https://github.com/partme-ai/codex-image-factory-plugin/issues>. Before proposing a change, state the Python version you verified on, whether it alters the plan schema or the ledger format, and include the affected gates.
+Open functional issues at <https://github.com/partme-ai/partme-image-factory/issues>. Before proposing a change, state the Python version you verified on, whether it alters the plan schema or the ledger format, and include the affected gates.
 
 ## License
 

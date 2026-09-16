@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/partme-ai/codex-image-factory-plugin/schemas/factory_job.schema.json",
+  "$id": "https://github.com/partme-ai/partme-image-factory/schemas/factory_job.schema.json",
   "title": "FactoryJob",
   "description": "The durable ledger for one image production job. Written atomically after every transition so an interrupted batch can be resumed without spending the usage allowance twice.",
   "type": "object",

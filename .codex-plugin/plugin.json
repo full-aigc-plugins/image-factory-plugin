@@ -6,8 +6,8 @@
     "name": "Full Stack Skills / PartMe.AI",
     "url": "https://github.com/partme-ai"
   },
-  "homepage": "https://github.com/partme-ai/codex-image-factory-plugin",
-  "repository": "https://github.com/partme-ai/codex-image-factory-plugin",
+  "homepage": "https://github.com/partme-ai/partme-image-factory",
+  "repository": "https://github.com/partme-ai/partme-image-factory",
   "license": "Apache-2.0",
   "keywords": [
     "image",
@@ -28,9 +28,9 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/partme-ai/codex-image-factory-plugin",
-    "privacyPolicyURL": "https://github.com/partme-ai/codex-image-factory-plugin/blob/main/PRIVACY.md",
-    "termsOfServiceURL": "https://github.com/partme-ai/codex-image-factory-plugin/blob/main/TERMS.md",
+    "websiteURL": "https://github.com/partme-ai/partme-image-factory",
+    "privacyPolicyURL": "https://github.com/partme-ai/partme-image-factory/blob/main/PRIVACY.md",
+    "termsOfServiceURL": "https://github.com/partme-ai/partme-image-factory/blob/main/TERMS.md",
     "defaultPrompt": [
       "Find prompt directions for my image batch",
       "Run this image batch plan and collect a receipt for every artifact",

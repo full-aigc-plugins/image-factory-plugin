@@ -10,7 +10,7 @@ while making approval, execution, receipt persistence, evaluation, recovery, and
 release evidence agree end to end.
 
 This specification extends the 0.1.0 compatibility baseline in
-`docs/superpowers/specs/2026-09-12-codex-image-factory-plugin-design.md`. It does
+`docs/superpowers/specs/2026-09-12-partme-image-factory-design.md`. It does
 not rewrite or retroactively relabel that baseline.
 
 ## Product boundary
