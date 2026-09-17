@@ -185,6 +185,31 @@ bin/image-factory probe
 
 Expected result: a JSON capability report for Python, the Codex CLI, and ledger access, with no secret value printed.
 
+### China mirror (AtomGit)
+
+If GitHub is slow or unreachable, install from the AtomGit mirror instead. The
+commands are identical apart from the marketplace URL:
+
+```bash
+codex plugin marketplace add https://atomgit.com/partme-ai/partme-image-factory.git --ref main
+codex plugin add image-factory@partme-ai-image-factory
+```
+
+To install the whole partme-ai plugin catalog from the mirror in one step:
+
+```bash
+codex plugin marketplace add https://atomgit.com/partme-ai/plugins.git
+codex plugin add image-factory@partme-ai-image-factory
+```
+
+Notes:
+
+- The AtomGit source and the GitHub source share marketplace names, so adding
+  one replaces the other. Switch back with
+  `codex plugin marketplace add https://github.com/partme-ai/plugins.git`.
+- For ZCode or Kimi, clone the mirror repository and register the local
+  directory in the respective marketplace configuration.
+
 ## Quick start
 
 ### 1. Find a direction
