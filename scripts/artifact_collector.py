@@ -32,7 +32,7 @@ from plan_validator import PlanItem
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 PNG_HEADER_BYTES = 24
-PLUGIN_ID = "codex-image-factory"
+PLUGIN_ID = "image-factory"
 SCHEMA_VERSION = "1.0.0"
 HASH_CHUNK = 64 * 1024
 SIBLING_POLICIES = ("reject", "newest")

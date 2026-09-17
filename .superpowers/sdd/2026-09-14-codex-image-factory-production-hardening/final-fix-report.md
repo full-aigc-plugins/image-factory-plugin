@@ -40,7 +40,7 @@ python3 -m compileall -q scripts tests
 exit 0
 
 python3 scripts/validate_distribution.py .
-validated codex-image-factory compatibility foundation 0.1.2
+validated image-factory compatibility foundation 0.1.2
 
 git diff --check
 exit 0

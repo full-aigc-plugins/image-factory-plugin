@@ -10,7 +10,7 @@ SCHEMA_DIR = ROOT / "schemas"
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import schema_lite  # noqa: E402
-PLUGIN_ID = "codex-image-factory"
+PLUGIN_ID = "image-factory"
 REPOSITORY = "https://github.com/partme-ai/partme-image-factory"
 JSON_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")

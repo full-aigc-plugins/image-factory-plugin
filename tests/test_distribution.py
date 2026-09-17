@@ -10,8 +10,8 @@ from scripts import validate_distribution
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PLUGIN_ID = "codex-image-factory"
-DISPLAY_NAME = "Codex Image Factory"
+PLUGIN_ID = "image-factory"
+DISPLAY_NAME = "Image Factory"
 REPOSITORY = "https://github.com/partme-ai/partme-image-factory"
 BRAND_COLOR = "#10B981"
 RELEASE_VERSION = "0.1.2"
@@ -158,8 +158,8 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(interface["displayName"], DISPLAY_NAME)
         self.assertEqual(interface["category"], "Creativity")
         self.assertEqual(interface["brandColor"], BRAND_COLOR)
-        self.assertEqual(interface["logo"], "./assets/logo.png")
-        self.assertEqual(interface["logoDark"], "./assets/logo-dark.png")
+        self.assertEqual(interface["logo"], "./assets/logo-approved.png")
+        self.assertEqual(interface["logoDark"], "./assets/logo-approved.png")
         self.assertEqual(interface["composerIcon"], "./assets/composer-icon.png")
         self.assertLessEqual(len(interface["defaultPrompt"]), 3)
         self.assertTrue(all(len(prompt) <= 128 for prompt in interface["defaultPrompt"]))

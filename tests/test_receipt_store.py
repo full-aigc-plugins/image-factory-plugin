@@ -36,7 +36,7 @@ class ReceiptStoreFixture:
         width, height = artifact_collector.parse_png_size(artifact) or (0, 0)
         return {
             "schema_version": "1.0.0",
-            "plugin_id": "codex-image-factory",
+            "plugin_id": "image-factory",
             "batch_id": "portrait-study",
             "item_id": item_id,
             "round": 1,

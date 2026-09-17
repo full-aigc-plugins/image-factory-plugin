@@ -129,7 +129,7 @@ class CollectTests(unittest.TestCase):
         self.assertTrue(result.ok, result.failure)
         receipt = result.receipt
         assert receipt is not None
-        self.assertEqual(receipt["plugin_id"], "codex-image-factory")
+        self.assertEqual(receipt["plugin_id"], "image-factory")
         self.assertEqual(receipt["batch_id"], "portrait-study")
         self.assertEqual(receipt["item_id"], "item-01")
         self.assertEqual(receipt["round"], 1)

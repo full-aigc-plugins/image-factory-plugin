@@ -1,14 +1,20 @@
 {
   "name": "image-factory",
   "version": "0.1.2",
-  "description": "Batch image production with attributed prompt discovery, verified receipts, evaluation, and prompt optimization.",
-  "author": { "name": "Full Stack Skills / PartMe.AI" },
+  "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
+  "author": {
+    "name": "Full Stack Skills / PartMe.AI"
+  },
   "homepage": "https://github.com/partme-ai/partme-image-factory",
   "license": "Apache-2.0",
-  "keywords": ["image", "batch", "receipts"],
+  "keywords": [
+    "image",
+    "batch",
+    "receipts"
+  ],
   "interface": {
     "displayName": "Image Factory",
-    "shortDescription": "Batch image production with verified receipts",
+    "shortDescription": "Discover, batch-produce, and evaluate images",
     "longDescription": "Batch image production for coding agents: attributed prompt discovery, verified receipts, evaluation, and prompt optimization loop.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "websiteURL": "https://github.com/partme-ai/partme-image-factory"
@@ -16,7 +22,15 @@
   "skills": "./skills/",
   "commands": "./commands/",
   "hooks": [
-    { "event": "SessionStart", "command": "python3 ./hooks/env_check.py", "timeout": 30 },
-    { "event": "UserPromptSubmit", "command": "python3 ./hooks/check_factory_intent.py", "timeout": 15 }
+    {
+      "event": "SessionStart",
+      "command": "python3 ./hooks/env_check.py",
+      "timeout": 30
+    },
+    {
+      "event": "UserPromptSubmit",
+      "command": "python3 ./hooks/check_factory_intent.py",
+      "timeout": 15
+    }
   ]
 }

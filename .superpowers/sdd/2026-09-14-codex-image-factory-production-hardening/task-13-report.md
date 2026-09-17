@@ -53,7 +53,7 @@ python3 -m compileall -q scripts tests
 exit 0
 
 python3 scripts/validate_distribution.py .
-validated codex-image-factory compatibility foundation 0.1.2
+validated image-factory compatibility foundation 0.1.2
 
 git diff --check
 exit 0
@@ -126,7 +126,7 @@ Ran 375 tests ... OK
 python3 -m compileall -q scripts tests
 exit 0
 python3 scripts/validate_distribution.py .
-validated codex-image-factory compatibility foundation 0.1.2
+validated image-factory compatibility foundation 0.1.2
 git diff --check
 exit 0
 ```
@@ -163,7 +163,7 @@ Ran 391 tests ... OK
 python3 -m compileall -q scripts tests
 exit 0
 python3 scripts/validate_distribution.py .
-validated codex-image-factory compatibility foundation 0.1.2
+validated image-factory compatibility foundation 0.1.2
 git diff --check
 exit 0
 ```
@@ -198,7 +198,7 @@ Ran 377 tests ... OK
 python3 -m compileall -q scripts tests
 exit 0
 python3 scripts/validate_distribution.py .
-validated codex-image-factory compatibility foundation 0.1.2
+validated image-factory compatibility foundation 0.1.2
 git diff --check
 exit 0
 ```
@@ -240,7 +240,7 @@ Ran 379 tests ... OK
 python3 -m compileall -q scripts tests
 exit 0
 python3 scripts/validate_distribution.py .
-validated codex-image-factory compatibility foundation 0.1.2
+validated image-factory compatibility foundation 0.1.2
 git diff --check
 exit 0
 ```
@@ -284,7 +284,7 @@ Ran 376 tests ... OK
 python3 -m compileall -q scripts tests
 exit 0
 python3 scripts/validate_distribution.py .
-validated codex-image-factory compatibility foundation 0.1.2
+validated image-factory compatibility foundation 0.1.2
 git diff --check
 exit 0
 ```

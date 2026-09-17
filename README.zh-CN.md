@@ -13,7 +13,7 @@
 
 ## 项目定位
 
-`codex-image-factory` 通过 Codex 本身来跑批量图片：先校验批次计划，再由 Codex 内置图像工具逐项生成，采集每件产物并独立重算哈希，用确定性门禁评测，最后把失败项改写成新一轮 prompt，经你批准后才执行。
+`image-factory` 通过 Codex 本身来跑批量图片：先校验批次计划，再由 Codex 内置图像工具逐项生成，采集每件产物并独立重算哈希，用确定性门禁评测，最后把失败项改写成新一轮 prompt，经你批准后才执行。
 
 版本 `0.1.2` 是 **release candidate**（发布候选），九项外部门禁中已有七项观测通过——包括五次真实出图、一次已验证的多轮「评测→优化→重跑」闭环，以及一次从全新 Codex 会话驱动的付费运行。插件自身不出图、不持有任何 API Key，也绝不自动重试。
 
@@ -39,7 +39,7 @@
       │
       ▼
 ┌──────────────────────────────────────────────────────────┐
-│ codex-image-factory                                      │
+│ image-factory                                      │
 │  ① discover   离线检索 prompt 方向                       │
 │  ② plan       校验批次计划并报价                          │
 │  ③ approve    花费前由你明确批准                         │
@@ -55,7 +55,7 @@
 
 | 项目属性 | 值 |
 |---|---|
-| 插件 ID | `codex-image-factory` |
+| 插件 ID | `image-factory` |
 | 宿主 | Codex CLI 或 ChatGPT 桌面应用 |
 | 当前版本 | `0.1.2`（release candidate，详见[成熟度](#成熟度)） |
 | 插件清单 | `.codex-plugin/plugin.json` |
@@ -152,7 +152,7 @@ CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖�
 
 ```bash
 codex plugin marketplace add partme-ai/partme-image-factory --ref main
-codex plugin add codex-image-factory@partme-ai-image-factory
+codex plugin add image-factory@partme-ai-image-factory
 ```
 
 重启 Codex 或 ChatGPT 桌面应用，然后新建任务以加载 Skills。
@@ -174,7 +174,7 @@ codex plugin list
 预期条目：
 
 ```text
-codex-image-factory@partme-ai-image-factory  installed, enabled
+image-factory@partme-ai-image-factory  installed, enabled
 ```
 
 再确认本地运行环境：

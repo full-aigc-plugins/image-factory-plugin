@@ -65,8 +65,8 @@ def validate(root: Path) -> list[str]:
     marketplace = load_json(marketplace_path)
     plugin_id = manifest.get("name", "")
     repository = manifest.get("repository", "")
-    if NAME_PATTERN.fullmatch(plugin_id) is None or not plugin_id.startswith("codex-"):
-        errors.append("manifest name must be a codex-prefixed kebab-case identifier")
+    if NAME_PATTERN.fullmatch(plugin_id) is None:
+        errors.append("manifest name must be a kebab-case identifier")
     if manifest.get("version") != "0.1.2":
         errors.append("release version must be 0.1.2")
     if manifest.get("skills") != "./skills/":

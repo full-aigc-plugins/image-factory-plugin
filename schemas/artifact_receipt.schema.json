@@ -24,7 +24,7 @@
   ],
   "properties": {
     "schema_version": {"const": "1.0.0"},
-    "plugin_id": {"const": "codex-image-factory"},
+    "plugin_id": {"const": "image-factory"},
     "batch_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
     "item_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
     "round": {"type": "integer", "minimum": 1},

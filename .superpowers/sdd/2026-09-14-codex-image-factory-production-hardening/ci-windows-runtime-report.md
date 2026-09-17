@@ -59,7 +59,7 @@ and probe logic, rather than only in Windows fixtures.
 - `python3 -m compileall -q scripts tests`: exit 0.
 - `python3.13 -m compileall -q scripts tests`: exit 0.
 - `python3 scripts/validate_distribution.py .`: exit 0, reported
-  `validated codex-image-factory compatibility foundation 0.1.2`.
+  `validated image-factory compatibility foundation 0.1.2`.
 - `git diff --check`: exit 0.
 
 The remote Windows matrix has not been rerun because this task does not
@@ -107,6 +107,6 @@ final verification run.
 - Python 3.13.0: 395 tests passed in 17.293s.
 - Both default and Python 3.13 `compileall` checks exited 0.
 - Distribution validation exited 0 and reported
-  `validated codex-image-factory compatibility foundation 0.1.2`.
+  `validated image-factory compatibility foundation 0.1.2`.
 - `git diff --check` exited 0.
 - Remote Windows CI remains pending a separately authorized push.

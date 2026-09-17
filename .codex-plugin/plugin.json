@@ -1,7 +1,7 @@
 {
-  "name": "codex-image-factory",
+  "name": "image-factory",
   "version": "0.1.2",
-  "description": "Batch image production for Codex with attributed prompt discovery, verified receipts, evaluation, and prompt optimization.",
+  "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
   "author": {
     "name": "Full Stack Skills / PartMe.AI",
     "url": "https://github.com/partme-ai"
@@ -18,8 +18,8 @@
   ],
   "skills": "./skills/",
   "interface": {
-    "displayName": "Codex Image Factory",
-    "shortDescription": "Discover, batch-produce, and evaluate images with Codex",
+    "displayName": "Image Factory",
+    "shortDescription": "Discover, batch-produce, and evaluate images",
     "longDescription": "Discover attributed prompt directions, then run a reference-driven image production loop inside Codex: validate a batch plan, generate through the built-in image tool, collect a hash-verified receipt for every artifact, evaluate against deterministic gates, and optimize prompts into a new round with explicit approval.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "category": "Creativity",
@@ -38,8 +38,8 @@
     ],
     "brandColor": "#10B981",
     "composerIcon": "./assets/composer-icon.png",
-    "logo": "./assets/logo.png",
-    "logoDark": "./assets/logo-dark.png",
+    "logo": "./assets/logo-approved.png",
+    "logoDark": "./assets/logo-approved.png",
     "screenshots": []
   }
 }

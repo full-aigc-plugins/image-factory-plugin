@@ -13,7 +13,7 @@
 
 ## Positioning
 
-`codex-image-factory` runs image batches through Codex itself. It validates a batch plan, asks Codex's built-in image tool to produce each item, collects every artifact with a recomputed hash, evaluates the batch against deterministic gates, and turns the failures into a new prompt round that you approve before it runs.
+`image-factory` runs image batches through Codex itself. It validates a batch plan, asks Codex's built-in image tool to produce each item, collects every artifact with a recomputed hash, evaluates the batch against deterministic gates, and turns the failures into a new prompt round that you approve before it runs.
 
 Version `0.1.2` is a **release candidate** with seven of its nine external gates observed — including five real generation calls, a verified multi-round evaluate/optimize/re-run loop, and a paid run driven from a fresh Codex conversation. The plugin never generates images itself, holds no API key, and never retries automatically.
 
@@ -39,7 +39,7 @@ References + direction
       │
       ▼
 ┌──────────────────────────────────────────────────────────┐
-│ codex-image-factory                                      │
+│ image-factory                                      │
 │  ① discover   offline prompt directions                  │
 │  ② plan       validated batch plan and quote             │
 │  ③ approve    explicit user decision before spend        │
@@ -55,7 +55,7 @@ Image batch + receipts + evaluation record
 
 | Property | Value |
 |---|---|
-| Plugin ID | `codex-image-factory` |
+| Plugin ID | `image-factory` |
 | Host | Codex CLI or ChatGPT desktop app |
 | Current version | `0.1.2` (release candidate — see [Maturity](#maturity)) |
 | Plugin manifest | `.codex-plugin/plugin.json` |
@@ -152,7 +152,7 @@ CI runs on Linux, macOS, and Windows without installing any package at test time
 
 ```bash
 codex plugin marketplace add partme-ai/partme-image-factory --ref main
-codex plugin add codex-image-factory@partme-ai-image-factory
+codex plugin add image-factory@partme-ai-image-factory
 ```
 
 Restart Codex or the ChatGPT desktop app, then open a new task so the Skills load.
@@ -174,7 +174,7 @@ codex plugin list
 Expected entry:
 
 ```text
-codex-image-factory@partme-ai-image-factory  installed, enabled
+image-factory@partme-ai-image-factory  installed, enabled
 ```
 
 Then confirm the local runtime:

@@ -37,7 +37,7 @@ all three tests.
 - `python3 -m unittest discover -s tests -v`: 365 tests, `OK`.
 - `python3 -m compileall -q scripts tests`: exit 0.
 - `python3 scripts/validate_distribution.py .`: reported
-  `validated codex-image-factory compatibility foundation 0.1.2`, exit 0.
+  `validated image-factory compatibility foundation 0.1.2`, exit 0.
 - `git diff --check`: exit 0.
 
 ## Self-review

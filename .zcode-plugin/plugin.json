@@ -1,18 +1,29 @@
 {
   "name": "image-factory",
   "displayName": "Image Factory",
-  "displayName_i18n": { "en": "Image Factory", "zh-CN": "图片工厂" },
+  "displayName_i18n": {
+    "en": "Image Factory",
+    "zh-CN": "图片工厂"
+  },
   "version": "0.1.2",
-  "description": "Batch image production for Codex with attributed prompt discovery, verified receipts, evaluation, and prompt optimization.",
+  "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
   "description_i18n": {
     "en": "Batch image production with attributed prompt discovery, verified receipts, evaluation, and prompt optimization.",
     "zh-CN": "批量图片生产：可归因的提示词发现、校验回执、成图评估与提示词优化闭环。"
   },
-  "author": { "name": "Full Stack Skills / PartMe.AI", "url": "https://github.com/partme-ai" },
+  "author": {
+    "name": "Full Stack Skills / PartMe.AI",
+    "url": "https://github.com/partme-ai"
+  },
   "homepage": "https://github.com/partme-ai/partme-image-factory",
   "repository": "https://github.com/partme-ai/partme-image-factory",
   "license": "Apache-2.0",
-  "keywords": ["image", "batch", "receipts", "evaluation"],
+  "keywords": [
+    "image",
+    "batch",
+    "receipts",
+    "evaluation"
+  ],
   "skills": "skills",
   "commands": "commands"
 }
