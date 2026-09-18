@@ -38,6 +38,6 @@ class UpstreamSnapshotBaselineTests(unittest.TestCase):
     def test_upstream_skills_are_outside_the_active_inventory(self) -> None:
         active = sorted(path.parent.name for path in (ROOT / "skills").glob("*/SKILL.md"))
         upstream = list(UPSTREAM.glob("**/SKILL.md"))
-        self.assertEqual(len(active), 4)
+        self.assertEqual(len(active), 5)
         self.assertEqual(len(upstream), 4)
         self.assertFalse(any("vendor" in path.parts for path in (ROOT / "skills").glob("**/*")))

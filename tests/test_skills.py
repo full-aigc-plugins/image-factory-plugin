@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import job_ledger  # noqa: E402
 
 EXPECTED = (
+    "image-factory-harness",
     "image-factory-use",
     "image-factory-run",
     "image-factory-judge",

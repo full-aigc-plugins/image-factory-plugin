@@ -12,6 +12,7 @@ RELEASE_VERSION = "0.1.2"
 PRIOR_RELEASE_SHA = "fff20c9aad9a9cd7893644306c752b2f7231071d"
 
 EXPECTED_SKILLS = (
+    "image-factory-harness",
     "image-factory-use",
     "image-factory-run",
     "image-factory-judge",
