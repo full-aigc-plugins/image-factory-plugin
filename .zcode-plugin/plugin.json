@@ -15,8 +15,8 @@
     "name": "Full Stack Skills / PartMe.AI",
     "url": "https://github.com/partme-ai"
   },
-  "homepage": "https://github.com/partme-ai/partme-image-factory",
-  "repository": "https://github.com/partme-ai/partme-image-factory",
+  "homepage": "https://github.com/full-aigc-plugins/image-factory-plugin",
+  "repository": "https://github.com/full-aigc-plugins/image-factory-plugin",
   "license": "Apache-2.0",
   "keywords": [
     "image",

@@ -1,6 +1,6 @@
-# Runtime and release verification: 0.1.4 candidate status
+# Runtime and release verification: 0.1.5 candidate status
 
-The `0.1.4` candidate changes only skill provenance, synchronization, and release metadata. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh `0.1.4` installation, remote SHA, or paid-generation proof. Current-candidate evidence is added only after the corresponding check is actually rerun.
+The `0.1.5` candidate changes repository identity, synchronization, and release metadata. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh `0.1.5` installation, remote SHA, or paid-generation proof. Current-candidate evidence is added only after the corresponding check is actually rerun.
 
 This file is the evidence ledger for the Image Factory 0.1.2 release
 candidate. It intentionally does not reuse runtime, installation, remote commit,
@@ -92,8 +92,9 @@ Codex CLI does not provide one.
 
 ## Local release-candidate preparation
 
-The 0.1.2 manifest, changelog, bilingual README files, architecture documents,
-runtime evidence, distribution tests, and validator output are version-aligned.
+The 0.1.5 manifest, changelog, bilingual README files, architecture documents,
+distribution tests, and validator output are version-aligned; runtime evidence
+remains explicitly attributed to 0.1.2.
 This local preparation is not remote publication, installation evidence, or a
 paid acceptance result; the external gate table above remains authoritative.
 

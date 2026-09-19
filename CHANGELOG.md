@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5 — 2026-09-20
+
+### Changed
+
+- Migrated active repository identity and install metadata to `full-aigc-plugins/image-factory-plugin`.
+- Pinned the repository-local marketplace to immutable `v0.1.5` sources and assets.
+- Kept paid-generation behavior and the historical `0.1.2` runtime evidence unchanged.
+
 ## 0.1.4 — 2026-09-20
 
 ### Changed

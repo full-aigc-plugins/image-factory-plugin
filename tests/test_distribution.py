@@ -12,9 +12,9 @@ from scripts import validate_distribution
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ID = "image-factory"
 DISPLAY_NAME = "Image Factory"
-REPOSITORY = "https://github.com/partme-ai/partme-image-factory"
+REPOSITORY = "https://github.com/full-aigc-plugins/image-factory-plugin"
 BRAND_COLOR = "#10B981"
-RELEASE_VERSION = "0.1.4"
+RELEASE_VERSION = "0.1.5"
 
 
 def load_json(relative: str) -> dict:
@@ -170,7 +170,7 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(marketplace["name"], "partme-ai-image-factory")
         self.assertEqual(
             entries[0]["source"],
-            {"source": "url", "url": REPOSITORY + ".git", "ref": "main"},
+            {"source": "url", "url": REPOSITORY + ".git", "ref": "v0.1.5"},
         )
         self.assertEqual(entries[0]["policy"], {"installation": "AVAILABLE", "authentication": "ON_USE"})
 

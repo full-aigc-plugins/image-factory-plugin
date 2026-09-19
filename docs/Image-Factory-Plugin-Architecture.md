@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | 0.1.4 supply-chain release candidate; runtime behavior unchanged from 0.1.2, fresh release checks pending |
+> | Status | 0.1.5 supply-chain release candidate; runtime behavior unchanged from 0.1.2, fresh release checks pending |
 > | Scope | The implemented batch image core and prompt-discovery layer |
 > | Audience | Maintainers, reviewers, and integrators of this plugin |
 > | Out of scope | Workbench UI, parent project state, and non-image media pipelines |

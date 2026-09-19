@@ -86,7 +86,7 @@ def validate(root: Path) -> list[str]:
     if len(entries) != 1:
         errors.append("marketplace must contain exactly one matching plugin")
     else:
-        expected_source = {"source": "url", "url": repository + ".git", "ref": "main"}
+        expected_source = {"source": "url", "url": repository + ".git", "ref": f"v{release_version}"}
         if entries[0].get("source") != expected_source:
             errors.append("marketplace source does not match repository")
         expected_policy = {"installation": "AVAILABLE", "authentication": "ON_USE"}

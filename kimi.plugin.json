@@ -5,7 +5,7 @@
   "author": {
     "name": "Full Stack Skills / PartMe.AI"
   },
-  "homepage": "https://github.com/partme-ai/partme-image-factory",
+  "homepage": "https://github.com/full-aigc-plugins/image-factory-plugin",
   "license": "Apache-2.0",
   "keywords": [
     "image",
@@ -17,7 +17,7 @@
     "shortDescription": "Discover, batch-produce, and evaluate images",
     "longDescription": "Batch image production for coding agents: attributed prompt discovery, verified receipts, evaluation, and prompt optimization loop.",
     "developerName": "Full Stack Skills / PartMe.AI",
-    "websiteURL": "https://github.com/partme-ai/partme-image-factory"
+    "websiteURL": "https://github.com/full-aigc-plugins/image-factory-plugin"
   },
   "skills": "./skills/",
   "commands": "./commands/",

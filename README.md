@@ -6,7 +6,7 @@
 
 > Turn a reference-driven image task into an auditable production run — validated plan, approved spend, and a hash-verified receipt for every artifact.
 
-[![Version](https://img.shields.io/badge/version-0.1.4-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.1.4)
+[![Version](https://img.shields.io/badge/version-0.1.5-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.1.5)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [Install](#installation) · [Quick start](#quick-start) · [Command contract](#command-contract) · [Troubleshooting](#troubleshooting)
@@ -15,7 +15,7 @@
 
 `image-factory` runs image batches through Codex itself. It validates a batch plan, asks Codex's built-in image tool to produce each item, collects every artifact with a recomputed hash, evaluates the batch against deterministic gates, and turns the failures into a new prompt round that you approve before it runs.
 
-Version `0.1.4` is a supply-chain hardening candidate with the paid-generation behavior unchanged from `0.1.2`. The seven observed external gates and five authorized generation calls remain historical `0.1.2` evidence until fresh `0.1.4` installation and remote-release checks are recorded. The plugin never generates images itself, holds no API key, and never retries automatically.
+Version `0.1.5` is a supply-chain hardening candidate with the paid-generation behavior unchanged from `0.1.2`. The seven observed external gates and five authorized generation calls remain historical `0.1.2` evidence until fresh `0.1.5` installation and remote-release checks are recorded. The plugin never generates images itself, holds no API key, and never retries automatically.
 
 ### Who it is for
 
@@ -57,7 +57,7 @@ Image batch + receipts + evaluation record
 |---|---|
 | Plugin ID | `image-factory` |
 | Host | Codex CLI or ChatGPT desktop app |
-| Current version | `0.1.2` (release candidate — see [Maturity](#maturity)) |
+| Current version | `0.1.5` (supply-chain release candidate — see [Maturity](#maturity)) |
 | Plugin manifest | `.codex-plugin/plugin.json` |
 | MCP configuration | none — the manifest forbids an MCP entry until an MCP server exists |
 | Primary language | Python 3.11+ |
@@ -151,7 +151,7 @@ CI runs on Linux, macOS, and Windows without installing any package at test time
 ### From the plugin marketplace
 
 ```bash
-codex plugin marketplace add partme-ai/partme-image-factory --ref main
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.1.5
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
@@ -160,7 +160,7 @@ Restart Codex or the ChatGPT desktop app, then open a new task so the Skills loa
 ### From source
 
 ```bash
-git clone https://github.com/partme-ai/partme-image-factory.git
+git clone https://github.com/full-aigc-plugins/image-factory-plugin.git
 cd image-factory-plugin
 bin/image-factory probe
 ```
@@ -363,7 +363,7 @@ image-factory-plugin/
 
 ## Contributing and support
 
-Open functional issues at <https://github.com/partme-ai/partme-image-factory/issues>. Before proposing a change, state the Python version you verified on, whether it alters the plan schema or the ledger format, and include the affected gates.
+Open functional issues at <https://github.com/full-aigc-plugins/image-factory-plugin/issues>. Before proposing a change, state the Python version you verified on, whether it alters the plan schema or the ledger format, and include the affected gates.
 
 ## License
 
