@@ -14,7 +14,7 @@ PLUGIN_ID = "image-factory"
 DISPLAY_NAME = "Image Factory"
 REPOSITORY = "https://github.com/partme-ai/partme-image-factory"
 BRAND_COLOR = "#10B981"
-RELEASE_VERSION = "0.1.2"
+RELEASE_VERSION = "0.1.4"
 
 
 def load_json(relative: str) -> dict:
@@ -149,7 +149,7 @@ class DistributionTests(unittest.TestCase):
     def test_manifest_and_marketplace(self) -> None:
         manifest = load_json(".codex-plugin/plugin.json")
         self.assertEqual(manifest["name"], PLUGIN_ID)
-        self.assertEqual(manifest["version"], RELEASE_VERSION)
+        self.assertEqual(manifest["version"].split("+", 1)[0], RELEASE_VERSION)
         self.assertEqual(manifest["repository"], REPOSITORY)
         self.assertEqual(manifest["license"], "Apache-2.0")
         self.assertEqual(manifest["skills"], "./skills/")

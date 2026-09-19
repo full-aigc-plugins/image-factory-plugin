@@ -1,4 +1,6 @@
-# Runtime and release verification: 0.1.2
+# Runtime and release verification: 0.1.4 candidate status
+
+The `0.1.4` candidate changes only skill provenance, synchronization, and release metadata. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh `0.1.4` installation, remote SHA, or paid-generation proof. Current-candidate evidence is added only after the corresponding check is actually rerun.
 
 This file is the evidence ledger for the Image Factory 0.1.2 release
 candidate. It intentionally does not reuse runtime, installation, remote commit,

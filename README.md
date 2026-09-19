@@ -6,7 +6,7 @@
 
 > Turn a reference-driven image task into an auditable production run — validated plan, approved spend, and a hash-verified receipt for every artifact.
 
-[![Version](https://img.shields.io/badge/version-0.1.2-blue)](https://github.com/partme-ai/partme-image-factory)
+[![Version](https://img.shields.io/badge/version-0.1.4-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.1.4)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [Install](#installation) · [Quick start](#quick-start) · [Command contract](#command-contract) · [Troubleshooting](#troubleshooting)
@@ -15,7 +15,7 @@
 
 `image-factory` runs image batches through Codex itself. It validates a batch plan, asks Codex's built-in image tool to produce each item, collects every artifact with a recomputed hash, evaluates the batch against deterministic gates, and turns the failures into a new prompt round that you approve before it runs.
 
-Version `0.1.2` is a **release candidate** with seven of its nine external gates observed — including five real generation calls, a verified multi-round evaluate/optimize/re-run loop, and a paid run driven from a fresh Codex conversation. The plugin never generates images itself, holds no API key, and never retries automatically.
+Version `0.1.4` is a supply-chain hardening candidate with the paid-generation behavior unchanged from `0.1.2`. The seven observed external gates and five authorized generation calls remain historical `0.1.2` evidence until fresh `0.1.4` installation and remote-release checks are recorded. The plugin never generates images itself, holds no API key, and never retries automatically.
 
 ### Who it is for
 

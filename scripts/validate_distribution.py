@@ -67,8 +67,9 @@ def validate(root: Path) -> list[str]:
     repository = manifest.get("repository", "")
     if NAME_PATTERN.fullmatch(plugin_id) is None:
         errors.append("manifest name must be a kebab-case identifier")
-    if manifest.get("version") != "0.1.2":
-        errors.append("release version must be 0.1.2")
+    release_version = str(manifest.get("version", "")).split("+", 1)[0]
+    if not release_version:
+        errors.append("release version must be present")
     if manifest.get("skills") != "./skills/":
         errors.append("manifest skills path must be ./skills/")
     if "mcpServers" in manifest or (root / ".mcp.json").exists():
@@ -146,8 +147,10 @@ def validate(root: Path) -> list[str]:
     runtime_evidence_path = root / "docs" / "verification" / "runtime.md"
     if runtime_evidence_path.is_file():
         runtime_evidence = runtime_evidence_path.read_text(encoding="utf-8")
-        if "0.1.2" not in runtime_evidence:
-            errors.append("runtime evidence must identify release candidate 0.1.2")
+        if release_version not in runtime_evidence:
+            errors.append(
+                f"runtime evidence must identify release candidate {release_version}"
+            )
         for gate in (
             "remote_ci_matrix",
             "remote_sha_parity",

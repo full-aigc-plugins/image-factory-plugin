@@ -6,7 +6,7 @@
 
 > 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
 
-[![版本](https://img.shields.io/badge/version-0.1.2-blue)](https://github.com/partme-ai/partme-image-factory)
+[![版本](https://img.shields.io/badge/version-0.1.4-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.1.4)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [命令契约](#命令契约) · [故障排查](#故障排查)
@@ -15,7 +15,7 @@
 
 `image-factory` 通过 Codex 本身来跑批量图片：先校验批次计划，再由 Codex 内置图像工具逐项生成，采集每件产物并独立重算哈希，用确定性门禁评测，最后把失败项改写成新一轮 prompt，经你批准后才执行。
 
-版本 `0.1.2` 是 **release candidate**（发布候选），九项外部门禁中已有七项观测通过——包括五次真实出图、一次已验证的多轮「评测→优化→重跑」闭环，以及一次从全新 Codex 会话驱动的付费运行。插件自身不出图、不持有任何 API Key，也绝不自动重试。
+版本 `0.1.4` 是供应链加固候选，付费生成行为与 `0.1.2` 保持一致。已观测的七项外部门禁和五次授权出图仍属于 `0.1.2` 历史证据，需在完成 `0.1.4` 全新安装与远端发布核验后补充当前证据。插件自身不出图、不持有任何 API Key，也绝不自动重试。
 
 ### 适合谁
 

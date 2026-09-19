@@ -4,11 +4,11 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | Implemented for the 0.1.2 release candidate; 7 of 9 external gates observed, generation path verified on macOS |
+> | Status | Implemented for the 0.1.4 supply-chain release candidate; runtime behavior unchanged from 0.1.2, fresh release checks pending |
 > | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
 > | Audience | Implementers extending or reviewing this plugin |
 > | Runtime evidence | `docs/verification/` |
-> | Last structural revision | 2026-09-14 |
+> | Last structural revision | 2026-09-20 |
 
 [English](Codex-Image-Factory-Plugin-Technical-Solution.md) | [简体中文](Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 

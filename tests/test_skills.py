@@ -6,6 +6,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
+LOCAL_SKILLS = set(
+    __import__("json").loads(
+        (ROOT / "plugin-local-skills.json").read_text(encoding="utf-8")
+    )["skills"]
+)
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import job_ledger  # noqa: E402
@@ -18,7 +23,9 @@ EXPECTED = (
     "image-factory-recover",
 )
 ROUTER = "image-factory-use"
-DELEGATES = tuple(name for name in EXPECTED if name != ROUTER)
+DELEGATES = tuple(
+    name for name in EXPECTED if name != ROUTER and name not in LOCAL_SKILLS
+)
 
 # The CLI subcommand each workflow skill is responsible for driving.
 COMMANDS = {

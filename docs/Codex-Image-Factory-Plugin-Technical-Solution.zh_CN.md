@@ -4,11 +4,11 @@
 >
 > | 字段 | 值 |
 > |---|---|
-> | 状态 | 0.1.2 release candidate（发布候选）的已实现技术方案；九项外部门禁已观测七项，生成路径已在 macOS 验证 |
+> | 状态 | 0.1.4 供应链加固 release candidate 的已实现方案；运行行为与 0.1.2 相同，全新发布核验待补 |
 > | 范围 | 技术决策、执行契约、失败模型，以及支撑它们的平台事实 |
 > | 读者 | 扩展或评审本插件的实现者 |
 > | 运行证据 | `docs/verification/` |
-> | 最近一次结构修订 | 2026-09-14 |
+> | 最近一次结构修订 | 2026-09-20 |
 
 [English](Codex-Image-Factory-Plugin-Technical-Solution.md) | [简体中文](Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 

@@ -4,12 +4,12 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | 0.1.2 release candidate; 7 of 9 external gates observed, generation path verified on macOS |
+> | Status | 0.1.4 supply-chain release candidate; runtime behavior unchanged from 0.1.2, fresh release checks pending |
 > | Scope | The implemented batch image core and prompt-discovery layer |
 > | Audience | Maintainers, reviewers, and integrators of this plugin |
 > | Out of scope | Workbench UI, parent project state, and non-image media pipelines |
 > | Runtime evidence | `docs/verification/` |
-> | Last structural revision | 2026-09-14 |
+> | Last structural revision | 2026-09-20 |
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 

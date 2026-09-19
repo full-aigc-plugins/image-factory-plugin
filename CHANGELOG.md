@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4 — 2026-09-20
+
+### Changed
+
+- Locked reusable skills to an immutable release tag, peeled commit SHA, and per-skill digests.
+- Declared `image-factory-harness` as plugin-local and added mutation tests for managed and local skill boundaries.
+- Updated release dispatch, three-host manifests, and distribution checks without changing paid-generation behavior.
+
 ## 0.1.2 — 2026-09-14
 
 ### Added

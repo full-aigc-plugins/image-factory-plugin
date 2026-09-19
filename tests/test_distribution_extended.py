@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ID = "image-factory"
 DISPLAY_NAME = "Image Factory"
-RELEASE_VERSION = "0.1.2"
+RELEASE_VERSION = "0.1.4"
 PRIOR_RELEASE_SHA = "fff20c9aad9a9cd7893644306c752b2f7231071d"
 
 EXPECTED_SKILLS = (
@@ -91,7 +91,7 @@ class DocumentationTests(unittest.TestCase):
         manifest = json.loads(
             (ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(manifest["version"], RELEASE_VERSION)
+        self.assertEqual(manifest["version"].split("+", 1)[0], RELEASE_VERSION)
         for relative in (
             "CHANGELOG.md",
             "README.md",
@@ -136,7 +136,7 @@ class DocumentationTests(unittest.TestCase):
         ):
             with self.subTest(document=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn("0.1.2", text)
+                self.assertIn(RELEASE_VERSION, text)
                 self.assertIn("release candidate", text.lower())
 
     def test_no_document_names_an_image_model(self) -> None:
@@ -159,7 +159,7 @@ class DocumentationTests(unittest.TestCase):
 
     def test_runtime_evidence_is_versioned_and_declares_every_external_gate(self) -> None:
         text = (ROOT / "docs/verification/runtime.md").read_text(encoding="utf-8")
-        self.assertIn("0.1.2", text)
+        self.assertIn(RELEASE_VERSION, text)
         for gate, expected_status in RUNTIME_GATES.items():
             with self.subTest(gate=gate):
                 self.assertIn(gate, text)

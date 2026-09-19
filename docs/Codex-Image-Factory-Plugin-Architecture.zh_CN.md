@@ -4,12 +4,12 @@
 >
 > | 字段 | 值 |
 > |---|---|
-> | 状态 | 0.1.2 release candidate（发布候选）；九项外部门禁已观测七项，生成路径已在 macOS 验证 |
+> | 状态 | 0.1.4 供应链加固 release candidate；运行行为与 0.1.2 相同，全新发布核验待补 |
 > | 范围 | 已实现的批量图像内核与提示词发现层 |
 > | 读者 | 本插件的维护者、审阅者与集成者 |
 > | 不在范围 | 工作台界面、父项目状态与非图片媒体管线 |
 > | 运行证据 | `docs/verification/` |
-> | 最近一次结构修订 | 2026-09-14 |
+> | 最近一次结构修订 | 2026-09-20 |
 
 [English](Codex-Image-Factory-Plugin-Architecture.md) | [简体中文](Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
 
