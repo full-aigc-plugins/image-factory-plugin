@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | Implemented for the 0.1.5 supply-chain release candidate; runtime behavior unchanged from 0.1.2, fresh release checks pending |
+> | Status | Implemented for the 0.1.6 supply-chain release candidate; runtime behavior unchanged from 0.1.2, fresh release checks pending |
 > | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
 > | Audience | Implementers extending or reviewing this plugin |
 > | Runtime evidence | `docs/verification/` |

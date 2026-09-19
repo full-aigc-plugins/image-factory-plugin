@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.6 — 2026-09-20
+
+### Changed
+
+- Replaced Codex-first public branding with host-neutral Image Factory identity across documentation and release artwork.
+- Kept Codex, ZCode, and Kimi host-specific installation details only where they describe an actual host contract.
+- Added a regression gate that rejects obsolete host-prefixed public product naming.
+
 ## 0.1.5 — 2026-09-20
 
 ### Changed

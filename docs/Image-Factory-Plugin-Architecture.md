@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | 0.1.5 supply-chain release candidate; runtime behavior unchanged from 0.1.2, fresh release checks pending |
+> | Status | 0.1.6 supply-chain release candidate; runtime behavior unchanged from 0.1.2, fresh release checks pending |
 > | Scope | The implemented batch image core and prompt-discovery layer |
 > | Audience | Maintainers, reviewers, and integrators of this plugin |
 > | Out of scope | Workbench UI, parent project state, and non-image media pipelines |
@@ -193,7 +193,7 @@ A plugin-owned API channel would be a separate extension point with its own cred
 
 ## 11. Deployment, compatibility, and evolution
 
-The plugin is a Codex plugin with a compatibility manifest at `.codex-plugin/plugin.json` and a URL marketplace entry. There is no MCP server, no daemon, and no network listener; the portable root `plugin.json` and `mcp.json` stay intentionally inactive, as `docs/portable-migration.md` records.
+The plugin is a cross-host plugin with Codex, ZCode, and Kimi manifests plus a URL marketplace entry. There is no MCP server, no daemon, and no network listener; the portable root `plugin.json` and `mcp.json` stay intentionally inactive, as `docs/portable-migration.md` records.
 
 Runtime prerequisites: a Codex installation the user already has, a signed-in account whose plan includes image generation, and a writable `$CODEX_HOME/generated_images` directory. `bin/image-factory probe` reports which of these is missing and what to do about it, without network access and without executing anything.
 

@@ -1,21 +1,21 @@
 # Image Factory 插件
 
-![Codex × Image Factory — 生产可核验的批量图片](assets/image-factory-hero.png)
+![Image Factory——生产可核验的批量图片](assets/image-factory-hero.png)
 
 <img src="assets/logo.png" alt="Image Factory 图标" width="128">
 
 > 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
 
-[![版本](https://img.shields.io/badge/version-0.1.5-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.1.5)
+[![版本](https://img.shields.io/badge/version-0.1.6-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.1.6)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [命令契约](#命令契约) · [故障排查](#故障排查)
 
 ## 项目定位
 
-`image-factory` 通过 Codex 本身来跑批量图片：先校验批次计划，再由 Codex 内置图像工具逐项生成，采集每件产物并独立重算哈希，用确定性门禁评测，最后把失败项改写成新一轮 prompt，经你批准后才执行。
+`image-factory` 通过宿主提供的图像生成能力来跑批量图片：先校验批次计划，再由宿主图像工具逐项生成，采集每件产物并独立重算哈希，用确定性门禁评测，最后把失败项改写成新一轮 prompt，经你批准后才执行。
 
-版本 `0.1.5` 是供应链加固候选，付费生成行为与 `0.1.2` 保持一致。已观测的七项外部门禁和五次授权出图仍属于 `0.1.2` 历史证据，需在完成 `0.1.5` 全新安装与远端发布核验后补充当前证据。插件自身不出图、不持有任何 API Key，也绝不自动重试。
+版本 `0.1.6` 是供应链加固候选，付费生成行为与 `0.1.2` 保持一致。已观测的七项外部门禁和五次授权出图仍属于 `0.1.2` 历史证据，需在完成 `0.1.6` 全新安装与远端发布核验后补充当前证据。插件自身不出图、不持有任何 API Key，也绝不自动重试。
 
 ### 适合谁
 
@@ -57,7 +57,7 @@
 |---|---|
 | 插件 ID | `image-factory` |
 | 宿主 | Codex CLI 或 ChatGPT 桌面应用 |
-| 当前版本 | `0.1.5`（供应链 release candidate，详见[成熟度](#成熟度)） |
+| 当前版本 | `0.1.6`（供应链 release candidate，详见[成熟度](#成熟度)） |
 | 插件清单 | `.codex-plugin/plugin.json` |
 | MCP 配置 | 无——在 MCP 服务器存在之前，清单一律禁止写 MCP 条目 |
 | 主要语言 | Python 3.11+ |
@@ -151,7 +151,7 @@ CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖�
 ### 从插件市场安装
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.1.5
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.1.6
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
