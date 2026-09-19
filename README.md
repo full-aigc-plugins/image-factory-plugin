@@ -355,8 +355,8 @@ image-factory-plugin/
 
 ## Deep links
 
-- [Architecture](docs/Codex-Image-Factory-Plugin-Architecture.md) · [架构文档](docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md)
-- [Technical solution](docs/Codex-Image-Factory-Plugin-Technical-Solution.md) · [技术方案](docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
+- [Architecture](docs/Image-Factory-Plugin-Architecture.md) · [架构文档](docs/Image-Factory-Plugin-Architecture.zh_CN.md)
+- [Technical solution](docs/Image-Factory-Plugin-Technical-Solution.md) · [技术方案](docs/Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 - [Design specification](docs/superpowers/specs/2026-09-12-image-factory-plugin-design.md)
 - [Production hardening design](docs/superpowers/specs/2026-09-14-image-factory-production-hardening-design.md)
 - [Implementation plan](docs/superpowers/plans/2026-09-12-image-factory-plugin-implementation.md)

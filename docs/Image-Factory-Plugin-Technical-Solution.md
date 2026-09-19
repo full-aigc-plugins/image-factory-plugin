@@ -10,7 +10,7 @@
 > | Runtime evidence | `docs/verification/` |
 > | Last structural revision | 2026-09-20 |
 
-[English](Codex-Image-Factory-Plugin-Technical-Solution.md) | [简体中文](Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md)
+[English](Image-Factory-Plugin-Technical-Solution.md) | [简体中文](Image-Factory-Plugin-Technical-Solution.zh_CN.md)
 
 ## 1. Decision
 

@@ -22,12 +22,12 @@ EXPECTED_SKILLS = (
 BILINGUAL_PAIRS = (
     ("README.md", "README.zh-CN.md"),
     (
-        "docs/Codex-Image-Factory-Plugin-Architecture.md",
-        "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
+        "docs/Image-Factory-Plugin-Architecture.md",
+        "docs/Image-Factory-Plugin-Architecture.zh_CN.md",
     ),
     (
-        "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
-        "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
+        "docs/Image-Factory-Plugin-Technical-Solution.md",
+        "docs/Image-Factory-Plugin-Technical-Solution.zh_CN.md",
     ),
 )
 
@@ -96,10 +96,10 @@ class DocumentationTests(unittest.TestCase):
             "CHANGELOG.md",
             "README.md",
             "README.zh-CN.md",
-            "docs/Codex-Image-Factory-Plugin-Architecture.md",
-            "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
-            "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
-            "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
+            "docs/Image-Factory-Plugin-Architecture.md",
+            "docs/Image-Factory-Plugin-Architecture.zh_CN.md",
+            "docs/Image-Factory-Plugin-Technical-Solution.md",
+            "docs/Image-Factory-Plugin-Technical-Solution.zh_CN.md",
             "docs/verification/runtime.md",
         ):
             with self.subTest(document=relative):
@@ -129,10 +129,10 @@ class DocumentationTests(unittest.TestCase):
 
     def test_architecture_and_solution_declare_their_status(self) -> None:
         for relative in (
-            "docs/Codex-Image-Factory-Plugin-Architecture.md",
-            "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
-            "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
-            "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
+            "docs/Image-Factory-Plugin-Architecture.md",
+            "docs/Image-Factory-Plugin-Architecture.zh_CN.md",
+            "docs/Image-Factory-Plugin-Technical-Solution.md",
+            "docs/Image-Factory-Plugin-Technical-Solution.zh_CN.md",
         ):
             with self.subTest(document=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
@@ -144,10 +144,10 @@ class DocumentationTests(unittest.TestCase):
         product_documents = [
             ROOT / "README.md",
             ROOT / "README.zh-CN.md",
-            ROOT / "docs/Codex-Image-Factory-Plugin-Architecture.md",
-            ROOT / "docs/Codex-Image-Factory-Plugin-Architecture.zh_CN.md",
-            ROOT / "docs/Codex-Image-Factory-Plugin-Technical-Solution.md",
-            ROOT / "docs/Codex-Image-Factory-Plugin-Technical-Solution.zh_CN.md",
+            ROOT / "docs/Image-Factory-Plugin-Architecture.md",
+            ROOT / "docs/Image-Factory-Plugin-Architecture.zh_CN.md",
+            ROOT / "docs/Image-Factory-Plugin-Technical-Solution.md",
+            ROOT / "docs/Image-Factory-Plugin-Technical-Solution.zh_CN.md",
             *sorted((ROOT / "skills").glob("*/SKILL.md")),
         ]
         for path in product_documents:
