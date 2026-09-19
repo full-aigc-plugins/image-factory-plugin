@@ -1,6 +1,6 @@
 ---
 name: image-factory-use
-description: Use when the user wants to produce a batch of images, run an image production round, or continue an image batch that already exists. Routes to `image-factory-run` for a batch that has not been generated yet, to `image-factory-harness 与 image-factory-judge` for a batch with results to evaluate or a next round to plan, and to `image-factory-recover` for a batch whose state is unclear or that was interrupted. This skill only picks the entry point and never performs the work itself. For a single ad-hoc image with no batch plan, no skill in this plugin applies — ask Codex for the image directly.
+description: Use when the user wants to produce a batch of images, run an image production round, or continue an image batch that already exists. Routes to `image-factory-run` for a batch that has not been generated yet, to `image-factory-judge` for a batch with results to evaluate or a next round to plan, and to `image-factory-recover` for a batch whose state is unclear or that was interrupted. This skill only picks the entry point and never performs the work itself. For a single ad-hoc image with no batch plan, no skill in this plugin applies — ask Codex for the image directly.
 ---
 
 # Image Factory
