@@ -79,12 +79,15 @@ class SkillInventoryTests(unittest.TestCase):
             with self.subTest(skill=name):
                 self.assertTrue((SKILLS / name / "SKILL.md").is_file(), name)
 
-    def test_skills_do_not_ship_helper_documents(self) -> None:
-        """Agent Skills forbid README-style companions that silently inflate context."""
+    def test_skills_only_ship_supported_progressive_disclosure_directories(self) -> None:
+        """Skill resources must use the supported progressive-disclosure layout."""
         for name in EXPECTED:
             for entry in (SKILLS / name).iterdir():
                 with self.subTest(skill=name, entry=entry.name):
-                    self.assertIn(entry.name, ("SKILL.md", "references", "scripts", "assets"))
+                    self.assertIn(
+                        entry.name,
+                        ("SKILL.md", "examples", "references", "scripts", "assets"),
+                    )
 
 
 class FrontmatterTests(unittest.TestCase):
