@@ -11,13 +11,19 @@ DISPLAY_NAME = "Image Factory"
 RELEASE_VERSION = "0.1.6"
 PRIOR_RELEASE_SHA = "fff20c9aad9a9cd7893644306c752b2f7231071d"
 
-EXPECTED_SKILLS = (
+FACTORY_SKILLS = (
     "image-factory-harness",
     "image-factory-use",
     "image-factory-run",
     "image-factory-judge",
     "image-factory-recover",
 )
+LOCKED_SKILLS = tuple(
+    skill
+    for source in json.loads((ROOT / "skills.lock.json").read_text(encoding="utf-8"))["sources"]
+    for skill in source["skills"]
+)
+EXPECTED_SKILLS = tuple(dict.fromkeys((*FACTORY_SKILLS, *LOCKED_SKILLS)))
 
 BILINGUAL_PAIRS = (
     ("README.md", "README.zh-CN.md"),
@@ -148,7 +154,7 @@ class DocumentationTests(unittest.TestCase):
             ROOT / "docs/Image-Factory-Plugin-Architecture.zh_CN.md",
             ROOT / "docs/Image-Factory-Plugin-Technical-Solution.md",
             ROOT / "docs/Image-Factory-Plugin-Technical-Solution.zh_CN.md",
-            *sorted((ROOT / "skills").glob("*/SKILL.md")),
+            *(ROOT / "skills" / name / "SKILL.md" for name in FACTORY_SKILLS),
         ]
         for path in product_documents:
             # Source URLs identify upstream repositories, not the runtime model.

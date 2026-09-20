@@ -17,11 +17,11 @@
       },
       "category": "Creativity",
       "version": "0.1.6",
-      "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
+      "description": "Generate images, covers and social cards, or run governed batches with verified receipts.",
       "icon": "https://cdn.jsdelivr.net/gh/full-aigc-plugins/image-factory-plugin@v0.1.6/assets/logo-approved.png",
       "interface": {
         "displayName": "Image Factory",
-        "shortDescription": "Discover, batch-produce, and evaluate images",
+        "shortDescription": "Generate images or run governed image batches",
         "logo": "https://cdn.jsdelivr.net/gh/full-aigc-plugins/image-factory-plugin@v0.1.6/assets/logo-approved.png"
       }
     }

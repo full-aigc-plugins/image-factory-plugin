@@ -6,10 +6,10 @@
     "zh-CN": "图片工厂"
   },
   "version": "0.1.6",
-  "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
+  "description": "Generate images, covers and social cards, or run governed batches with verified receipts.",
   "description_i18n": {
-    "en": "Batch image production with attributed prompt discovery, verified receipts, evaluation, and prompt optimization.",
-    "zh-CN": "批量图片生产：可归因的提示词发现、校验回执、成图评估与提示词优化闭环。"
+    "en": "Direct image, cover and social-card generation plus governed batches with verified receipts and evaluation.",
+    "zh-CN": "直接生图、封面和社交图片卡片，以及带校验回执和评估的受治理批量生产。"
   },
   "author": {
     "name": "Full Stack Skills / PartMe.AI",

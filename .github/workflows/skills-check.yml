@@ -42,6 +42,6 @@ jobs:
           bypassed = sorted(path for path in changed if any(path.startswith(prefix) for prefix in prefixes))
           if bypassed:
               print("::error::Externally managed skills changed without skills.lock.json: " + ", ".join(bypassed))
-              print("Edit image-factory-skills, release a new tag, then run scripts/vendor/skill_vendor.py update.")
+              print("Edit the owning skill package, release a new tag, then run scripts/vendor/skill_vendor.py update.")
               sys.exit(1)
           PY

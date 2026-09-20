@@ -1,3 +1,4 @@
+import json
 import re
 import sys
 import unittest
@@ -15,16 +16,23 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import job_ledger  # noqa: E402
 
-EXPECTED = (
+FACTORY_EXPECTED = (
     "image-factory-harness",
     "image-factory-use",
     "image-factory-run",
     "image-factory-judge",
     "image-factory-recover",
 )
+EXTERNAL_EXPECTED = tuple(
+    name
+    for source in json.loads((ROOT / "skills.lock.json").read_text(encoding="utf-8"))["sources"]
+    for name in source["skills"]
+    if not name.startswith("image-factory-")
+)
+EXPECTED = FACTORY_EXPECTED + EXTERNAL_EXPECTED
 ROUTER = "image-factory-use"
 DELEGATES = tuple(
-    name for name in EXPECTED if name != ROUTER and name not in LOCAL_SKILLS
+    name for name in FACTORY_EXPECTED if name != ROUTER and name not in LOCAL_SKILLS
 )
 
 # The CLI subcommand each workflow skill is responsible for driving.
@@ -165,7 +173,7 @@ class BodyTests(unittest.TestCase):
         return text[text.index("\n---", 4) + 4 :]
 
     def test_every_skill_has_the_required_sections(self) -> None:
-        for name in EXPECTED:
+        for name in FACTORY_EXPECTED:
             with self.subTest(skill=name):
                 body = self.body(name)
                 self.assertIn("## When to use", body)
@@ -280,7 +288,7 @@ class BodyTests(unittest.TestCase):
                     self.assertIn(phrase.lower(), body.lower())
 
     def test_no_skill_instructs_an_install_or_a_retry(self) -> None:
-        for name in EXPECTED:
+        for name in FACTORY_EXPECTED:
             body = self.body(name).lower()
             for phrase in FORBIDDEN_PHRASES:
                 with self.subTest(skill=name, phrase=phrase):
@@ -288,7 +296,7 @@ class BodyTests(unittest.TestCase):
 
     def test_no_skill_hardcodes_an_image_model(self) -> None:
         """The plugin must not promise a model the platform selects."""
-        for name in EXPECTED:
+        for name in FACTORY_EXPECTED:
             body = self.body(name).lower()
             for model in ("gpt-image", "image-2.5", "sunburst", "flare"):
                 with self.subTest(skill=name, model=model):
@@ -305,9 +313,66 @@ class BodyTests(unittest.TestCase):
                 )
 
 
+class HarnessArbitrationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.harness = (SKILLS / "image-factory-harness" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.capability_map = (
+            SKILLS / "image-factory-harness" / "references" / "capability-map.md"
+        )
+
+    def test_harness_names_every_supported_entrypoint(self) -> None:
+        for name in (
+            "baoyu-image-gen",
+            "baoyu-cover-image",
+            "baoyu-xhs-images",
+            "image-factory-use",
+        ):
+            with self.subTest(skill=name):
+                self.assertIn(name, self.harness)
+
+    def test_harness_keeps_the_capability_routing_diagram(self) -> None:
+        self.assertIn("```mermaid", self.harness)
+        self.assertIn("flowchart TD", self.harness)
+        self.assertIn("用户生图请求", self.harness)
+        self.assertIn("统一交付摘要", self.harness)
+        self.assertIn("可交给 Video Factory", self.harness)
+
+    def test_harness_uses_progressive_disclosure_for_the_capability_map(self) -> None:
+        self.assertTrue(self.capability_map.is_file())
+        self.assertIn("references/capability-map.md", self.harness)
+
+    def test_harness_refuses_to_fabricate_a_combined_execution_path(self) -> None:
+        text = self.harness.lower()
+        self.assertIn("no execution adapter", text)
+        self.assertIn("choose", text)
+        self.assertIn("receipt", text)
+
+    def test_capability_map_defines_route_neutral_delivery_evidence(self) -> None:
+        text = self.capability_map.read_text(encoding="utf-8")
+        for field in (
+            "selected_skill",
+            "execution_backend",
+            "output_paths",
+            "prompt_records",
+            "reference_inputs",
+            "governance_evidence",
+            "unverified_items",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(field, text)
+
+    def test_capability_map_keeps_video_as_a_handoff(self) -> None:
+        text = self.capability_map.read_text(encoding="utf-8").lower()
+        self.assertIn("video factory", text)
+        self.assertIn("handoff", text)
+        self.assertIn("does not execute video", text)
+
+
 class MarkdownHygieneTests(unittest.TestCase):
     def test_headings_are_well_formed(self) -> None:
-        for name in EXPECTED:
+        for name in FACTORY_EXPECTED:
             text = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
             with self.subTest(skill=name):
                 self.assertEqual(text.count("\n# "), 1, "exactly one H1")

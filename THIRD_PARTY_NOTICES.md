@@ -1,6 +1,14 @@
 # Third-Party Notices
 
-This repository does not bundle third-party application binaries, proprietary SDKs, credentials, or generated media. The plugin's own scripts use the Python standard library only.
+This repository does not bundle third-party application binaries, proprietary SDKs, credentials, or generated media. The plugin's own Factory scripts use the Python standard library only.
+
+The active skills `baoyu-image-gen`, `baoyu-cover-image`, and
+`baoyu-xhs-images` are redistributed unchanged from
+https://github.com/partme-ai/baoyu-skills at the commit recorded in
+`skills.lock.json`, under the MIT License. Copyright (c) 2026 Jim Liu. The
+complete license is retained in `licenses/baoyu-MIT.txt`. These skills may
+invoke runtime-native image tools, the user's existing Codex CLI login, or
+provider APIs selected and configured by the user; no credential is bundled.
 
 The data/style-library.json template metadata is redistributed from
 https://github.com/freestylefly/awesome-gpt-image-2 at commit

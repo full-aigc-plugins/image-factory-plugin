@@ -13,9 +13,9 @@
 
 ## Positioning
 
-`image-factory` runs image batches through the host's image-generation capability. It validates a batch plan, asks the host image tool to produce each item, collects every artifact with a recomputed hash, evaluates the batch against deterministic gates, and turns the failures into a new prompt round that you approve before it runs.
+`image-factory` now exposes two complementary layers. The unchanged Baoyu skills handle direct image generation, article covers, and social image-card series. The Factory workflow handles governed image batches: it validates a batch plan, asks the selected host or provider image tool to produce each item, collects every artifact with a recomputed hash, evaluates the batch against deterministic gates, and turns failures into a new prompt round that you approve before it runs.
 
-Version `0.1.6` is a supply-chain hardening candidate with the paid-generation behavior unchanged from `0.1.2`. The seven observed external gates and five authorized generation calls remain historical `0.1.2` evidence until fresh `0.1.6` installation and remote-release checks are recorded. The plugin never generates images itself, holds no API key, and never retries automatically.
+Version `0.1.6` is the last published supply-chain hardening candidate. The pending integration adds external Baoyu workflows without changing Factory execution semantics. Factory itself still holds no API key and never retries automatically; `baoyu-image-gen` may use a user-selected provider credential or the logged-in Codex CLI according to its unchanged upstream instructions.
 
 ### Who it is for
 
@@ -77,14 +77,17 @@ Image batch + receipts + evaluation record
 | Evaluation | A completed batch | Deterministic gate results plus an advisory score | The model-authored score is advisory only | Stable |
 | Optimization | Failed items | A new prompt round requiring approval | Never overwrites the previous round | Stable |
 | Recovery | An interrupted job | Reconciled ledger without re-invoking Codex | Reconciles verified receipts only | Stable |
+| Direct image generation | A prompt and optional references | One or more images through the chosen Baoyu backend | Provider availability and upstream confirmation rules apply | External managed skill |
+| Article cover | Article content and visual preferences | Cover prompt record plus raster cover | Confirmation is required unless explicitly skipped | External managed skill |
+| Social image cards | Source content and visual strategy | A 1-10 card series with saved prompts | Uses the Baoyu anchor-chain and confirmation workflow | External managed skill |
 
 ### Not responsible for
 
-- Generating images. Generation is performed by Codex through its own built-in image tool and your existing Codex authentication.
-- Choosing the image model. The model is selected by Codex, is not selectable here, and is never hard-coded or promised by this repository. Receipts record only what Codex reports, and record `null` when Codex reports nothing.
+- Reimplementing or patching the Baoyu workflows. Their complete source is synchronized from an immutable upstream release and checked by digest.
+- Choosing a provider on the user's behalf. Direct Baoyu generation follows its saved preferences and confirmation rules; the governed Factory path records only what its execution backend reports.
 - Controlling size, quality, background, or image count. The built-in tool accepts only a prompt and reference images, so batch items differ only by those.
 - Owning a graphical workbench, project management, or video composition. Those surfaces are outside this repository.
-- Providing an external generation API channel. Adding one would be a separate, clearly marked extension point; this repository does not add one and does not read API keys.
+- Writing, translating, formatting, or publishing articles. Those capabilities belong in the separate content-writing plugin.
 
 ### Maturity
 
@@ -130,7 +133,7 @@ flowchart LR
 | `scripts/job_ledger.py` | Durable state transitions and secret scrubbing | Execution |
 | `scripts/receipt_store.py` | Per-artifact receipts and re-verification | Remote lifetime |
 | `scripts/job_lock.py` | Cross-process advisory locking | Scheduling |
-| `skills/` (4) | Routing, judging, and recovery instructions for supported hosts | Runtime enforcement |
+| `skills/` (8) | Five Factory routing/governance skills plus three unchanged Baoyu image skills | Runtime enforcement or upstream skill ownership |
 
 ## Compatibility
 
@@ -146,7 +149,8 @@ CI runs on Linux, macOS, and Windows without installing any package at test time
 
 - Python 3.11 or newer on `PATH`.
 - The Codex CLI reachable on `PATH`, or a `CODEX_HOME` pointing at an installation.
-- No API key, no npm dependency, and no external service account.
+- Factory-only batches need no API key or npm dependency.
+- Direct `baoyu-image-gen` requires `bun` or `npx`; the selected provider may require its documented credential. The `codex-cli` provider instead uses an existing logged-in Codex CLI.
 
 ### From the plugin marketplace
 
