@@ -15,5 +15,5 @@
 
 - [x] 3.1 Prove byte equality and pass offline vendor validation
 - [x] 3.2 Pass distribution and full unit tests
-- [ ] 3.3 Publish immutable upstream `v2.5.2` tag and pass online vendor validation
-- [ ] 3.4 Bump Image Factory, publish the plugin, and update the marketplace catalog
+- [x] 3.3 Publish immutable upstream `v2.5.2` tag and pass online vendor validation
+- [x] 3.4 Bump Image Factory, publish the plugin, and update the marketplace catalog

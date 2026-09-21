@@ -26,15 +26,33 @@
 - **THEN** 更新或检查命令失败并指出该目录
 
 ### Requirement: Upgrade events identify exact source state
-技能升级事件 MUST 携带 release tag 和 peeled commit SHA，插件同步流程 MUST 校验二者与锁定来源匹配后才可更新并创建升级变更。
+
+Skill upgrade events MUST identify the locked package, immutable release tag, and peeled commit SHA. The plugin sync workflow MUST reject unknown packages and MUST verify the tag resolves to the dispatched commit before updating files.
+
+#### Scenario: Valid release event arrives for one of multiple sources
+
+- **WHEN** a trusted skill repository dispatches `package`, `ref`, and matching `sha`
+- **THEN** the plugin updates only that package's lock entry and managed skill directories and creates a reviewable upgrade change
 
 #### Scenario: Valid release event arrives
-- **WHEN** 受信任的技能源发布新 release 并提供匹配的 tag 与 commit
-- **THEN** 插件生成只包含预期技能、锁文件和版本更新的可审查升级变更
+
+- **WHEN** a trusted skill repository publishes a release and provides a matching package, tag, and commit
+- **THEN** the plugin generates a reviewable change containing only the expected managed skills, lockfile update, and required release metadata
+
+#### Scenario: Event omits package for the legacy source
+
+- **WHEN** the existing `image-factory-skills` producer sends the historical `ref` and `sha` payload without `package`
+- **THEN** the workflow selects `image-factory-skills` for backward compatibility
+
+#### Scenario: Event names an unknown package
+
+- **WHEN** the payload package is not present in `skills.lock.json`
+- **THEN** the sync command fails without changing managed skills or the lockfile
 
 #### Scenario: Event commit does not match tag
-- **WHEN** 事件中的 commit 与远端 tag 的 peeled SHA 不一致
-- **THEN** 同步流程失败且不修改插件技能或锁文件
+
+- **WHEN** the dispatched commit differs from the remote tag's peeled SHA
+- **THEN** the sync workflow fails without modifying plugin skills or the lockfile
 
 ### Requirement: Release surfaces remain consistent
 发布前验证 MUST 确认 Codex、ZCode、Kimi manifest、市场版本、插件 tag 和测试结果属于同一发布。
@@ -42,3 +60,4 @@
 #### Scenario: Release candidate is consistent
 - **WHEN** 发布候选通过分发检查
 - **THEN** 三端 manifest 版本一致，受管技能检查通过，插件 tag 与 GitHub Release 可对应到同一 commit
+
