@@ -794,6 +794,13 @@ def _advisory_from_file(path: str | None) -> dict:
     return {key: tuple(value) if isinstance(value, list) else value for key, value in raw.items()}
 
 
+def _signal_rows(signals) -> list[dict]:
+    return [
+        {"kind": signal.kind, "message": signal.message, "evidence": list(signal.evidence)}
+        for signal in signals
+    ]
+
+
 def current_rows_by_key(payload: dict, current_keys: set[str]) -> dict[str, dict]:
     rows: dict[str, dict] = {}
     for row in payload["items"]:
@@ -894,7 +901,12 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
     scores_path = Path(args.scores)
     atomic_json.write_json_atomic(scores_path, evaluation.scores)
     scores_sha256 = hashlib.sha256(scores_path.read_bytes()).hexdigest()
-    ledger.record_evaluation_final(scores_sha256, evaluation.scores["decision"])
+    numeric_summary = evaluator.summarize_numeric(
+        evaluation.scores, evaluation.scores["pass_threshold"]
+    )
+    ledger.record_evaluation_final(
+        scores_sha256, evaluation.scores["decision"], numeric_summary=numeric_summary
+    )
 
     payload = {
         "ok": evaluation.ok,
@@ -979,7 +991,9 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
         evaluation=scores,
         rewrites=rewrites,
         retry_unchanged=set(args.retry_unchanged or []),
+        numeric_history=current.get("numeric_history") or [],
     )
+    signals = _signal_rows(outcome.signals)
     if outcome.errors:
         payload = {
             "ok": False,
@@ -987,11 +1001,17 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
                 {"code": error.code, "message": error.message, "item_id": error.item_id}
                 for error in outcome.errors
             ],
+            "signals": signals,
         }
         return EXIT_FAILURE, _emit(payload, args.json)
 
     if outcome.complete:
-        payload = {"ok": True, "complete": True, "carried_forward": list(outcome.carried_forward)}
+        payload = {
+            "ok": True,
+            "complete": True,
+            "carried_forward": list(outcome.carried_forward),
+            "signals": signals,
+        }
         return EXIT_OK, _emit(payload, args.json)
 
     assert outcome.next_plan is not None
@@ -1012,6 +1032,7 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
         "round": outcome.next_plan["round"],
         "rework": list(outcome.rework),
         "carried_forward": list(outcome.carried_forward),
+        "signals": signals,
         "plan": str(args.out),
     }
     return EXIT_OK, _emit(payload, args.json)

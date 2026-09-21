@@ -63,16 +63,19 @@ class ImageBatchMigrationTests(unittest.TestCase):
 
         result = contract_migrations.migrate_image_batch(original)
 
-        self.assertEqual(result.document["schema_version"], "1.1.0")
+        self.assertEqual(result.document["schema_version"], "1.2.0")
         self.assertIs(result.document["limits"]["require_approval_before_run"], True)
         self.assertIs(result.document["judge_policy"]["require_human_labels"], True)
-        self.assertEqual(result.notes, ("migrated image batch 1.0.0 to 1.1.0",))
+        self.assertEqual(
+            result.notes,
+            ("migrated image batch 1.0.0 to 1.1.0", "migrated image batch 1.1.0 to 1.2.0"),
+        )
         self.assertEqual(schema_lite.validate(result.document, load_schema("image_batch.schema.json")), [])
         self.assertEqual(json.dumps(original, sort_keys=True), before)
 
     def test_current_plan_returns_an_unchanged_copy(self) -> None:
         original = {
-            "schema_version": "1.1.0",
+            "schema_version": "1.2.0",
             "batch_id": "portrait-study",
             "round": 1,
             "items": [{"id": "item-01", "prompt": "portrait"}],
@@ -178,7 +181,8 @@ class FactoryJobMigrationTests(unittest.TestCase):
 
         result = contract_migrations.migrate_factory_job(original)
 
-        self.assertEqual(result.document["schema_version"], "1.1.0")
+        self.assertEqual(result.document["schema_version"], "1.2.0")
+        self.assertEqual(result.document["numeric_history"], [])
         self.assertEqual(result.document["approval"], {"current": None, "history": []})
         self.assertIsNone(result.document["evaluation"])
         self.assertIsNone(result.document["optimization"])
@@ -189,7 +193,7 @@ class FactoryJobMigrationTests(unittest.TestCase):
         self.assertEqual(original, before)
 
     def test_current_job_returns_an_unchanged_copy(self) -> None:
-        original = {"schema_version": "1.1.0", "nested": {"value": 1}}
+        original = {"schema_version": "1.2.0", "nested": {"value": 1}}
         result = contract_migrations.migrate_factory_job(original)
         result.document["nested"]["value"] = 2
         self.assertEqual(original["nested"]["value"], 1)
@@ -209,6 +213,12 @@ class FactoryJobMigrationTests(unittest.TestCase):
         for version in (None, 1, "2.0.0"):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 contract_migrations.migrate_factory_job({"schema_version": version})
+
+    def test_numeric_history_is_added_without_inventing_rounds(self) -> None:
+        original = legacy_job()
+        result = contract_migrations.migrate_factory_job(original)
+        self.assertEqual(result.notes[-1], "migrated factory job 1.1.0 to 1.2.0")
+        self.assertEqual(result.document["numeric_history"], [])
 
 
 if __name__ == "__main__":

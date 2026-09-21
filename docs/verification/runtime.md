@@ -1,6 +1,6 @@
-# Runtime and release verification: 0.1.6 candidate status
+# Runtime and release verification: 0.2.0 candidate status
 
-The `0.1.6` candidate changes repository identity, synchronization, and release metadata. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh `0.1.6` installation, remote SHA, or paid-generation proof. Current-candidate evidence is added only after the corresponding check is actually rerun.
+The `0.2.0` candidate adds loop-convergence evidence and declared pixel checks on top of the `0.1.6` identity and synchronization work. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh installation, remote SHA, or paid-generation proof. Current-candidate evidence — the `1.2.0` numeric-ledger loop and the offline declared-pixel-check reproduction — was rerun against this candidate and is recorded in the dated sections below.
 
 This file is the evidence ledger for the Image Factory 0.1.2 release
 candidate. It intentionally does not reuse runtime, installation, remote commit,
@@ -66,6 +66,66 @@ Two label caveats belong with this result rather than being left implicit:
   metrics, not by a human looking at the images.
 - The item was not regenerated on a hunch: `optimize` refuses to emit a round
   without an explicit rewrite for every item it marks as needing rework.
+
+## Convergence evidence from the 1.2.0 numeric ledger (2026-09-21)
+
+Collected against the working tree with the `make-loop-convergence-observable`
+change applied (unreleased; no version bump). Three authorized generation calls
+across two plans, none retried; each approval was bound to its exact plan hash
+(`912f6bf3…` for round 1 with two items, `fdfbe7b6…` for round 2 with the single
+rewritten item). All three artifacts are 1254x1254; every receipt SHA-256 was
+re-derived with `shasum -a 256` and every pixel size re-read with `sips`, and
+the deterministic gates recomputed both at evaluate time and passed.
+
+| Round | Decision | Ledger `best_score` | `mean_score` | `gap_dimensions` |
+| --- | --- | --- | --- | --- |
+| 1 | fail | 0.92 | 0.66 | background, composition, declared-content |
+| 2 | pass | 0.88 | 0.88 | (none) |
+
+What this run adds over the 0.1.2 loop record: the numbers above were read back
+from the job ledger alone (`numeric_history`), after the run, without opening
+either external scores document — those live at caller-chosen paths and could
+have been overwritten. "Which round scored best" and "what changed between
+rounds" are answerable from the ledger.
+
+The round-1 rejection was measured against the plan's declared requirements,
+not taste: all four corner pixels of the labelled emblem were RGB `(0, 0, 0)`
+against a declared plain white background, while the plain item measured
+centred margins of 19.5–19.8 percent and an ink mean of RGB `(2, 106, 78)`
+(green advantage +28). The round-2 rewrite measured white corners
+`(254, 254, 254)` and margins of 23.3 and 23.4 percent, was approved, and the
+job ended `Accepted` at ledger revision 22.
+
+One honest signal is recorded rather than smoothed: convergence detection over
+the ledger history reports a regression (round 1 best 0.92, round 2 best 0.88).
+The two rounds scored different item sets — round 1 carried two items, round 2
+only the rewritten one — so the drop reflects set composition as much as
+quality. The signal keeps the drop visible by design; under this change neither
+it nor any other evaluation signal can open a round, and the loop ended because
+a human approved the final artifact, not because a number said so.
+
+Label caveat, same as the 0.1.2 record: the `rejected` and `approved` labels
+were assigned by the automated reviewer from those measured, declared criteria,
+not by a human looking at the images; the operator authorized the paid run
+itself.
+
+## Declared pixel checks against the 2026-09-21 artifacts (offline)
+
+Collected against the working tree with the `add-declared-pixel-checks` change
+applied (unreleased; no version bump; no additional generation calls). The two
+round-1/round-2 artifacts from the `emblem-convergence` batch above were
+re-evaluated under a declared corner-colour check (white, tolerance 10) plus a
+declared minimum-margin check (15 percent):
+
+| Artifact | Declared corner-colour | Declared min-margin |
+| --- | --- | --- |
+| round 1 emblem-labelled | FAIL — worst corner RGB `(0, 0, 0)` | PASS — margins 23.6 / 23.5 / 16.9 / 17.1 percent |
+| round 2 emblem-labelled | PASS — worst corner RGB `(254, 254, 254)` | PASS — margins 22.2 / 22.1 / 15.3 / 15.6 percent |
+
+The declared check reproduces the human rejection basis of round 1 exactly, as
+a deterministic gate: measured `(0, 0, 0)` against a declared white background
+fails without anyone looking at the image, and the round-2 rewrite passes. The
+check results also agree with the ledger's recorded decisions for both rounds.
 
 ## Host conditions observed while collecting this evidence
 

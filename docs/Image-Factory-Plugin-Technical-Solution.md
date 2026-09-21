@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | Implemented for the 0.1.6 supply-chain release candidate; runtime behavior unchanged from 0.1.2, fresh release checks pending |
+> | Status | Implemented for the 0.2.0 release candidate: convergence evidence and declared pixel checks on the 0.1.6 supply-chain hardening; release checks recorded in `docs/verification/runtime.md` |
 > | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
 > | Audience | Implementers extending or reviewing this plugin |
 > | Runtime evidence | `docs/verification/` |

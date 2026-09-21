@@ -6,7 +6,7 @@
 
 > 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
 
-[![版本](https://img.shields.io/badge/version-0.1.6-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.1.6)
+[![版本](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.2.0)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [命令契约](#命令契约) · [故障排查](#故障排查)
@@ -15,7 +15,7 @@
 
 `image-factory` 现在提供两层互补能力：原样集成的 Baoyu 技能负责直接生图、文章封面和社交图片卡片；Factory 工作流负责受治理的批量图片生产——先校验批次计划，再由选定的宿主或提供商图像工具逐项生成，采集每件产物并独立重算哈希，用确定性门禁评测，最后把失败项改写成新一轮 prompt，经你批准后才执行。
 
-版本 `0.1.6` 是上一个已发布的供应链加固候选。当前待发布集成会新增外部 Baoyu 工作流，但不会改变 Factory 的执行语义。Factory 自身仍不持有 API Key、也绝不自动重试；`baoyu-image-gen` 可按其原始上游说明使用用户选定的提供商凭据，或复用已登录的 Codex CLI。
+版本 `0.2.0` 在 `0.1.6` 供应链加固与不变的外部 Baoyu 工作流之上，新增循环收敛证据（持久逐轮数字历史、命名维度批评、回归与两级停滞检测）与声明式像素检查（计划声明的角点颜色、最小边距、墨色门禁，由标准库解码器度量）。Factory 自身仍不持有 API Key、也绝不自动重试；`baoyu-image-gen` 可按其原始上游说明使用用户选定的提供商凭据，或复用已登录的 Codex CLI。
 
 ### 适合谁
 
@@ -57,7 +57,7 @@
 |---|---|
 | 插件 ID | `image-factory` |
 | 宿主 | Codex CLI 或 ChatGPT 桌面应用 |
-| 当前版本 | `0.1.6`（供应链 release candidate，详见[成熟度](#成熟度)） |
+| 当前版本 | `0.2.0`（供应链 release candidate，详见[成熟度](#成熟度)） |
 | 插件清单 | `.codex-plugin/plugin.json` |
 | MCP 配置 | 无——在 MCP 服务器存在之前，清单一律禁止写 MCP 条目 |
 | 主要语言 | Python 3.11+ |
@@ -155,7 +155,7 @@ CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖�
 ### 从插件市场安装
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.1.6
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.2.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 

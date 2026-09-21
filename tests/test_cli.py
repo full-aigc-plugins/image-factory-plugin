@@ -237,7 +237,7 @@ class ValidatePlanCommandTests(unittest.TestCase):
         self.assertTrue(payload["require_approval_before_run"])
         self.assertRegex(payload["plan_sha256"], r"^[0-9a-f]{64}$")
         self.assertTrue(payload["require_human_labels"])
-        self.assertEqual(payload["migration_notes"], ["migrated image batch 1.0.0 to 1.1.0"])
+        self.assertEqual(payload["migration_notes"], ["migrated image batch 1.0.0 to 1.1.0", "migrated image batch 1.1.0 to 1.2.0"])
 
     def test_invalid_plan_exits_with_usage_error(self) -> None:
         self.fixture.write_plan(valid_plan(round=999))
@@ -261,7 +261,7 @@ class QuoteCommandTests(unittest.TestCase):
         self.assertFalse(payload["spends_allowance_on_quote"])
         self.assertRegex(payload["plan_sha256"], r"^[0-9a-f]{64}$")
         self.assertTrue(payload["require_human_labels"])
-        self.assertEqual(payload["migration_notes"], ["migrated image batch 1.0.0 to 1.1.0"])
+        self.assertEqual(payload["migration_notes"], ["migrated image batch 1.0.0 to 1.1.0", "migrated image batch 1.1.0 to 1.2.0"])
         self.assertFalse(self.fixture.job_path.exists())
 
 
@@ -906,7 +906,7 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
         fixture = fixture or self.fixture
         scores_path = scores_path or self.scores_path
         failing = {
-            "schema_version": "1.0.0", "batch_id": "portrait-study", "round": 1,
+            "schema_version": "1.1.0", "batch_id": "portrait-study", "round": 1,
             "pass_threshold": 0.8,
             "deterministic_gates": {
                 "all_passed": False,

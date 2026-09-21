@@ -20,7 +20,7 @@ SCHEMA = json.loads((ROOT / "schemas/image_batch.schema.json").read_text(encodin
 
 def minimal_plan(**overrides) -> dict:
     plan = {
-        "schema_version": "1.1.0",
+        "schema_version": "1.2.0",
         "batch_id": "portrait-study",
         "round": 1,
         "limits": {
@@ -84,7 +84,7 @@ def same_plan_with_different_key_order() -> dict:
         },
         "round": 1,
         "batch_id": "portrait-study",
-        "schema_version": "1.1.0",
+        "schema_version": "1.2.0",
     }
 
 
@@ -277,7 +277,7 @@ class PlanValidatorTests(unittest.TestCase):
             "items": [{"id": "item-01", "prompt": "legacy portrait"}],
         }
         result = self.fixture.validate(legacy)
-        self.assertEqual(result.migration_notes, ("migrated image batch 1.0.0 to 1.1.0",))
+        self.assertEqual(result.migration_notes, ("migrated image batch 1.0.0 to 1.1.0", "migrated image batch 1.1.0 to 1.2.0"))
 
 
 if __name__ == "__main__":

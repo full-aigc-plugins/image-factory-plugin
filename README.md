@@ -6,7 +6,7 @@
 
 > Turn a reference-driven image task into an auditable production run — validated plan, approved spend, and a hash-verified receipt for every artifact.
 
-[![Version](https://img.shields.io/badge/version-0.1.6-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.1.6)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.2.0)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [Install](#installation) · [Quick start](#quick-start) · [Command contract](#command-contract) · [Troubleshooting](#troubleshooting)
@@ -15,7 +15,7 @@
 
 `image-factory` now exposes two complementary layers. The unchanged Baoyu skills handle direct image generation, article covers, and social image-card series. The Factory workflow handles governed image batches: it validates a batch plan, asks the selected host or provider image tool to produce each item, collects every artifact with a recomputed hash, evaluates the batch against deterministic gates, and turns failures into a new prompt round that you approve before it runs.
 
-Version `0.1.6` is the last published supply-chain hardening candidate. The pending integration adds external Baoyu workflows without changing Factory execution semantics. Factory itself still holds no API key and never retries automatically; `baoyu-image-gen` may use a user-selected provider credential or the logged-in Codex CLI according to its unchanged upstream instructions.
+Version `0.2.0` adds loop-convergence evidence (durable per-round numeric history, named-dimension critique, regression and two-level stall detection) and declared pixel checks (plan-declared corner-colour, minimum-margin, and ink-colour gates evaluated on a standard-library decoder), on top of the `0.1.6` supply-chain hardening and the unchanged external Baoyu workflows. Factory itself still holds no API key and never retries automatically; `baoyu-image-gen` may use a user-selected provider credential or the logged-in Codex CLI according to its unchanged upstream instructions.
 
 ### Who it is for
 
@@ -57,7 +57,7 @@ Image batch + receipts + evaluation record
 |---|---|
 | Plugin ID | `image-factory` |
 | Host | Codex CLI or ChatGPT desktop app |
-| Current version | `0.1.6` (supply-chain release candidate — see [Maturity](#maturity)) |
+| Current version | `0.2.0` (supply-chain release candidate — see [Maturity](#maturity)) |
 | Plugin manifest | `.codex-plugin/plugin.json` |
 | MCP configuration | none — the manifest forbids an MCP entry until an MCP server exists |
 | Primary language | Python 3.11+ |
@@ -155,7 +155,7 @@ CI runs on Linux, macOS, and Windows without installing any package at test time
 ### From the plugin marketplace
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.1.6
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.2.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 

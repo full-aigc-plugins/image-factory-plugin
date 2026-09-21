@@ -7,7 +7,7 @@ description: Route image work between direct Baoyu generation and governed Image
 
 ## When to use
 
-用本技能决定“由谁执行”，而不是在这里生成图片。它只负责四个入口的能力仲裁：
+用本技能决定“由谁执行”，而不是在这里生成图片。它只负责五个入口的能力仲裁：
 
 ```mermaid
 flowchart TD
@@ -32,8 +32,9 @@ flowchart TD
 | 文章封面、头图、Cover | **`baoyu-cover-image`** |
 | 小红书、微信图片卡片、社交信息图系列 | **`baoyu-xhs-images`** |
 | 需要计划校验、报价、批准、回执、评测、优化轮次或恢复 | **`image-factory-use`** |
+| 在 Factory 治理路径内，需要独立分维度评审或收敛/回归/停滞证据 | **`image-factory-review`** |
 
-四个入口已经随插件提供。只按技能名称交接，不复制其正文，也不在 Harness 中重写
+五个入口已经随插件提供。只按技能名称交接，不复制其正文，也不在 Harness 中重写
 Provider、风格矩阵、确认步骤或执行规则。
 
 ## Workflow

@@ -27,7 +27,7 @@ import contract_migrations
 import atomic_json
 import schema_lite
 
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "1.2.0"
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "factory_job.schema.json"
 JOB_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{2,63}$"
 IMAGE_LIMIT_ID = "image_gen"
@@ -157,6 +157,7 @@ def new_job(job_id: str) -> dict:
         "usage_limit": None,
         "error_category": None,
         "history": [],
+        "numeric_history": [],
     }
 
 
@@ -361,8 +362,80 @@ class JobLedger:
             },
         )
 
-    def record_evaluation_final(self, scores_sha256: str, decision: str) -> dict:
-        """Persist evaluation evidence and its final state in one ledger revision."""
+    NUMERIC_SUMMARY_FIELDS = (
+        "advisory_enabled",
+        "scored_items",
+        "best_score",
+        "mean_score",
+        "gap_dimensions",
+    )
+
+    def _numeric_entry(
+        self, payload: dict, decision: str, numeric_summary: dict | None
+    ) -> dict:
+        """Build one numeric-history row; a round without numbers records that fact."""
+        batch = payload.get("batch")
+        if isinstance(batch, dict) and isinstance(batch.get("round"), int):
+            round_number = batch["round"]
+        else:
+            round_number = len(payload.get("numeric_history") or []) + 1
+        entry: dict = {"round": round_number, "decision": decision}
+        if numeric_summary is None:
+            entry.update(
+                {
+                    "advisory_enabled": False,
+                    "scored_items": 0,
+                    "best_score": None,
+                    "mean_score": None,
+                    "gap_dimensions": [],
+                }
+            )
+            return entry
+        unknown = sorted(set(numeric_summary) - set(self.NUMERIC_SUMMARY_FIELDS))
+        missing = sorted(set(self.NUMERIC_SUMMARY_FIELDS) - set(numeric_summary))
+        if unknown or missing:
+            raise ValueError(
+                f"numeric summary fields do not match the contract "
+                f"(unknown: {unknown}; missing: {missing})"
+            )
+        if not isinstance(numeric_summary["advisory_enabled"], bool):
+            raise ValueError("numeric summary advisory_enabled must be a boolean")
+        scored_items = numeric_summary["scored_items"]
+        if (
+            not isinstance(scored_items, int)
+            or isinstance(scored_items, bool)
+            or scored_items < 0
+        ):
+            raise ValueError("numeric summary scored_items must be a non-negative integer")
+        for field in ("best_score", "mean_score"):
+            value = numeric_summary[field]
+            if value is None:
+                continue
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not 0.0 <= float(value) <= 1.0
+            ):
+                raise ValueError(
+                    f"numeric summary {field} must be null or a number between 0 and 1"
+                )
+        gaps = numeric_summary["gap_dimensions"]
+        if not isinstance(gaps, list) or not all(
+            isinstance(name, str) and 0 < len(name) <= 64 for name in gaps
+        ):
+            raise ValueError(
+                "numeric summary gap_dimensions must be a list of at most 64-character names"
+            )
+        entry.update({field: numeric_summary[field] for field in self.NUMERIC_SUMMARY_FIELDS})
+        return entry
+
+    def record_evaluation_final(
+        self,
+        scores_sha256: str,
+        decision: str,
+        numeric_summary: dict | None = None,
+    ) -> dict:
+        """Persist evaluation evidence, its final state, and the round's numbers."""
         if not isinstance(scores_sha256, str) or not json_pattern_match(
             scores_sha256, SHA256_PATTERN
         ):
@@ -398,6 +471,17 @@ class JobLedger:
             "decision": decision,
             "evaluated_at": timestamp,
         }
+        # The numeric history is the durable record of each round's numbers: it
+        # survives the external scores document being overwritten at the same path.
+        # Re-evaluating one round replaces that round's row instead of duplicating it.
+        entry = self._numeric_entry(payload, decision, numeric_summary)
+        history = [
+            row
+            for row in (payload.get("numeric_history") or [])
+            if row.get("round") != entry["round"]
+        ]
+        history.append(entry)
+        payload["numeric_history"] = history
         self._persist_mutation(payload)
         return payload
 

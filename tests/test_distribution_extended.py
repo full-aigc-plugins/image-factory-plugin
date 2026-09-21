@@ -8,11 +8,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ID = "image-factory"
 DISPLAY_NAME = "Image Factory"
-RELEASE_VERSION = "0.1.6"
+RELEASE_VERSION = "0.2.0"
 PRIOR_RELEASE_SHA = "fff20c9aad9a9cd7893644306c752b2f7231071d"
 
 FACTORY_SKILLS = (
     "image-factory-harness",
+    "image-factory-review",
     "image-factory-use",
     "image-factory-run",
     "image-factory-judge",

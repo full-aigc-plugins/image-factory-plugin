@@ -14,6 +14,7 @@ Video Factory 时才读取本文件。普通请求应直接按 `SKILL.md` 的快
 | **`baoyu-cover-image`** | 文章封面、头图、封面尺寸与视觉维度 | 生成并保存封面 prompt，再由该技能选择的图片后端执行 | `npx skills add partme-ai/baoyu-skills --skill baoyu-cover-image` |
 | **`baoyu-xhs-images`** | 小红书、微信图片卡片、社交信息图系列 | 使用该技能自己的策略、确认、锚点链和批次策略 | `npx skills add partme-ai/baoyu-skills --skill baoyu-xhs-images` |
 | **`image-factory-use`** | 审批、报价、回执、确定性评测、优化轮次、状态恢复 | 进入 Factory plan / ledger / receipt 状态机 | `npx skills add full-aigc-skills/image-factory-skills --skill image-factory-use` |
+| **`image-factory-review`** | Factory 批次内的独立分维度评审、跨轮收敛/回归/停滞证据 | 只产出 advisory 评分文档；不承担对话面，判词仍归 `image-factory-use` 路径 | 插件本地技能，不单独安装 |
 
 ## Selection priority
 
@@ -61,6 +62,8 @@ unverified_items:
 
 不得从 prompt、文件名或旧日志推测 `execution_backend`。Factory 路径以 JSON、ledger、
 receipt 和 evaluation 文件为准；直接路径以所选 Baoyu 技能及其实际工具输出为准。
+`image-factory-review` 产出的分维度批评计入 `governance_evidence` 的 `evaluation`
+一项；它是 advisory 证据，不是判词，不得在摘要中表述为批次结论。
 
 ## Video Factory handoff
 

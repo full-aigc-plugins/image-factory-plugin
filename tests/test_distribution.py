@@ -14,7 +14,7 @@ PLUGIN_ID = "image-factory"
 DISPLAY_NAME = "Image Factory"
 REPOSITORY = "https://github.com/full-aigc-plugins/image-factory-plugin"
 BRAND_COLOR = "#10B981"
-RELEASE_VERSION = "0.1.6"
+RELEASE_VERSION = "0.2.0"
 
 
 def load_json(relative: str) -> dict:
@@ -170,7 +170,7 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(marketplace["name"], "partme-ai-image-factory")
         self.assertEqual(
             entries[0]["source"],
-            {"source": "url", "url": REPOSITORY + ".git", "ref": "v0.1.6"},
+            {"source": "url", "url": REPOSITORY + ".git", "ref": "v0.2.0"},
         )
         self.assertEqual(entries[0]["policy"], {"installation": "AVAILABLE", "authentication": "ON_USE"})
 

@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import contract_migrations
+import declared_checks as declared_checks_module
 import schema_lite
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "image_batch.schema.json"
@@ -49,6 +50,9 @@ class PlanItem:
     reference_images: tuple[str, ...]
     reference_sha256: tuple[str, ...]
     idempotency_key: str
+    # Declared evaluation criteria. Deliberately excluded from the idempotency
+    # key: they judge the artifact, they are not a generation input.
+    pixel_checks: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -253,6 +257,17 @@ def validate_plan(
             continue
 
         reference_hashes = tuple(hashes)
+        declared_checks = tuple(row.get("pixel_checks") or ())
+        check_errors = False
+        for check in declared_checks:
+            message = declared_checks_module.validate_check(check)
+            if message is not None:
+                errors.append(
+                    PlanError("plan_pixel_check_invalid", message, item_id)
+                )
+                check_errors = True
+        if check_errors:
+            continue
         items.append(
             PlanItem(
                 id=item_id,
@@ -267,6 +282,7 @@ def validate_plan(
                     prompt=prompt,
                     reference_sha256=reference_hashes,
                 ),
+                pixel_checks=declared_checks,
             )
         )
 

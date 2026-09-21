@@ -16,39 +16,91 @@
     "decision"
   ],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
-    "batch_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
-    "round": {"type": "integer", "minimum": 1},
-    "pass_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "schema_version": {
+      "const": "1.1.0"
+    },
+    "batch_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "pass_threshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
     "deterministic_gates": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["all_passed", "per_item"],
+      "required": [
+        "all_passed",
+        "per_item"
+      ],
       "properties": {
-        "all_passed": {"type": "boolean"},
-        "per_item": {"type": "array", "items": {"$ref": "#/$defs/gateResult"}}
+        "all_passed": {
+          "type": "boolean"
+        },
+        "per_item": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gateResult"
+          }
+        }
       }
     },
     "advisory": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "items"],
+      "required": [
+        "enabled",
+        "items"
+      ],
       "properties": {
-        "enabled": {"type": "boolean"},
-        "items": {"type": "array", "items": {"$ref": "#/$defs/advisoryScore"}}
+        "enabled": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/advisoryScore"
+          }
+        }
       }
     },
-    "human_labels": {"type": "array", "items": {"$ref": "#/$defs/humanLabel"}},
-    "decision": {"enum": ["pass", "fail", "pending_approval"]}
+    "human_labels": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/humanLabel"
+      }
+    },
+    "decision": {
+      "enum": [
+        "pass",
+        "fail",
+        "pending_approval"
+      ]
+    }
   },
   "$defs": {
     "gateResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["item_id", "passed", "failures"],
+      "required": [
+        "item_id",
+        "passed",
+        "failures"
+      ],
       "properties": {
-        "item_id": {"type": "string", "minLength": 1},
-        "passed": {"type": "boolean"},
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "passed": {
+          "type": "boolean"
+        },
         "failures": {
           "type": "array",
           "items": {
@@ -57,8 +109,43 @@
               "below_min_dimension",
               "duplicate_content",
               "hash_mismatch",
-              "missing_artifact"
+              "missing_artifact",
+              "failed_pixel_check"
             ]
+          }
+        },
+        "pixel_checks": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "passed",
+              "measured",
+              "expected"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "corner-colour",
+                  "min-margin",
+                  "ink-colour"
+                ]
+              },
+              "passed": {
+                "type": "boolean"
+              },
+              "measured": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "expected": {
+                "type": "string",
+                "maxLength": 200
+              }
+            }
           }
         }
       }
@@ -66,21 +153,83 @@
     "advisoryScore": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["item_id", "score", "reason"],
+      "required": [
+        "item_id",
+        "score",
+        "reason"
+      ],
       "properties": {
-        "item_id": {"type": "string", "minLength": 1},
-        "score": {"type": "number", "minimum": 0, "maximum": 1},
-        "reason": {"type": "string", "maxLength": 2000}
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "dimensions": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "score"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "evidence": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "complete": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
       }
     },
     "humanLabel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["item_id", "label"],
+      "required": [
+        "item_id",
+        "label"
+      ],
       "properties": {
-        "item_id": {"type": "string", "minLength": 1},
-        "label": {"enum": ["approved", "rejected", "unlabeled"]},
-        "at": {"type": ["string", "null"]}
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "enum": [
+            "approved",
+            "rejected",
+            "unlabeled"
+          ]
+        },
+        "at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     }
   }

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0 — 2026-09-22
+
+### Added
+
+- Loop-convergence evidence: the durable ledger records each round's numeric assessment (`numeric_history`), so "which round scored best" and "did the final round regress" are answerable from the ledger alone.
+- Named-dimension critique: advisory entries may carry bounded per-dimension scores with observable evidence; unevidenced dimensions are recorded as incomplete and never count as gaps.
+- Regression and two-level stall detection: `optimize` reports regressions with both rounds' evidence, rejects `--retry-unchanged` while a stall is approaching, and stops with `optimizer_stall_established` once a structural rework fails to lift the score. No evaluation signal can open a round.
+- Plugin-local `image-factory-review` skill: silent, independent-context, anti-ratchet dimensioned review consumed by `evaluate`; routed by the harness.
+- Declared pixel checks: plan items may declare corner-colour, minimum-margin, and ink-colour checks; a standard-library decoder measures them lazily and a failure joins the deterministic tier (`failed_pixel_check`). Checks are carried across rounds unchanged and never enter idempotency keys or receipts.
+- Consumed `image-factory-skills` v1.0.2: the judge now requires an independent scoring context and documents the dimensioned advisory and anti-ratchet rule.
+
+### Changed
+
+- `factory_job` ledger schema 1.1.0 → 1.2.0 (adds `numeric_history`; migration chain provided).
+- `image_batch` plan schema 1.1.0 → 1.2.0 (adds optional `pixel_checks`); `scores` schema 1.0.0 → 1.1.0 (widens the deterministic failure enum by one member and adds check details).
+- Skills sync selects the source-organization token by repository owner.
+
 ## 0.1.6 — 2026-09-20
 
 ### Changed

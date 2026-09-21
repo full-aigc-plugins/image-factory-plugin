@@ -44,7 +44,7 @@ def scores(gates: dict, advisory: dict | None = None, labels: dict | None = None
         for item_id, passed in gates.items()
     ]
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "batch_id": "portrait-study",
         "round": 1,
         "pass_threshold": 0.8,
@@ -110,7 +110,7 @@ class NextRoundTests(unittest.TestCase):
         result = self.optimize(
             current, scores({"item-01": False}), rewrites={"item-01": "try again"}
         )
-        self.assertEqual(result.next_plan["schema_version"], "1.1.0")
+        self.assertEqual(result.next_plan["schema_version"], "1.2.0")
         self.assertIs(result.next_plan["limits"]["require_approval_before_run"], True)
         self.assertIs(result.next_plan["judge_policy"]["require_human_labels"], True)
         self.assertEqual(schema_lite.validate(result.next_plan, BATCH_SCHEMA), [])

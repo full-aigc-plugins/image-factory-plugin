@@ -84,7 +84,7 @@ class SchemaContractTests(unittest.TestCase):
         schema = load_schema("image_batch.schema.json")
         props = schema["properties"]
         self.assertEqual(schema["required"], ["schema_version", "batch_id", "round", "items"])
-        self.assertEqual(props["schema_version"]["const"], "1.1.0")
+        self.assertEqual(props["schema_version"]["const"], "1.2.0")
         self.assertEqual(props["batch_id"]["pattern"], "^[a-z0-9][a-z0-9_-]{2,63}$")
         self.assertEqual(props["round"]["minimum"], 1)
         self.assertIsInstance(props["schema_version"]["const"], str)
@@ -98,15 +98,23 @@ class SchemaContractTests(unittest.TestCase):
         self.assertEqual(item["properties"]["reference_images"]["maxItems"], PLATFORM_MAX_REFERENCE_IMAGES)
         self.assertEqual(item["properties"]["id"]["pattern"], "^[a-z0-9][a-z0-9_-]{0,63}$")
         self.assertEqual(item["properties"]["prompt"]["minLength"], 1)
+        checks = item["properties"]["pixel_checks"]
+        self.assertEqual(checks["maxItems"], 8)
+        self.assertEqual(checks["items"]["required"], ["kind"])
+        self.assertIs(checks["items"]["additionalProperties"], False)
+        self.assertEqual(
+            checks["items"]["properties"]["kind"]["enum"],
+            ["corner-colour", "min-margin", "ink-colour"],
+        )
 
         limits = schema["$defs"]["batchLimits"]
         self.assertIs(limits["additionalProperties"], False)
         self.assertEqual(limits["required"], ["max_images", "max_rounds", "require_approval_before_run"])
         self.assertEqual(limits["properties"]["require_approval_before_run"], {"const": True})
 
-    def test_image_plan_1_1_requires_both_human_gates(self) -> None:
+    def test_image_plan_1_2_requires_both_human_gates(self) -> None:
         schema = load_schema("image_batch.schema.json")
-        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.1.0")
+        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.2.0")
         limits = schema["$defs"]["batchLimits"]
         policy = schema["$defs"]["judgePolicy"]
         self.assertEqual(limits["properties"]["require_approval_before_run"], {"const": True})
@@ -191,11 +199,21 @@ class SchemaContractTests(unittest.TestCase):
             ],
         )
         self.assertEqual(props["revision"]["minimum"], 1)
-        self.assertEqual(props["schema_version"]["const"], "1.1.0")
+        self.assertEqual(props["schema_version"]["const"], "1.2.0")
 
-    def test_factory_job_1_1_exposes_transaction_fields(self) -> None:
+    def test_factory_job_1_2_exposes_transaction_fields(self) -> None:
         schema = load_schema("factory_job.schema.json")
-        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.1.0")
+        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.2.0")
+        numeric = schema["properties"]["numeric_history"]
+        self.assertEqual(numeric["items"]["$ref"], "#/$defs/numericEvaluation")
+        entry = schema["$defs"]["numericEvaluation"]
+        self.assertIs(entry["additionalProperties"], False)
+        self.assertIn(
+            "best_score",
+            entry["required"],
+            "a round without numbers must record that fact explicitly",
+        )
+        self.assertEqual(entry["properties"]["best_score"]["type"], ["number", "null"])
         self.assertIn("PendingApproval", schema["properties"]["state"]["enum"])
         self.assertIn("Accepted", schema["properties"]["state"]["enum"])
         item = schema["$defs"]["jobItem"]
@@ -232,7 +250,7 @@ class SchemaContractTests(unittest.TestCase):
             schema["required"],
             ["schema_version", "batch_id", "round", "pass_threshold", "deterministic_gates", "advisory", "human_labels", "decision"],
         )
-        self.assertEqual(props["schema_version"]["const"], "1.0.0")
+        self.assertEqual(props["schema_version"]["const"], "1.1.0")
         self.assertEqual(props["decision"]["enum"], ["pass", "fail", "pending_approval"])
         self.assertEqual(props["advisory"]["properties"]["enabled"]["type"], "boolean")
         item_score = schema["$defs"]["advisoryScore"]
@@ -242,15 +260,34 @@ class SchemaContractTests(unittest.TestCase):
             schema["$defs"]["humanLabel"]["properties"]["label"]["enum"],
             ["approved", "rejected", "unlabeled"],
         )
+        dimensions = item_score["properties"]["dimensions"]
+        self.assertEqual(dimensions["maxItems"], 16)
+        dimension = dimensions["items"]
+        self.assertEqual(dimension["required"], ["name", "score"])
+        self.assertEqual(dimension["properties"]["name"]["maxLength"], 64)
+        self.assertEqual(dimension["properties"]["score"]["minimum"], 0)
+        self.assertEqual(dimension["properties"]["score"]["maximum"], 1)
+        self.assertEqual(dimension["properties"]["evidence"]["maxLength"], 2000)
+        self.assertIn("complete", dimension["properties"])
         gate = schema["$defs"]["gateResult"]
         self.assertEqual(gate["required"], ["item_id", "passed", "failures"])
+        # Widened by add-declared-pixel-checks: a declared pixel check has one
+        # true answer just like the five original gates, so it joins their tier.
         self.assertEqual(gate["properties"]["failures"]["items"]["enum"], [
             "not_a_png",
             "below_min_dimension",
             "duplicate_content",
             "hash_mismatch",
             "missing_artifact",
+            "failed_pixel_check",
         ])
+        detail = gate["properties"]["pixel_checks"]["items"]
+        self.assertEqual(detail["required"], ["kind", "passed", "measured", "expected"])
+        self.assertIs(detail["additionalProperties"], False)
+        self.assertEqual(
+            detail["properties"]["kind"]["enum"],
+            ["corner-colour", "min-margin", "ink-colour"],
+        )
 
     def test_platform_limit_is_recorded_not_assumed(self) -> None:
         """The plugin must not promise size/quality control the platform lacks."""

@@ -1,7 +1,7 @@
 {
   "name": "image-factory",
-  "version": "0.1.6+codex.20260920",
-  "description": "Generate images, covers and social cards, or run governed batches with verified receipts.",
+  "version": "0.2.0+codex.20260921",
+  "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
   "author": {
     "name": "Full Stack Skills / PartMe.AI",
     "url": "https://github.com/partme-ai"
@@ -19,7 +19,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Image Factory",
-    "shortDescription": "Generate images or run governed image batches",
+    "shortDescription": "Discover, batch-produce, and evaluate images",
     "longDescription": "Use unchanged Baoyu workflows for direct image generation, article covers, and social image-card series, or run Image Factory's governed production loop with plan validation, explicit approval, hash-verified receipts, deterministic evaluation, and recoverable optimization rounds.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "category": "Creativity",

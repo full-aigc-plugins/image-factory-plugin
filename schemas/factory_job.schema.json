@@ -5,9 +5,9 @@
   "description": "The durable ledger for one image production job. Written atomically after every transition so an interrupted batch can be resumed without spending the usage allowance twice.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "job_id", "state", "revision", "created_at", "updated_at", "batch", "rounds", "items", "approval", "evaluation", "optimization", "usage_limit", "error_category", "history"],
+  "required": ["schema_version", "job_id", "state", "revision", "created_at", "updated_at", "batch", "rounds", "items", "approval", "evaluation", "optimization", "usage_limit", "error_category", "history", "numeric_history"],
   "properties": {
-    "schema_version": {"const": "1.1.0"},
+    "schema_version": {"const": "1.2.0"},
     "job_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
     "state": {"enum": ["Draft", "PlanValidated", "Approved", "Running", "Evaluated", "PendingApproval", "Optimized", "Accepted", "Completed", "Partial", "Failed", "Unknown"]},
     "revision": {"type": "integer", "minimum": 1},
@@ -30,7 +30,8 @@
       }
     },
     "error_category": {"enum": ["capability_unavailable", "codex_missing", "quota_exceeded", "timeout", "generation_failed", "artifact_missing", "hash_mismatch", "duplicate_artifact", "plan_invalid", "approval_required", "job_already_running", "recovery_required", "unknown", null]},
-    "history": {"type": "array", "items": {"$ref": "#/$defs/historyEntry"}}
+    "history": {"type": "array", "items": {"$ref": "#/$defs/historyEntry"}},
+    "numeric_history": {"type": "array", "items": {"$ref": "#/$defs/numericEvaluation"}}
   },
   "$defs": {
     "batchRecord": {
@@ -120,6 +121,25 @@
         "to_state": {"type": "string", "minLength": 1},
         "at": {"type": "string", "format": "date-time"},
         "note": {"type": "string", "maxLength": 500}
+      }
+    },
+    "numericEvaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One round's numeric assessment, kept so convergence can be answered from the ledger alone. best_score and mean_score are null when the round carried no advisory numbers; a null is a recorded absence, never an invented value.",
+      "required": ["round", "decision", "advisory_enabled", "scored_items", "best_score", "mean_score", "gap_dimensions"],
+      "properties": {
+        "round": {"type": "integer", "minimum": 1},
+        "decision": {"enum": ["pass", "fail", "pending_approval"]},
+        "advisory_enabled": {"type": "boolean"},
+        "scored_items": {"type": "integer", "minimum": 0},
+        "best_score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "mean_score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "gap_dimensions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {"type": "string", "minLength": 1, "maxLength": 64}
+        }
       }
     }
   }

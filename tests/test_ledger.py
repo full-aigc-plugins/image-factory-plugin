@@ -318,7 +318,8 @@ class PersistenceTests(unittest.TestCase):
 
         loaded = self.fixture.ledger().read()
 
-        self.assertEqual(loaded["schema_version"], "1.1.0")
+        self.assertEqual(loaded["schema_version"], "1.2.0")
+        self.assertEqual(loaded["numeric_history"], [])
         self.assertEqual(loaded["approval"], {"current": None, "history": []})
         self.assertEqual(self.fixture.path.read_text(encoding="utf-8"), raw)
 

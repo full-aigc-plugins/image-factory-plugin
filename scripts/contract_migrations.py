@@ -57,9 +57,9 @@ def migrate_image_batch(document: object) -> MigrationResult:
         raise ValueError("image batch must be a JSON object")
     plan = copy.deepcopy(document)
     version = plan.get("schema_version")
-    if version == "1.1.0":
+    if version == "1.2.0":
         return MigrationResult(plan, ())
-    if version != "1.0.0":
+    if version not in ("1.0.0", "1.1.0"):
         raise ValueError(f"unsupported image batch schema_version {version!r}")
     plan["schema_version"] = "1.1.0"
     limits = plan.get("limits")
@@ -80,42 +80,57 @@ def migrate_image_batch(document: object) -> MigrationResult:
         raise ValueError("image batch judge_policy must be a JSON object")
     limits["require_approval_before_run"] = True
     policy["require_human_labels"] = True
-    return MigrationResult(plan, ("migrated image batch 1.0.0 to 1.1.0",))
+    notes = ["migrated image batch 1.0.0 to 1.1.0"]
+    # 1.1.0 -> 1.2.0 adds optional per-item pixel checks; existing documents
+    # validate unchanged, so this leg is a pass-through with a note.
+    plan["schema_version"] = "1.2.0"
+    notes.append("migrated image batch 1.1.0 to 1.2.0")
+    return MigrationResult(plan, tuple(notes))
 
 
 def migrate_factory_job(document: object) -> MigrationResult:
     if not isinstance(document, dict):
         raise ValueError("factory job must be a JSON object")
     job = copy.deepcopy(document)
+    notes: list[str] = []
     version = job.get("schema_version")
-    if version == "1.1.0":
+    if version == "1.2.0":
         return MigrationResult(job, ())
-    if version != "1.0.0":
+    if version not in ("1.0.0", "1.1.0"):
         raise ValueError(f"unsupported factory job schema_version {version!r}")
-    job["schema_version"] = "1.1.0"
-    if job.get("approval") is not None:
-        raise ValueError("factory job 1.0.0 approval evidence cannot be migrated safely")
-    if job.get("batch") is not None and not isinstance(job.get("batch"), dict):
-        raise ValueError("factory job batch must be a JSON object or null")
-    if job.get("batch") is not None and not _is_transaction_batch(job["batch"]):
-        job["batch"] = None
-    if job.get("usage_limit") is not None and not _is_usage_limit(job["usage_limit"]):
-        job["usage_limit"] = None
-    job["approval"] = {"current": None, "history": []}
-    job["evaluation"] = None
-    job["optimization"] = None
-    items = job.get("items", [])
-    if isinstance(items, list):
-        for item in items:
-            if isinstance(item, dict):
-                item.setdefault("attempt_id", None)
-                item.setdefault("attempt_started_at", None)
-                item.setdefault("receipt_id", None)
-                item.setdefault("idempotency_key", None)
-                item.setdefault("error_category", None)
-                key = item["idempotency_key"]
-                if key is not None and (
-                    not isinstance(key, str) or SHA256_PATTERN.fullmatch(key) is None
-                ):
-                    item["idempotency_key"] = None
-    return MigrationResult(job, ("migrated factory job 1.0.0 to 1.1.0",))
+    if version == "1.0.0":
+        if job.get("approval") is not None:
+            raise ValueError("factory job 1.0.0 approval evidence cannot be migrated safely")
+        if job.get("batch") is not None and not isinstance(job.get("batch"), dict):
+            raise ValueError("factory job batch must be a JSON object or null")
+        if job.get("batch") is not None and not _is_transaction_batch(job["batch"]):
+            job["batch"] = None
+        if job.get("usage_limit") is not None and not _is_usage_limit(job["usage_limit"]):
+            job["usage_limit"] = None
+        job["approval"] = {"current": None, "history": []}
+        job["evaluation"] = None
+        job["optimization"] = None
+        items = job.get("items", [])
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    item.setdefault("attempt_id", None)
+                    item.setdefault("attempt_started_at", None)
+                    item.setdefault("receipt_id", None)
+                    item.setdefault("idempotency_key", None)
+                    key = item["idempotency_key"]
+                    if key is not None and (
+                        not isinstance(key, str) or SHA256_PATTERN.fullmatch(key) is None
+                    ):
+                        item["idempotency_key"] = None
+                    item.setdefault("error_category", None)
+        notes.append("migrated factory job 1.0.0 to 1.1.0")
+    # 1.1.0 -> 1.2.0 adds the durable per-round numeric history. Historic rounds
+    # cannot be backfilled (their numbers were never kept), so the default is an
+    # empty record rather than an invented one.
+    job["schema_version"] = "1.2.0"
+    numeric_history = job.setdefault("numeric_history", [])
+    if not isinstance(numeric_history, list):
+        raise ValueError("factory job numeric_history must be a list")
+    notes.append("migrated factory job 1.1.0 to 1.2.0")
+    return MigrationResult(job, tuple(notes))

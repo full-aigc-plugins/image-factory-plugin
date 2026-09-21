@@ -1,5 +1,8 @@
 {
   "version": 1,
   "dest": "skills/",
-  "skills": ["image-factory-harness"]
+  "skills": [
+    "image-factory-harness",
+    "image-factory-review"
+  ]
 }

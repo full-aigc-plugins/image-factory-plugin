@@ -1,7 +1,7 @@
 {
   "name": "image-factory",
-  "version": "0.1.6",
-  "description": "Generate images, covers and social cards, or run governed batches with verified receipts.",
+  "version": "0.2.0",
+  "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
   "author": {
     "name": "Full Stack Skills / PartMe.AI"
   },
@@ -14,7 +14,7 @@
   ],
   "interface": {
     "displayName": "Image Factory",
-    "shortDescription": "Generate images or run governed image batches",
+    "shortDescription": "Discover, batch-produce, and evaluate images",
     "longDescription": "Direct image, cover and social-card generation through unchanged Baoyu skills, plus governed batch production with prompt discovery, verified receipts, evaluation, and recovery.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "websiteURL": "https://github.com/full-aigc-plugins/image-factory-plugin"

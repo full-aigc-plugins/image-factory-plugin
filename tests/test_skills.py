@@ -18,6 +18,7 @@ import job_ledger  # noqa: E402
 
 FACTORY_EXPECTED = (
     "image-factory-harness",
+    "image-factory-review",
     "image-factory-use",
     "image-factory-run",
     "image-factory-judge",
