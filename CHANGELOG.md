@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0 — 2026-09-23
+
+- Add opt-in versioned aHash/dHash/pHash duplicate evidence while retaining the original aHash-only plan path; image_batch 1.6.0 and scores 1.4.0 migrate without inventing visual evidence.
+- Add sample-sufficient Wilson calibration, model/provider/style/shot strata, and reviewer-version drift alerts; thresholds never auto-change.
+- Add verified-anchor comparison, evidence-region overlays, dimension filtering, and a 390px review workspace with export-only human label drafts.
+- Add a runtime acceptance matrix and CLI for separate paid-story, host, model, and fault cases. All real 4/8/12, cross-host/model, and fault-injection cases remain `NOT_RUN`; synthetic tests are not live continuity acceptance.
+
 ## 0.7.0 — 2026-09-23
 
 - Add image_batch 1.5.0 structured story state with permanent locks, scene locks, inherited variables, explicit transitions, deterministic prompt compilation, and state-preserving rework.

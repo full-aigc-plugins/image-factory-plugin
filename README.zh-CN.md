@@ -6,7 +6,7 @@
 
 > 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
 
-[![版本](https://img.shields.io/badge/version-0.7.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.7.0)
+[![版本](https://img.shields.io/badge/version-0.8.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.8.0)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [命令契约](#命令契约) · [故障排查](#故障排查)
@@ -15,7 +15,7 @@
 
 `image-factory` 提供两层互补能力。用户确认生图后，Harness 依据显式宿主元数据或当前会话实际工具能力识别环境；在 Codex 中优先使用无需 Provider API Key 的内置 `imagegen` / `image_gen`。只有明确观测到图片额度耗尽，才会在 Codex 中提供 Baoyu 降级；ZCode、Kimi 或其他宿主则只在没有可验证原生图片能力时考虑 Baoyu。Factory 工作流继续负责计划校验、批准、回执、评测与恢复等受治理批次能力。
 
-版本 `0.7.0` 新增 image_batch 1.5.0 结构化故事状态、4/8/12 镜头连续性基准合同、版本化视觉评审器与 scores 1.3.0 来源记录。内置“勤能补拙”基准当前为 synthetic；真实模型连续性仍需逐图验收，不被单测冒充。
+版本 `0.8.0` 增加可选多哈希近重复证据、分层校准与漂移告警、移动审片工作区和真实运行验收矩阵。内置“勤能补拙”基准仍为 synthetic；真实付费 4/8/12、跨宿主/模型与故障注入均为 `NOT_RUN`，人物和元素稳定性尚未通过真实验收。
 
 ### 适合谁
 
@@ -58,7 +58,7 @@
 |---|---|
 | 插件 ID | `image-factory` |
 | 宿主 | Codex CLI 或 ChatGPT 桌面应用 |
-| 当前版本 | `0.7.0`（P0 Foundation release candidate，详见[成熟度](#成熟度)） |
+| 当前版本 | `0.8.0`（P1 Evidence release candidate，详见[成熟度](#成熟度)） |
 | 插件清单 | `.codex-plugin/plugin.json` |
 | MCP 配置 | 无——在 MCP 服务器存在之前，清单一律禁止写 MCP 条目 |
 | 主要语言 | Python 3.11+ |
@@ -157,7 +157,7 @@ CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖�
 ### 从插件市场安装
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.7.0
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.8.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
@@ -260,9 +260,14 @@ bin/image-factory status image-plan.json
 被删除后可用 `summarize` 从已核验回执与评分重建，全程不调用生成。
 
 标准视觉评审器可通过重复的 `--reviewer-report` 接入；评审器 id、版本、能力、置信度、
-不确定度和证据区域会保留在 scores 1.3.0 中，低置信度 finding 不驱动返工。离线连续性
+不确定度和证据区域会保留在 scores 1.4.0 中，低置信度 finding 不驱动返工。离线连续性
 基准使用 `benchmark --pack ... --run ... --out ...` 聚合一次通过率、人物漂移率、元素丢失率、
 返工、成本和耗时。参见[视觉连续性 Foundation](docs/guides/visual-consistency-foundation.zh-CN.md)。
+0.8.0 增加可选 aHash/dHash/pHash 逐算法距离、Wilson 区间与分层/漂移报告、390px
+基准帧对照审片页及独立运行验收矩阵。真实付费 4/8/12、跨宿主/模型与故障注入仍全部是
+`NOT_RUN`，不能由 synthetic 测试推断人物或元素稳定性已通过。详见
+[生产质量证据](docs/guides/production-quality-evidence.zh-CN.md)与
+[真实运行验收矩阵](docs/guides/runtime-acceptance-matrix.zh-CN.md)。
 
 ## 配置
 
@@ -286,6 +291,8 @@ bin/image-factory status image-plan.json
 | `recover` | 把回执核对进台账 | — |
 | `evaluate` | 对批次运行确定性门禁 | — |
 | `summarize` | 从已核验证据重建 contact sheet 与故事板 | `--out-dir` |
+| `calibrate` | 重新计算分层校准和评审器漂移，不改阈值 | `--scores`、`--out` |
+| `acceptance-init/add/record` | 独立记录真实运行案例，不启动生成 | `--matrix`、`--case` |
 | `optimize` | 依据失败项生成新一轮 prompt | — |
 | `status` | 读取当前台账状态 | — |
 

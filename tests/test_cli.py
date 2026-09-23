@@ -243,6 +243,7 @@ class ValidatePlanCommandTests(unittest.TestCase):
             "migrated image batch 1.2.0 to 1.3.0",
             "migrated image batch 1.3.0 to 1.4.0",
             "migrated image batch 1.4.0 to 1.5.0",
+            "migrated image batch 1.5.0 to 1.6.0",
         ])
 
     def test_invalid_plan_exits_with_usage_error(self) -> None:
@@ -273,6 +274,7 @@ class QuoteCommandTests(unittest.TestCase):
             "migrated image batch 1.2.0 to 1.3.0",
             "migrated image batch 1.3.0 to 1.4.0",
             "migrated image batch 1.4.0 to 1.5.0",
+            "migrated image batch 1.5.0 to 1.6.0",
         ])
         self.assertFalse(self.fixture.job_path.exists())
 

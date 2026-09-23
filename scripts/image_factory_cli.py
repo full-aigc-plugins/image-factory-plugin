@@ -45,6 +45,7 @@ import prompt_library
 import provenance
 import receipt_store
 import reviewer_adapter
+import runtime_acceptance
 import schema_lite
 import visual_summary
 
@@ -1063,6 +1064,7 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
         advisory=advisory,
         human_labels=labels,
         near_duplicate_hamming_distance=result.near_duplicate_hamming_distance,
+        near_duplicate_policy=result.near_duplicate_policy,
         reviewer_reports=reviewer_reports,
     )
     scores_path = Path(args.scores)
@@ -1259,6 +1261,7 @@ def command_summarize(args: argparse.Namespace) -> tuple[int, str]:
         scores=scores,
         destination_dir=Path(args.destination),
         output_dir=Path(args.out_dir),
+        anchors=_load_json(Path(args.anchors)) if args.anchors else None,
     )
     return EXIT_OK, _emit({"ok": True, **paths}, args.json)
 
@@ -1390,6 +1393,84 @@ def command_benchmark(args: argparse.Namespace) -> tuple[int, str]:
     )
 
 
+def _validated_acceptance_matrix(matrix: dict) -> None:
+    schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" / "runtime_acceptance_matrix.schema.json").read_text(encoding="utf-8"))
+    errors = schema_lite.validate(matrix, schema)
+    if errors:
+        raise ValueError(f"runtime acceptance matrix invalid: {'; '.join(errors)}")
+    runtime_acceptance.validate_matrix(matrix)
+
+
+def command_acceptance_init(args: argparse.Namespace) -> tuple[int, str]:
+    """Create an explicit NOT_RUN matrix; never overwrite existing evidence."""
+    target = Path(args.out)
+    if target.exists():
+        raise ValueError(f"matrix already exists: {target}")
+    matrix = runtime_acceptance.new_matrix(plugin_version=args.plugin_version)
+    _validated_acceptance_matrix(matrix)
+    atomic_json.write_json_atomic(target, matrix)
+    return EXIT_OK, _emit({"ok": True, "matrix": str(target), "statuses": {"NOT_RUN": len(matrix["cases"])}}, args.json)
+
+
+def command_acceptance_record(args: argparse.Namespace) -> tuple[int, str]:
+    """Record one independently evidenced case; this command does not run it."""
+    target, evidence_path = Path(args.matrix), Path(args.record)
+    refuse_path_aliases({"matrix": target, "record": evidence_path})
+    matrix = _load_json(target)
+    _validated_acceptance_matrix(matrix)
+    record = _load_json(evidence_path)
+    if not isinstance(record, dict):
+        raise ValueError("acceptance record must be an object")
+    updated = runtime_acceptance.record_case(matrix, args.case, record)
+    _validated_acceptance_matrix(updated)
+    atomic_json.write_json_atomic(target, updated)
+    return EXIT_OK, _emit({"ok": True, "matrix": str(target), "case_id": args.case, "status": record.get("status")}, args.json)
+
+
+def command_acceptance_add(args: argparse.Namespace) -> tuple[int, str]:
+    """Declare an independent model or host combination, initially NOT_RUN."""
+    target = Path(args.matrix)
+    matrix = _load_json(target)
+    _validated_acceptance_matrix(matrix)
+    updated = runtime_acceptance.add_case(
+        matrix, case_id=args.case, kind=args.kind, host=args.host,
+        model=args.model, provider=args.provider, prompt_strategy=args.prompt_strategy,
+    )
+    _validated_acceptance_matrix(updated)
+    atomic_json.write_json_atomic(target, updated)
+    return EXIT_OK, _emit({"ok": True, "matrix": str(target), "case_id": args.case, "status": "NOT_RUN"}, args.json)
+
+
+def command_calibrate(args: argparse.Namespace) -> tuple[int, str]:
+    """Recompute advisory calibration without modifying thresholds or the ledger."""
+    paths = {"scores": Path(args.scores), "out": Path(args.out)}
+    if args.item_context:
+        paths["item_context"] = Path(args.item_context)
+    if args.approved_baseline:
+        paths["approved_baseline"] = Path(args.approved_baseline)
+    refuse_path_aliases(paths)
+    scores = contract_migrations.migrate_scores(_load_json(Path(args.scores))).document
+    schema = json.loads(SCORES_SCHEMA_PATH.read_text(encoding="utf-8"))
+    errors = schema_lite.validate(scores, schema)
+    if errors:
+        raise ValueError(f"scores schema invalid: {'; '.join(errors)}")
+    item_context = _load_json(Path(args.item_context)) if args.item_context else None
+    approved_baseline = _load_json(Path(args.approved_baseline)) if args.approved_baseline else None
+    report = calibration.build_report(
+        scores,
+        min_samples=args.min_samples,
+        item_context=item_context,
+        approved_baseline=approved_baseline,
+        drift_tolerance=args.drift_tolerance,
+    )
+    report_schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" / "calibration_report.schema.json").read_text(encoding="utf-8"))
+    errors = schema_lite.validate(report, report_schema)
+    if errors:
+        raise ValueError(f"calibration report invalid: {'; '.join(errors)}")
+    atomic_json.write_json_atomic(Path(args.out), report)
+    return EXIT_OK, _emit({"ok": True, "out": args.out, "labeled_count": report["overall"]["labeled_count"], "sample_sufficient": report["overall"]["sample_sufficient"], "drift_review_required": report["drift"]["review_required"]}, args.json)
+
+
 def build_parser() -> argparse.ArgumentParser:
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument("--codex-home", default=None)
@@ -1410,6 +1491,32 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--pack", required=True)
     benchmark.add_argument("--run", action="append", required=True)
     benchmark.add_argument("--out", required=True)
+
+    calibrate = subparsers.add_parser("calibrate", parents=[shared])
+    calibrate.add_argument("--scores", required=True)
+    calibrate.add_argument("--item-context", default=None)
+    calibrate.add_argument("--approved-baseline", default=None)
+    calibrate.add_argument("--min-samples", type=int, default=30)
+    calibrate.add_argument("--drift-tolerance", type=float, default=0.05)
+    calibrate.add_argument("--out", required=True)
+
+    acceptance_init = subparsers.add_parser("acceptance-init", parents=[shared])
+    acceptance_init.add_argument("--plugin-version", required=True)
+    acceptance_init.add_argument("--out", required=True)
+
+    acceptance_record = subparsers.add_parser("acceptance-record", parents=[shared])
+    acceptance_record.add_argument("--matrix", required=True)
+    acceptance_record.add_argument("--case", required=True)
+    acceptance_record.add_argument("--record", required=True)
+
+    acceptance_add = subparsers.add_parser("acceptance-add", parents=[shared])
+    acceptance_add.add_argument("--matrix", required=True)
+    acceptance_add.add_argument("--case", required=True)
+    acceptance_add.add_argument("--kind", choices=("cross_host", "model_comparison", "fault"), required=True)
+    acceptance_add.add_argument("--host", required=True)
+    acceptance_add.add_argument("--model", default=None)
+    acceptance_add.add_argument("--provider", default=None)
+    acceptance_add.add_argument("--prompt-strategy", default=None)
 
     validate = subparsers.add_parser("validate-plan", parents=[shared])
     validate.add_argument("plan")
@@ -1448,6 +1555,7 @@ def build_parser() -> argparse.ArgumentParser:
     summarize.add_argument("--plan", required=True)
     summarize.add_argument("--scores", required=True)
     summarize.add_argument("--out-dir", required=True)
+    summarize.add_argument("--anchors", default=None, help="JSON map of current item id to verified anchor item id")
 
     status = subparsers.add_parser("status", parents=[shared])
     status.add_argument("--job", required=True)
@@ -1461,6 +1569,10 @@ def build_parser() -> argparse.ArgumentParser:
 HANDLERS = {
     "prompt-search": command_prompt_search,
     "benchmark": command_benchmark,
+    "calibrate": command_calibrate,
+    "acceptance-init": command_acceptance_init,
+    "acceptance-record": command_acceptance_record,
+    "acceptance-add": command_acceptance_add,
     "probe": command_probe,
     "validate-plan": command_validate_plan,
     "quote": command_quote,

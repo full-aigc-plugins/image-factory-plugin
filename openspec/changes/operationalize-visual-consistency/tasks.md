@@ -31,21 +31,21 @@
 
 ## 5. P1 Evidence — duplicate, calibration and drift
 
-- [ ] 5.1 为 aHash/dHash/pHash 组合先写差异图、裁剪和误报回归测试
-- [ ] 5.2 增加版本化多哈希策略与逐算法距离证据，保留 aHash 兼容模式
-- [ ] 5.3 为样本充足性、Wilson 置信区间、分层统计和 reviewer drift 写失败测试
-- [ ] 5.4 扩展校准 schema/实现；样本不足不产生可采纳阈值，漂移不自动改阈值
+- [x] 5.1 为 aHash/dHash/pHash 组合先写差异图、裁剪和误报回归测试
+- [x] 5.2 增加版本化多哈希策略与逐算法距离证据，保留 aHash 兼容模式
+- [x] 5.3 为样本充足性、Wilson 置信区间、分层统计和 reviewer drift 写失败测试
+- [x] 5.4 扩展校准 schema/实现；样本不足不产生可采纳阈值，漂移不自动改阈值
 
 ## 6. P1 Evidence — human review workspace
 
-- [ ] 6.1 扩展 storyboard 索引：基准帧、证据区域、来源、分歧和人工标签
-- [ ] 6.2 增加基准/当前并排、维度筛选、差异标记与人工理由录入
-- [ ] 6.3 添加 390x884、768x1024、1280x1024 布局检查与静态安全测试
-- [ ] 6.4 证明审片页仍可从已核验回执重建且不复制原图、不调用模型、不修改台账
+- [x] 6.1 扩展 storyboard 索引：基准帧、证据区域、来源、分歧和人工标签
+- [x] 6.2 增加基准/当前并排、维度筛选、差异标记与人工理由录入
+- [ ] 6.3 添加 390x884、768x1024、1280x1024 布局检查与静态安全测试（静态与转义测试已通过；浏览器访问本地页被策略阻止，真实三档渲染仍未验收）
+- [x] 6.4 证明审片页仍可从已核验回执重建且不复制原图、不调用模型、不修改台账
 
 ## 7. P2 Runtime acceptance
 
-- [ ] 7.1 新增 runtime acceptance matrix schema 和记录命令，状态限定为 PASS/FAIL/BLOCKED/NOT_RUN
+- [x] 7.1 新增 runtime acceptance matrix schema 和记录命令，状态限定为 PASS/FAIL/BLOCKED/NOT_RUN；初始 11 案例全部 `NOT_RUN`
 - [ ] 7.2 执行真实付费 4/8/12 镜头连续性基准并逐图人工标注
 - [ ] 7.3 分模型、供应商和提示策略运行足够样本，生成可校准比较报告
 - [ ] 7.4 执行 Codex/ZCode/Kimi 可用组合的独立宿主验收，未运行组合保持 NOT_RUN
@@ -59,3 +59,4 @@
 - [x] 8.4 按完成阶段 bump minor 版本，同步四份 manifest 与市场 catalog
 - [x] 8.5 提交、推送、PR/CI、tag/release、市场同步和已安装 Codex 缓存验收（PR #8、v0.7.0、市场 c64a7f9、缓存 510 tests）
 - [ ] 8.6 只有全部 P0/P1/P2 证据完成后才归档本 change；任何 live 缺口继续保持未完成
+- [ ] 8.7 发布 0.8.0 P1 证据与矩阵更新；核对 PR/CI、市场版本和安装缓存，不改变 P2 `NOT_RUN`

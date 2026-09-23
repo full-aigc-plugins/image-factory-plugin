@@ -63,7 +63,7 @@ class ImageBatchMigrationTests(unittest.TestCase):
 
         result = contract_migrations.migrate_image_batch(original)
 
-        self.assertEqual(result.document["schema_version"], "1.5.0")
+        self.assertEqual(result.document["schema_version"], "1.6.0")
         self.assertIs(result.document["limits"]["require_approval_before_run"], True)
         self.assertIs(result.document["judge_policy"]["require_human_labels"], True)
         self.assertEqual(
@@ -74,6 +74,7 @@ class ImageBatchMigrationTests(unittest.TestCase):
                 "migrated image batch 1.2.0 to 1.3.0",
                 "migrated image batch 1.3.0 to 1.4.0",
                 "migrated image batch 1.4.0 to 1.5.0",
+                "migrated image batch 1.5.0 to 1.6.0",
             ),
         )
         self.assertEqual(schema_lite.validate(result.document, load_schema("image_batch.schema.json")), [])
@@ -81,7 +82,7 @@ class ImageBatchMigrationTests(unittest.TestCase):
 
     def test_current_plan_returns_an_unchanged_copy(self) -> None:
         original = {
-            "schema_version": "1.5.0",
+            "schema_version": "1.6.0",
             "batch_id": "portrait-study",
             "round": 1,
             "items": [{"id": "item-01", "prompt": "portrait"}],
@@ -107,10 +108,10 @@ class ImageBatchMigrationTests(unittest.TestCase):
             "items": [{"id": "item-01", "prompt": "portrait"}],
         }
         result = contract_migrations.migrate_image_batch(original)
-        self.assertEqual(result.document["schema_version"], "1.5.0")
+        self.assertEqual(result.document["schema_version"], "1.6.0")
         self.assertNotIn("consistency_profile", result.document)
         self.assertNotIn("story_state", result.document)
-        self.assertEqual(result.notes, ("migrated image batch 1.4.0 to 1.5.0",))
+        self.assertEqual(result.notes, ("migrated image batch 1.4.0 to 1.5.0", "migrated image batch 1.5.0 to 1.6.0"))
 
 
 class ScoresMigrationTests(unittest.TestCase):
@@ -121,12 +122,12 @@ class ScoresMigrationTests(unittest.TestCase):
             "round": 1,
         }
         result = contract_migrations.migrate_scores(original)
-        self.assertEqual(result.document["schema_version"], "1.3.0")
+        self.assertEqual(result.document["schema_version"], "1.4.0")
         self.assertEqual(result.document["reviewer_reports"], [])
-        self.assertEqual(result.notes, ("migrated scores 1.2.0 to 1.3.0",))
+        self.assertEqual(result.notes, ("migrated scores 1.2.0 to 1.3.0", "migrated scores 1.3.0 to 1.4.0"))
 
     def test_current_scores_returns_an_unchanged_copy(self) -> None:
-        original = {"schema_version": "1.3.0", "reviewer_reports": []}
+        original = {"schema_version": "1.4.0", "reviewer_reports": []}
         result = contract_migrations.migrate_scores(original)
         self.assertEqual(result.document, original)
         self.assertIsNot(result.document, original)

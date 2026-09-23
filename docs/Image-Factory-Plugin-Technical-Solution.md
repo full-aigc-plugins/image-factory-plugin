@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | Implemented for the 0.7.0 P0 Foundation release candidate: structured story state, continuity benchmark contracts, and versioned visual review; live model continuity remains a separate runtime acceptance gate |
+> | Status | Implemented for the 0.8.0 P1 Evidence release candidate: multi-hash, stratified calibration, mobile review, and runtime matrix; live model continuity remains a separate runtime acceptance gate |
 > | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
 > | Audience | Implementers extending or reviewing this plugin |
 > | Runtime evidence | `docs/verification/` |

@@ -1,8 +1,21 @@
-# Runtime and release verification: 0.7.0 candidate status
+# Runtime and release verification: 0.8.0 candidate status
 
-The `0.7.0` candidate adds structured story state, fixed synthetic 4/8/12-shot benchmark packs, a no-generation benchmark aggregator, and versioned visual reviewer evidence on top of the `0.6.0` quality contracts. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh installation, remote SHA, paid-generation proof, or live character-continuity acceptance. Current-candidate local evidence covers 510 deterministic and synthetic tests. The bundled diligence-story packs are explicitly `synthetic`; fresh installation and live continuity generation remain separate release gates.
+The `0.8.0` candidate adds versioned multi-hash composition evidence, stratified calibration and reviewer-drift alerts, an export-only review workspace, and a structured runtime acceptance matrix. The deterministic and synthetic tests do not prove live character or element continuity. The historical `0.1.2` runtime record below remains immutable and must not be reused as fresh 0.8.0 acceptance.
 
-## 0.7.0 visual-continuity acceptance boundary
+## 0.8.0 acceptance boundary
+
+| Case | Status | Evidence |
+| --- | --- | --- |
+| `multi_hash_and_calibration_contract` | `PASS` | Local synthetic algorithm, schema, migration, CLI, and regression tests only. |
+| `review_workspace_static_layout` | `PASS` | Deterministic rebuild, verified-anchor, HTML escaping and 390px CSS contract tests. |
+| `review_workspace_browser_390_768_1280` | `NOT_RUN` | Browser access to the local review page was blocked by policy; no viewport rendering claim. |
+| `live_4_8_12_continuity_benchmark` | `NOT_RUN` | No paid 0.8.0 story generation or frame-by-frame acceptance. |
+| `cross_host_model_provider_comparison` | `NOT_RUN` | No 0.8.0 Codex/ZCode/Kimi or model/provider comparison. |
+| `fault_injection_acceptance_matrix` | `NOT_RUN` | Matrix is initialized; live interruption, duplicate callback, concurrency, disk-full and quota tests have not run. |
+
+See [`../../data/benchmarks/runtime-acceptance-matrix.json`](../../data/benchmarks/runtime-acceptance-matrix.json) for per-case statuses. The matrix only moves out of `NOT_RUN` with host-specific live evidence.
+
+## Historical 0.7.0 visual-continuity acceptance boundary
 
 | Case | Status | Evidence |
 | --- | --- | --- |

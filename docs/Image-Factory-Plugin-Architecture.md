@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | 0.7.0 P0 Foundation release candidate: structured story state, continuity benchmark contracts, and versioned visual review; live continuity remains `NOT_RUN` |
+> | Status | 0.8.0 P1 Evidence release candidate: multi-hash, stratified calibration, mobile review, and runtime matrix; live continuity remains `NOT_RUN` |
 > | Scope | The implemented batch image core and prompt-discovery layer |
 > | Audience | Maintainers, reviewers, and integrators of this plugin |
 > | Out of scope | Workbench UI, parent project state, and non-image media pipelines |
@@ -203,7 +203,7 @@ Runtime prerequisites: a Codex installation the user already has, a signed-in ac
 
 Python 3.11 or later is required for `tomllib`. All scripts use the standard library only. GitHub Actions defines six offline cells: Linux, macOS, and Windows on Python 3.11 and 3.13. Each cell compiles sources, runs the full suite, validates the distribution, and checks the diff without installing runtime dependencies.
 
-This document describes the implemented 0.7.0 P0 Foundation image core and prompt-discovery layer. Workbench UI, parent project state, and non-image media pipelines are separate product responsibilities and are not implemented or planned in this plugin repository.
+This document describes the implemented 0.8.0 P1 Evidence image core and prompt-discovery layer. Workbench UI, parent project state, and non-image media pipelines are separate product responsibilities and are not implemented or planned in this plugin repository.
 
 The design leaves three clean seams:
 

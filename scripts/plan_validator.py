@@ -93,6 +93,7 @@ class PlanResult:
     migration_notes: tuple[str, ...]
     consistency_profile_sha256: str | None = None
     near_duplicate_hamming_distance: int | None = None
+    near_duplicate_policy: dict | None = None
 
 
 def file_sha256(target: Path) -> str:
@@ -557,6 +558,9 @@ def validate_plan(
     reject_duplicates = policy.get("reject_duplicates", True)
     advisory_enabled = policy.get("advisory_enabled", False)
     near_duplicate_hamming_distance = policy.get("near_duplicate_hamming_distance")
+    near_duplicate_policy = policy.get("near_duplicate_policy")
+    if near_duplicate_hamming_distance is not None and near_duplicate_policy is not None:
+        errors.append(PlanError("plan_duplicate_policy_conflict", "legacy and multi-hash policies are mutually exclusive"))
     plan_sha256 = ""
     if not errors:
         plan_sha256 = canonical_plan_sha256(
@@ -575,6 +579,7 @@ def validate_plan(
                     "advisory_enabled": advisory_enabled,
                     "require_human_labels": require_human_labels,
                     "near_duplicate_hamming_distance": near_duplicate_hamming_distance,
+                    "near_duplicate_policy": near_duplicate_policy,
                 },
                 "consistency_profile_sha256": profile_sha256,
                 "items": [
@@ -633,4 +638,5 @@ def validate_plan(
         migration_notes=migration.notes,
         consistency_profile_sha256=profile_sha256,
         near_duplicate_hamming_distance=near_duplicate_hamming_distance,
+        near_duplicate_policy=near_duplicate_policy,
     )
