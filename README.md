@@ -6,16 +6,16 @@
 
 > Turn a reference-driven image task into an auditable production run — validated plan, approved spend, and a hash-verified receipt for every artifact.
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.2.0)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.3.0)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [Install](#installation) · [Quick start](#quick-start) · [Command contract](#command-contract) · [Troubleshooting](#troubleshooting)
 
 ## Positioning
 
-`image-factory` now exposes two complementary layers. The unchanged Baoyu skills handle direct image generation, article covers, and social image-card series. The Factory workflow handles governed image batches: it validates a batch plan, asks the selected host or provider image tool to produce each item, collects every artifact with a recomputed hash, evaluates the batch against deterministic gates, and turns failures into a new prompt round that you approve before it runs.
+`image-factory` exposes two complementary layers. After the user confirms generation, the Harness identifies the current session from explicit host metadata or actual tool capabilities. In Codex it prefers the built-in `imagegen` / `image_gen` path, which needs no provider API key. The unchanged Baoyu skills are offered in Codex only after explicit image-quota exhaustion; on ZCode, Kimi, or another host they are considered only when that session has no verified native image capability. The Factory workflow continues to handle governed batches with validation, approval, receipts, evaluation, and recovery.
 
-Version `0.2.0` adds loop-convergence evidence (durable per-round numeric history, named-dimension critique, regression and two-level stall detection) and declared pixel checks (plan-declared corner-colour, minimum-margin, and ink-colour gates evaluated on a standard-library decoder), on top of the `0.1.6` supply-chain hardening and the unchanged external Baoyu workflows. Factory itself still holds no API key and never retries automatically; `baoyu-image-gen` may use a user-selected provider credential or the logged-in Codex CLI according to its unchanged upstream instructions.
+Version `0.3.0` adds host-aware routing and the verified `imagegen` snapshot from `image-factory-skills v1.1.0`. Codex uses its built-in image capability first; Baoyu is offered only after explicit image-quota exhaustion. The existing convergence, pixel-check, receipt, and recovery contracts remain unchanged.
 
 ### Who it is for
 
@@ -57,7 +57,7 @@ Image batch + receipts + evaluation record
 |---|---|
 | Plugin ID | `image-factory` |
 | Host | Codex CLI or ChatGPT desktop app |
-| Current version | `0.2.0` (supply-chain release candidate — see [Maturity](#maturity)) |
+| Current version | `0.3.0` (supply-chain release candidate — see [Maturity](#maturity)) |
 | Plugin manifest | `.codex-plugin/plugin.json` |
 | MCP configuration | none — the manifest forbids an MCP entry until an MCP server exists |
 | Primary language | Python 3.11+ |
@@ -77,14 +77,14 @@ Image batch + receipts + evaluation record
 | Evaluation | A completed batch | Deterministic gate results plus an advisory score | The model-authored score is advisory only | Stable |
 | Optimization | Failed items | A new prompt round requiring approval | Never overwrites the previous round | Stable |
 | Recovery | An interrupted job | Reconciled ledger without re-invoking Codex | Reconciles verified receipts only | Stable |
-| Direct image generation | A prompt and optional references | One or more images through the chosen Baoyu backend | Provider availability and upstream confirmation rules apply | External managed skill |
-| Article cover | Article content and visual preferences | Cover prompt record plus raster cover | Confirmation is required unless explicitly skipped | External managed skill |
-| Social image cards | Source content and visual strategy | A 1-10 card series with saved prompts | Uses the Baoyu anchor-chain and confirmation workflow | External managed skill |
+| Codex direct image generation | A prompt and optional references | One or more images through built-in `image_gen` | Preferred whenever the current Codex session exposes the tool | Managed `imagegen` snapshot |
+| External image fallback | A confirmed quota event or a non-Codex host without native image capability | Image, cover, or social-card outputs through the selected Baoyu workflow | User chooses the fallback and configures provider credentials locally | External managed skills |
 
 ### Not responsible for
 
 - Reimplementing or patching the Baoyu workflows. Their complete source is synchronized from an immutable upstream release and checked by digest.
-- Choosing a provider on the user's behalf. Direct Baoyu generation follows its saved preferences and confirmation rules; the governed Factory path records only what its execution backend reports.
+- Inferring the host from installed skills or filesystem paths. The Harness uses current-session metadata or actual tool capability.
+- Choosing a provider or handling credentials on the user's behalf. A Baoyu fallback requires an explicit user choice, and credentials stay in local environment or provider configuration rather than chat.
 - Controlling size, quality, background, or image count. The built-in tool accepts only a prompt and reference images, so batch items differ only by those.
 - Owning a graphical workbench, project management, or video composition. Those surfaces are outside this repository.
 - Writing, translating, formatting, or publishing articles. Those capabilities belong in the separate content-writing plugin.
@@ -155,7 +155,7 @@ CI runs on Linux, macOS, and Windows without installing any package at test time
 ### From the plugin marketplace
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.2.0
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.3.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 

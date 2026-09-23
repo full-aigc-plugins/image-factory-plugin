@@ -1,40 +1,50 @@
 ---
 name: image-factory-harness
-description: Route image work between direct Baoyu generation and governed Image Factory batches, preserve each workflow's real execution boundary, and normalize artifact evidence for delivery or video handoff. Use when selecting an image workflow, handling a request that mixes creative generation with approval or receipts, or preparing image outputs for downstream media work.
+description: Route confirmed image generation by current-session host capability, prefer Codex imagegen before any external provider, allow Baoyu fallback only after explicit Codex image quota exhaustion, preserve governed Image Factory boundaries, and normalize delivery evidence. Use when selecting an image workflow, handling a generation failure, or preparing image outputs for downstream media work.
 ---
 
 # 图片能力 Harness
 
 ## When to use
 
-用本技能决定“由谁执行”，而不是在这里生成图片。它只负责五个入口的能力仲裁：
+用本技能决定“由谁执行”，而不是在这里生成图片。用户确认要生图后，先识别当前会话
+宿主与实际工具能力，再选择入口：
 
 ```mermaid
 flowchart TD
-    A[用户生图请求] --> B{意图分类}
-    B -->|普通生图/参考图/指定 Provider| C[baoyu-image-gen]
-    B -->|文章封面| D[baoyu-cover-image]
-    B -->|小红书/社交图片卡片| E[baoyu-xhs-images]
-    B -->|审批/报价/回执/评测/恢复| F[image-factory-use]
-    B -->|既要创作模板又要治理| G{当前 V1 选择}
-    G -->|创作便利优先| C
-    G -->|审计治理优先| F
-    C --> H[统一交付摘要]
-    D --> H
-    E --> H
-    F --> H
-    H --> I[可交给 Video Factory]
+    A[用户生图请求 已确认执行] --> B{是否要求 Factory 治理证据}
+    B -->|是| F[image-factory-use]
+    B -->|否| C{current-session 宿主证据}
+    C -->|Codex 且有 image_gen| D[imagegen]
+    C -->|ZCode / Kimi / 其他| E{有真实原生生图能力}
+    C -->|unknown| U[报告无法自动判定]
+    E -->|有| N[宿主原生路径]
+    E -->|无| X[外部 Provider 路径]
+    D --> Q{明确图片额度耗尽}
+    F --> Q
+    Q -->|否| H[统一交付摘要]
+    Q -->|是且用户选择降级| R{内容类型}
+    R -->|普通图| I[baoyu-image-gen]
+    R -->|封面| J[baoyu-cover-image]
+    R -->|社交卡片| K[baoyu-xhs-images]
+    X --> R
+    N --> H
+    I --> H
+    J --> H
+    K --> H
+    H --> V[可交给 Video Factory]
 ```
 
 | 用户目标 | 交给 |
 | --- | --- |
-| 普通生图、参考图生成、指定后端或批量 prompt 文件 | **`baoyu-image-gen`** |
-| 文章封面、头图、Cover | **`baoyu-cover-image`** |
-| 小红书、微信图片卡片、社交信息图系列 | **`baoyu-xhs-images`** |
+| Codex 中已确认的直接生图或编辑，且当前会话暴露 `image_gen` | 优先 **`imagegen`** |
+| Codex 内置路径有明确额度耗尽证据，用户选择普通图降级 | **`baoyu-image-gen`** |
+| Codex 内置路径有明确额度耗尽证据，用户选择封面降级 | **`baoyu-cover-image`** |
+| Codex 内置路径有明确额度耗尽证据，用户选择社交卡片降级 | **`baoyu-xhs-images`** |
 | 需要计划校验、报价、批准、回执、评测、优化轮次或恢复 | **`image-factory-use`** |
 | 在 Factory 治理路径内，需要独立分维度评审或收敛/回归/停滞证据 | **`image-factory-review`** |
 
-五个入口已经随插件提供。只按技能名称交接，不复制其正文，也不在 Harness 中重写
+这些入口由宿主或插件提供。只按技能名称交接，不复制其正文，也不在 Harness 中重写
 Provider、风格矩阵、确认步骤或执行规则。
 
 ## Workflow
@@ -42,13 +52,18 @@ Provider、风格矩阵、确认步骤或执行规则。
 1. 从当前请求识别两组信号：
    - **直接创作**：生图、封面、卡片、参考图、风格、比例或指定后端。
    - **Factory 治理**：计划、预算、批准、回执、确定性评测、优化轮次或中断恢复。
-2. 只有一组信号时，按上表交给最具体的技能并停止；不要先运行另一个技能。
-3. 两组信号同时存在时，读取
+2. 用户确认执行后，读取[能力地图](references/capability-map.md)的宿主识别规则。Codex
+   且当前会话暴露 `image_gen` 时，直接创作必须优先交给 **`imagegen`**；不得先请求
+   Provider 密钥。
+3. 只有取得结构化 `quota_exceeded` 图片配额证据后，才可以提出 Baoyu 降级。普通失败、
+   工具缺失、authentication、network、timeout 或 unknown 都停在原路径并如实报告。
+4. 两组信号同时存在时，读取
    [能力地图](references/capability-map.md) 的“混合请求”部分。当前 **no execution adapter**
    可以把 Baoyu 的直接执行自动变成 Factory 执行；必须向用户说明差异并请其 **choose**：
    直接创作路径，或带 approval / receipt / evaluation 的治理路径。
-4. 只有在请求含糊、跨路径或需要交给 Video Factory 时才读取能力地图；普通请求不加载它。
-5. 所选技能完成后，按能力地图中的统一交付契约报告真实证据。
+5. ZCode、Kimi 或其他宿主只使用当前会话真实暴露的原生图片能力；没有可验证原生能力时，
+   才把 Baoyu 作为外部 Provider 路径。这不是 Codex 的额度降级语义。
+6. 所选技能完成后，按能力地图中的统一交付契约报告真实证据。
 
 ## Factory branch
 
@@ -60,11 +75,13 @@ Provider、风格矩阵、确认步骤或执行规则。
   validate-plan、quote、run、evaluate、optimize、recover 或 status。
 - `--generation-dir` 保存计划、台账与执行中间状态，`--destination` 保存正式产物；两者分离。
 - JSON 输出、回执和台账是事实来源；叙述不得覆盖机器证据。
+- 台账仅在 `error_category=quota_exceeded` 且 `usage_limit.limit_id=image_gen` 时证明图片
+  配额耗尽；只有这类证据允许提出 Baoyu 降级。
 
 ## Delivery
 
-所有路径都输出统一摘要，但只填写实际获得的证据：所选技能、执行后端、输出路径、
-prompt 记录、参考输入、治理证据和未验证项。直接 Baoyu 路径的 Factory approval、
+所有路径都输出统一摘要，但只填写实际获得的证据：宿主判定、所选技能、执行后端、
+输出路径、prompt 记录、参考输入、治理证据和未验证项。直接 Baoyu 路径的 Factory approval、
 receipt 和 evaluation 应标记为 `not_applicable`，不得事后伪造。
 
 若下一步是视频制作，只交付摘要与图片资产；本 Harness 不执行视频。
@@ -72,6 +89,9 @@ receipt 和 evaluation 应标记为 `not_applicable`，不得事后伪造。
 ## Never do
 
 - 不直接修改、裁剪或复制三个外部 Baoyu 技能的正文、脚本和引用资料。
+- 不根据 `imagegen` 技能是否已安装、插件目录或文件路径推断当前宿主。
+- 不在 Codex 内置额度尚未明确耗尽时，引导用户配置 Baoyu 或其他 Provider 密钥。
+- 不要求用户把密钥粘贴到对话；只允许用户选择后在本机按对应技能说明配置。
 - 不把直接 Baoyu 产物描述成经过 Factory 计划、批准、回执或评测。
 - 不把一个路径的后端、重试、确认或费用规则套到另一个路径。
 - 不替用户批准付费执行，也不把旧批准沿用到变化后的计划、prompt、参考图或数量。

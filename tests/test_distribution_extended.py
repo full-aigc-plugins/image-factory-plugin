@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ID = "image-factory"
 DISPLAY_NAME = "Image Factory"
-RELEASE_VERSION = "0.2.0"
+RELEASE_VERSION = "0.3.0"
 PRIOR_RELEASE_SHA = "fff20c9aad9a9cd7893644306c752b2f7231071d"
 
 FACTORY_SKILLS = (
@@ -88,7 +88,7 @@ class SkillInventoryTests(unittest.TestCase):
             with self.subTest(skill=name):
                 self.assertTrue(text.startswith("---\n"))
                 head = text[4 : text.index("\n---", 4)]
-                declared = re.search(r"^name:\s*(\S+)\s*$", head, re.MULTILINE)
+                declared = re.search(r"^name:\s*['\"]?([^'\"\s]+)['\"]?\s*$", head, re.MULTILINE)
                 self.assertIsNotNone(declared, f"{name}: no name field")
                 self.assertEqual(declared.group(1), name)
 
@@ -202,6 +202,14 @@ class LinkTests(unittest.TestCase):
 
 
 class RepositoryStructureTests(unittest.TestCase):
+    def test_release_bump_updates_repository_pins_and_filters_market_sync(self) -> None:
+        script = (ROOT / "scripts/bump-plugin.mjs").read_text(encoding="utf-8")
+        self.assertIn("bumpRepositoryMarketplace", script)
+        self.assertIn("entry.source.ref = `v${newVersion}`", script)
+        self.assertIn("@v${newVersion}/", script)
+        self.assertIn("const pluginFilter = `--plugin=${pluginId}`", script)
+        self.assertIn('[syncScript, "--write", pluginFilter]', script)
+
     def test_no_symlinks_anywhere(self) -> None:
         offenders = [
             str(entry.relative_to(ROOT))

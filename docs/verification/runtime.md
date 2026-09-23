@@ -1,6 +1,6 @@
-# Runtime and release verification: 0.2.0 candidate status
+# Runtime and release verification: 0.3.0 candidate status
 
-The `0.2.0` candidate adds loop-convergence evidence and declared pixel checks on top of the `0.1.6` identity and synchronization work. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh installation, remote SHA, or paid-generation proof. Current-candidate evidence — the `1.2.0` numeric-ledger loop and the offline declared-pixel-check reproduction — was rerun against this candidate and is recorded in the dated sections below.
+The `0.3.0` candidate adds host-aware, Codex-built-in-first routing and the immutable `image-factory-skills v1.1.0` `imagegen` snapshot. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh installation, remote SHA, or paid-generation proof. Current-candidate local evidence covers the routing contracts, full unit suite, distribution validator, and online skill-vendor verification; fresh three-host installation and generation remain separate release gates.
 
 This file is the evidence ledger for the Image Factory 0.1.2 release
 candidate. It intentionally does not reuse runtime, installation, remote commit,

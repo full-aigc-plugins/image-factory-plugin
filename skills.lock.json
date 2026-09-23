@@ -4,9 +4,10 @@
     {
       "package": "image-factory-skills",
       "repo": "https://github.com/full-aigc-skills/image-factory-skills.git",
-      "ref": "v1.0.2",
-      "sha": "1454407175cf79bb83f897657ed1dceb4e4b59c4",
+      "ref": "v1.1.0",
+      "sha": "b8ff7eb24db5da19216fbaec5aee6ea1eedf8f88",
       "skills": [
+        "imagegen",
         "image-factory-use",
         "image-factory-run",
         "image-factory-judge",
@@ -14,6 +15,7 @@
       ],
       "dest": "skills/",
       "sha256": {
+        "imagegen": "5603af7279d4634f491d2234b3026f8b76d4b227659487bcdbbc2fb2568d29ab",
         "image-factory-use": "e616f58ac86d5bdf11bcf7e157e791f3c8aee42ebee833ff740ce1a7bfa9c998",
         "image-factory-run": "7215399bd60742e5d0d64d61248e2d99242523aa81f97cc41af9ae281146ba72",
         "image-factory-judge": "e8a245668f9aefa12222f1de22c2ba57a550c8549e3753b93c6f02f77ca5ee70",

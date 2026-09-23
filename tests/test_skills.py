@@ -95,7 +95,15 @@ class SkillInventoryTests(unittest.TestCase):
                 with self.subTest(skill=name, entry=entry.name):
                     self.assertIn(
                         entry.name,
-                        ("SKILL.md", "examples", "references", "scripts", "assets"),
+                        (
+                            "SKILL.md",
+                            "LICENSE.txt",
+                            "agents",
+                            "examples",
+                            "references",
+                            "scripts",
+                            "assets",
+                        ),
                     )
 
 
@@ -141,7 +149,7 @@ class FrontmatterTests(unittest.TestCase):
             head = text[4 : text.index("\n---", 4)]
             match = re.search(r"^description:(.*)$", head, re.MULTILINE)
             assert match is not None
-            value = match.group(1).strip()
+            value = match.group(1).strip().strip("'\"")
             with self.subTest(skill=name):
                 self.assertNotIn(": ", value, "a colon-space breaks YAML plain scalars")
                 self.assertNotIn(" #", value, "a space-hash starts a YAML comment")
@@ -325,6 +333,7 @@ class HarnessArbitrationTests(unittest.TestCase):
 
     def test_harness_names_every_supported_entrypoint(self) -> None:
         for name in (
+            "imagegen",
             "baoyu-image-gen",
             "baoyu-cover-image",
             "baoyu-xhs-images",
@@ -332,6 +341,36 @@ class HarnessArbitrationTests(unittest.TestCase):
         ):
             with self.subTest(skill=name):
                 self.assertIn(name, self.harness)
+
+    def test_codex_routes_to_imagegen_before_baoyu(self) -> None:
+        text = self.harness.lower()
+        self.assertIn("image_gen", text)
+        self.assertIn("imagegen", text)
+        self.assertIn("codex", text)
+        self.assertIn("优先", text)
+        self.assertIn("quota_exceeded", text)
+
+    def test_host_detection_does_not_use_installed_skill_presence(self) -> None:
+        text = self.capability_map.read_text(encoding="utf-8").lower()
+        self.assertIn("current-session", text)
+        self.assertIn("zcode", text)
+        self.assertIn("kimi", text)
+        self.assertIn("不得", text)
+        self.assertIn("技能", text)
+
+    def test_codex_fallback_requires_explicit_image_quota_evidence(self) -> None:
+        text = self.capability_map.read_text(encoding="utf-8").lower()
+        self.assertIn("error_category=quota_exceeded", text)
+        self.assertIn("usage_limit.limit_id=image_gen", text)
+        for failure in ("tool_unavailable", "authentication", "network", "timeout", "unknown"):
+            with self.subTest(failure=failure):
+                self.assertIn(failure, text)
+
+    def test_baoyu_key_setup_is_local_and_never_requested_in_chat(self) -> None:
+        text = self.capability_map.read_text(encoding="utf-8").lower()
+        self.assertIn("本机", text)
+        self.assertIn("不得粘贴", text)
+        self.assertIn("用户选择", text)
 
     def test_harness_keeps_the_capability_routing_diagram(self) -> None:
         self.assertIn("```mermaid", self.harness)

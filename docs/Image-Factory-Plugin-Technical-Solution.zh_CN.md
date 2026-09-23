@@ -4,7 +4,7 @@
 >
 > | 字段 | 值 |
 > |---|---|
-> | 状态 | 0.2.0 release candidate 的已实现方案：在 0.1.6 供应链加固之上新增收敛证据与声明式像素检查；发布核验记录于 `docs/verification/runtime.md` |
+> | 状态 | 0.3.0 release candidate 的已实现方案：在收敛、像素检查与供应链基础上新增宿主感知、Codex 内置优先路由；发布核验记录于 `docs/verification/runtime.md` |
 > | 范围 | 技术决策、执行契约、失败模型，以及支撑它们的平台事实 |
 > | 读者 | 扩展或评审本插件的实现者 |
 > | 运行证据 | `docs/verification/` |

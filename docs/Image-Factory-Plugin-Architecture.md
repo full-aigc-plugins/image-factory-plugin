@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | 0.2.0 release candidate: convergence evidence and declared pixel checks added to the 0.1.6 supply-chain hardening; fresh release checks recorded in `docs/verification/runtime.md` |
+> | Status | 0.3.0 release candidate: host-aware built-in-first routing added to the convergence, pixel-check, and supply-chain foundations; fresh release checks recorded in `docs/verification/runtime.md` |
 > | Scope | The implemented batch image core and prompt-discovery layer |
 > | Audience | Maintainers, reviewers, and integrators of this plugin |
 > | Out of scope | Workbench UI, parent project state, and non-image media pipelines |

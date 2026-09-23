@@ -1,6 +1,6 @@
 {
   "name": "image-factory",
-  "version": "0.2.0+codex.20260921",
+  "version": "0.3.0+codex.20260923",
   "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
   "author": {
     "name": "Full Stack Skills / PartMe.AI",
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Image Factory",
     "shortDescription": "Discover, batch-produce, and evaluate images",
-    "longDescription": "Use unchanged Baoyu workflows for direct image generation, article covers, and social image-card series, or run Image Factory's governed production loop with plan validation, explicit approval, hash-verified receipts, deterministic evaluation, and recoverable optimization rounds.",
+    "longDescription": "Prefer Codex built-in imagegen for direct image generation, offer unchanged Baoyu workflows only after explicit image-quota exhaustion, or run Image Factory's governed production loop with plan validation, approval, verified receipts, evaluation, and recovery.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "category": "Creativity",
     "capabilities": [

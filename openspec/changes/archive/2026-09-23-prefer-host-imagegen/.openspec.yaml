@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-09-23
+goal: Harness 按当前会话能力识别宿主，并在 Codex 中仅于明确额度耗尽后考虑 Baoyu 降级。

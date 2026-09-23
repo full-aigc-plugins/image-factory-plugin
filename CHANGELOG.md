@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-09-23
+
+- 在 Codex 会话中优先路由到内置 `imagegen` / `image_gen`，默认不要求 Provider API Key。
+- 依据当前会话宿主元数据或真实工具能力区分 Codex、ZCode、Kimi 与 unknown，不再根据技能安装状态猜测宿主。
+- 仅在结构化图片额度耗尽证据出现后，才向 Codex 用户提供 Baoyu 外部 Provider 降级。
+- 锁定并完整捆绑 `image-factory-skills v1.1.0` 的逐字节验证 `imagegen` 快照。
+- 修复版本提升脚本，使仓库 marketplace 的 ref/icon 与版本同步，并支持单插件市场生成和校验。
+
 ## 0.2.0 — 2026-09-22
 
 ### Added

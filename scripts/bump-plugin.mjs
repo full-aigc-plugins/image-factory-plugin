@@ -122,16 +122,41 @@ fs.writeFileSync(catalogPath, catalogText);
 const bumpPlain = (text) => text.replace(`"version": "${oldVersion}"`, `"version": "${newVersion}"`);
 const bumpCodex = (text) => text.replace(/"version": "\d+\.\d+\.\d+(?:\+codex\.\d+)?"/, `"version": "${newVersion}+codex.${today}"`);
 
+const bumpRepositoryMarketplace = (text) => {
+  const marketplace = JSON.parse(text);
+  const entries = marketplace.plugins ?? [];
+  if (entries.length !== 1 || entries[0].name !== pluginId) {
+    throw new Error(`${pluginId}: repository marketplace must contain exactly one matching plugin`);
+  }
+  const entry = entries[0];
+  entry.version = newVersion;
+  if (entry.source?.ref) entry.source.ref = `v${newVersion}`;
+  const releasePin = (value) => typeof value === "string"
+    ? value.replace(/@v\d+\.\d+\.\d+\//, `@v${newVersion}/`)
+    : value;
+  entry.icon = releasePin(entry.icon);
+  if (entry.interface) entry.interface.logo = releasePin(entry.interface.logo);
+  return `${JSON.stringify(marketplace, null, 2)}\n`;
+};
+
 for (const rel of plainManifestRels) {
   const manifest = path.join(repoDir, rel);
-  fs.writeFileSync(manifest, bumpPlain(fs.readFileSync(manifest, "utf8")));
+  const current = fs.readFileSync(manifest, "utf8");
+  fs.writeFileSync(
+    manifest,
+    rel === ".agents/plugins/marketplace.json"
+      ? bumpRepositoryMarketplace(current)
+      : bumpPlain(current)
+  );
 }
 const codexManifest = path.join(repoDir, ".codex-plugin/plugin.json");
 fs.writeFileSync(codexManifest, bumpCodex(fs.readFileSync(codexManifest, "utf8")));
 
 // 3) 重新生成三平台清单 + 全量校验
-execFileSync(process.execPath, [path.join(root, "scripts/sync-marketplaces.mjs"), "--write"], { stdio: "inherit" });
-execFileSync(process.execPath, [path.join(root, "scripts/sync-marketplaces.mjs")], { stdio: "inherit" });
+const syncScript = path.join(root, "scripts/sync-marketplaces.mjs");
+const pluginFilter = `--plugin=${pluginId}`;
+execFileSync(process.execPath, [syncScript, "--write", pluginFilter], { stdio: "inherit" });
+execFileSync(process.execPath, [syncScript, pluginFilter], { stdio: "inherit" });
 
 // 4) 提交提示
 console.log(`

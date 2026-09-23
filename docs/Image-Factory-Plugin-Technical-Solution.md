@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | Implemented for the 0.2.0 release candidate: convergence evidence and declared pixel checks on the 0.1.6 supply-chain hardening; release checks recorded in `docs/verification/runtime.md` |
+> | Status | Implemented for the 0.3.0 release candidate: host-aware built-in-first routing on the convergence, pixel-check, and supply-chain foundations; release checks recorded in `docs/verification/runtime.md` |
 > | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
 > | Audience | Implementers extending or reviewing this plugin |
 > | Runtime evidence | `docs/verification/` |

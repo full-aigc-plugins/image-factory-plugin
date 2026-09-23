@@ -6,16 +6,16 @@
 
 > 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
 
-[![版本](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.2.0)
+[![版本](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.3.0)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [命令契约](#命令契约) · [故障排查](#故障排查)
 
 ## 项目定位
 
-`image-factory` 现在提供两层互补能力：原样集成的 Baoyu 技能负责直接生图、文章封面和社交图片卡片；Factory 工作流负责受治理的批量图片生产——先校验批次计划，再由选定的宿主或提供商图像工具逐项生成，采集每件产物并独立重算哈希，用确定性门禁评测，最后把失败项改写成新一轮 prompt，经你批准后才执行。
+`image-factory` 提供两层互补能力。用户确认生图后，Harness 依据显式宿主元数据或当前会话实际工具能力识别环境；在 Codex 中优先使用无需 Provider API Key 的内置 `imagegen` / `image_gen`。只有明确观测到图片额度耗尽，才会在 Codex 中提供 Baoyu 降级；ZCode、Kimi 或其他宿主则只在没有可验证原生图片能力时考虑 Baoyu。Factory 工作流继续负责计划校验、批准、回执、评测与恢复等受治理批次能力。
 
-版本 `0.2.0` 在 `0.1.6` 供应链加固与不变的外部 Baoyu 工作流之上，新增循环收敛证据（持久逐轮数字历史、命名维度批评、回归与两级停滞检测）与声明式像素检查（计划声明的角点颜色、最小边距、墨色门禁，由标准库解码器度量）。Factory 自身仍不持有 API Key、也绝不自动重试；`baoyu-image-gen` 可按其原始上游说明使用用户选定的提供商凭据，或复用已登录的 Codex CLI。
+版本 `0.3.0` 新增宿主感知路由，并锁定 `image-factory-skills v1.1.0` 的可验证 `imagegen` 快照。Codex 先使用内置图片能力，只有明确图片额度耗尽后才提供 Baoyu 降级；既有收敛证据、像素检查、回执和恢复契约保持不变。
 
 ### 适合谁
 
@@ -57,7 +57,7 @@
 |---|---|
 | 插件 ID | `image-factory` |
 | 宿主 | Codex CLI 或 ChatGPT 桌面应用 |
-| 当前版本 | `0.2.0`（供应链 release candidate，详见[成熟度](#成熟度)） |
+| 当前版本 | `0.3.0`（供应链 release candidate，详见[成熟度](#成熟度)） |
 | 插件清单 | `.codex-plugin/plugin.json` |
 | MCP 配置 | 无——在 MCP 服务器存在之前，清单一律禁止写 MCP 条目 |
 | 主要语言 | Python 3.11+ |
@@ -77,14 +77,14 @@
 | 评测 | 已完成的批次 | 确定性门禁结果 + 参考性评分 | 模型给出的评分仅供参考 | 稳定 |
 | 优化 | 失败项 | 需要批准的新一轮 prompt | 绝不覆盖上一轮 | 稳定 |
 | 恢复 | 中断的任务 | 不重新调用 Codex 的台账核对 | 只核对已核验的回执 | 稳定 |
-| 直接生图 | prompt 与可选参考图 | 通过选定 Baoyu 后端生成一张或多张图片 | 遵循提供商可用性与上游确认规则 | 外部受管技能 |
-| 文章封面 | 文章内容与视觉偏好 | 封面 prompt 记录与位图封面 | 未明确跳过时必须确认 | 外部受管技能 |
-| 社交图片卡片 | 原始内容与视觉策略 | 保存 prompt 的 1-10 张卡片系列 | 遵循 Baoyu 锚点链与确认流程 | 外部受管技能 |
+| Codex 直接生图 | prompt 与可选参考图 | 通过内置 `image_gen` 生成一张或多张图片 | 当前 Codex 会话暴露该工具时始终优先 | 受管 `imagegen` 快照 |
+| 外部图片降级 | 已确认的额度事件，或没有原生图片能力的非 Codex 宿主 | 通过所选 Baoyu 工作流生成图片、封面或社交卡片 | 用户选择降级并在本机配置 Provider 凭据 | 外部受管技能 |
 
 ### 不负责
 
 - 重写或修补 Baoyu 工作流。三个技能从不可变上游发布完整同步，并用摘要校验。
-- 代替用户决定提供商。直接 Baoyu 生图遵循其偏好与确认规则；受治理的 Factory 路径只记录执行后端实际报告的信息。
+- 根据已安装技能或文件路径猜测宿主。Harness 只使用当前会话元数据或实际工具能力。
+- 代替用户决定提供商或处理凭据。Baoyu 降级需要用户明确选择，凭据保留在本机环境变量或 Provider 配置中，不粘贴到对话。
 - 控制尺寸、质量、背景或张数。内置工具只接受 prompt 与参考图，因此批次项的差异只能来自这两者。
 - 拥有图形工作台、项目管理或视频合成。这些界面不在本仓库范围内。
 - 撰写、翻译、排版或发布文章。这些能力归属单独的内容写作插件。
@@ -155,7 +155,7 @@ CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖�
 ### 从插件市场安装
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.2.0
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.3.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
