@@ -435,7 +435,7 @@ class EvidenceProductTests(unittest.TestCase):
         self.assertEqual(row["findings"][0]["region"]["x"], 0.2)
         self.assertEqual(row["human_reason"], "hairline changed")
         self.assertEqual(row["disagreements"][0]["dimension"], "character_identity")
-        page = Path(summary["contact_sheet"]).read_text()
+        page = Path(summary["contact_sheet"]).read_text(encoding="utf-8")
         self.assertIn('name="dimension-filter"', page)
         self.assertIn('name="review-reason"', page)
         self.assertIn("download-review", page)
@@ -452,7 +452,7 @@ class EvidenceProductTests(unittest.TestCase):
         scores = self.fixture.evaluate([item], {item.id: receipt}).scores
         scores["reviewer_reports"] = [{"reviewer": {"id": "face", "version": "1.0.0"}, "items": [{"item_id": item.id, "findings": [{"dimension": "character_identity", "score": 0.1, "confidence": 0.9, "evidence": "</script><script>alert(1)</script>", "region": None, "uncertain": False}]}]}]
         summary = visual_summary.build_summary(receipts={item.id: receipt}, scores=scores, destination_dir=self.fixture.destination, output_dir=self.fixture.base / "review")
-        page = Path(summary["contact_sheet"]).read_text()
+        page = Path(summary["contact_sheet"]).read_text(encoding="utf-8")
         self.assertNotIn("</script><script>alert(1)</script>", page)
         self.assertIn("&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;", page)
 
