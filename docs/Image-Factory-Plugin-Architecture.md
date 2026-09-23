@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | 0.4.0 release candidate: series profiles, effective-prompt compilation, and role-aware anchors added; live continuity is not represented as runtime acceptance evidence |
+> | Status | 0.5.0 release candidate: series consistency plus streaming attempt evidence, session attribution, capacity preflight, watch, and late-artifact recovery; live continuity is not represented as runtime acceptance evidence |
 > | Scope | The implemented batch image core and prompt-discovery layer |
 > | Audience | Maintainers, reviewers, and integrators of this plugin |
 > | Out of scope | Workbench UI, parent project state, and non-image media pipelines |
@@ -134,18 +134,20 @@ sequenceDiagram
 
 Failure, cancellation, and timeout semantics:
 
-- A **timeout or interrupted subprocess after reservation** is ambiguous. The item becomes `Unknown` unless a valid per-item receipt proves completion; it is never retried automatically.
+- A **timeout or interrupted subprocess after reservation** is ambiguous. The item becomes `Unknown`, keeps its durable attempt/session evidence, and is never retried automatically. Recovery may collect a valid late artifact attributed to that exact session.
 - A **usage limit** stops the whole batch. The limit id and reset time are recorded, and no further item is attempted in that run.
 - A **missing artifact** after an exit code of zero is a failure, not a success. The generator's claim and the disk's evidence are different things.
 - **Cancellation** preserves the durable `Attempting` evidence. Recovery either verifies its receipt or changes it to `Unknown`; it never turns it back into pending work.
 
 ## 8. Contracts, state, and data
 
-Four documents form the interface, each closed with `additionalProperties: false`.
+Five documents form the interface, each closed with `additionalProperties: false`.
 
 **`schemas/image_batch.schema.json`** — one batch round. Requires `schema_version`, `batch_id`, `round`, and `items`. An item carries an `id`, a `prompt`, and at most five `reference_images`. The schema deliberately has no `size`, `quality`, `background`, `n`, or `model` field: the built-in tool accepts none of them, so accepting them here would be a promise the platform cannot keep.
 
 **`schemas/artifact_receipt.schema.json`** — one collected artifact. Carries the path, `sha256`, `bytes`, `width`, `height`, `prompt_sha256`, and `idempotency_key`, plus a `source` block naming the generation session and call. `source.model_reported` is nullable and is `null` in practice: the plugin records what Codex reported and never infers a model.
+
+**`schemas/attempt_progress.schema.json`** — one external attempt's observable state. It binds attempt id, item id, session id, streamed event count, pre-attempt snapshot, candidate files, and attributed files without changing the historical ledger schema.
 
 **`schemas/factory_job.schema.json`** — the 1.1.0 ledger. Governs the state machine, approval history, plan-hash binding, and the `Attempting`/`Unknown` item lifecycle. Legacy 1.0.0 documents migrate in memory without inventing approval evidence or changing observed outcomes.
 
@@ -199,7 +201,7 @@ Runtime prerequisites: a Codex installation the user already has, a signed-in ac
 
 Python 3.11 or later is required for `tomllib`. All scripts use the standard library only. GitHub Actions defines six offline cells: Linux, macOS, and Windows on Python 3.11 and 3.13. Each cell compiles sources, runs the full suite, validates the distribution, and checks the diff without installing runtime dependencies.
 
-This document describes the implemented 0.1.2 release candidate image core and prompt-discovery layer. Workbench UI, parent project state, and non-image media pipelines are separate product responsibilities and are not implemented or planned in this plugin repository.
+This document describes the implemented 0.5.0 release candidate image core and prompt-discovery layer. Workbench UI, parent project state, and non-image media pipelines are separate product responsibilities and are not implemented or planned in this plugin repository.
 
 The design leaves three clean seams:
 

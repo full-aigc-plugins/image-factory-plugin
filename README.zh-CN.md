@@ -6,7 +6,7 @@
 
 > 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
 
-[![版本](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.4.0)
+[![版本](https://img.shields.io/badge/version-0.5.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.5.0)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [命令契约](#命令契约) · [故障排查](#故障排查)
@@ -15,7 +15,7 @@
 
 `image-factory` 提供两层互补能力。用户确认生图后，Harness 依据显式宿主元数据或当前会话实际工具能力识别环境；在 Codex 中优先使用无需 Provider API Key 的内置 `imagegen` / `image_gen`。只有明确观测到图片额度耗尽，才会在 Codex 中提供 Baoyu 降级；ZCode、Kimi 或其他宿主则只在没有可验证原生图片能力时考虑 Baoyu。Factory 工作流继续负责计划校验、批准、回执、评测与恢复等受治理批次能力。
 
-版本 `0.4.0` 新增系列一致性档案、有效 prompt 编译、角色化参考图和返工锚点保留。它让人物、道具和画风约束成为批准与回执可验证的生成输入；真实模型连续性仍需逐图验收，不被单测冒充。
+版本 `0.5.0` 在系列一致性契约上新增流式 attempt 证据、session/call 产物归属、保守容量预检、只读状态观察与晚到产物无重试恢复；真实模型连续性仍需逐图验收，不被单测冒充。
 
 ### 适合谁
 
@@ -58,7 +58,7 @@
 |---|---|
 | 插件 ID | `image-factory` |
 | 宿主 | Codex CLI 或 ChatGPT 桌面应用 |
-| 当前版本 | `0.4.0`（供应链 release candidate，详见[成熟度](#成熟度)） |
+| 当前版本 | `0.5.0`（供应链 release candidate，详见[成熟度](#成熟度)） |
 | 插件清单 | `.codex-plugin/plugin.json` |
 | MCP 配置 | 无——在 MCP 服务器存在之前，清单一律禁止写 MCP 条目 |
 | 主要语言 | Python 3.11+ |
@@ -157,7 +157,7 @@ CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖�
 ### 从插件市场安装
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.4.0
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.5.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 

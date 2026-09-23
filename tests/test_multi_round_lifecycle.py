@@ -147,7 +147,7 @@ class MultiRoundLifecycleTests(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_OK, output)
         self.assertEqual(json.loads(output)["counts"]["pending"], 1)
 
-    def test_round_two_crash_after_invocation_recovers_as_unknown_without_retry(self) -> None:
+    def test_round_two_crash_after_invocation_recovers_late_artifact_without_retry(self) -> None:
         original = cli.generation_runner.run_item
 
         def invoked(**kwargs):
@@ -161,20 +161,11 @@ class MultiRoundLifecycleTests(unittest.TestCase):
             "recover", "--plan", str(self.round_two_plan), "--job", str(self.fixture.job_path),
             "--destination", str(self.fixture.destination), "--json",
         )
-        self.assertEqual(code, cli.EXIT_RECOVERY_REQUIRED, output)
-        self.assertEqual(json.loads(output)["unknown_count"], 1)
-        round_two_scores = self.fixture.base / "round-two-unknown-scores.json"
-        round_two_scores.write_bytes(b'{"previous": true}\n')
-        job_before = self.fixture.job_path.read_bytes()
-        scores_before = round_two_scores.read_bytes()
-        code, output = self.fixture.run_cli(
-            "evaluate", "--plan", str(self.round_two_plan), "--job", str(self.fixture.job_path),
-            "--scores", str(round_two_scores), *self.fixture.base_args(), "--json",
-        )
-        self.assertEqual(code, cli.EXIT_FAILURE, output)
-        self.assertIn("cannot be evaluated", json.loads(output)["error"])
-        self.assertEqual(self.fixture.job_path.read_bytes(), job_before)
-        self.assertEqual(round_two_scores.read_bytes(), scores_before)
+        self.assertEqual(code, cli.EXIT_OK, output)
+        report = json.loads(output)
+        self.assertEqual(report["unknown_count"], 0)
+        self.assertEqual(report["late_recovered"], ["item-01"])
+        self.assert_recovered_round_two_evaluates_to_accepted()
 
     def test_round_two_crash_after_publication_before_receipt_recovers_as_unknown(self) -> None:
         with patch.object(cli.receipt_store, "write_receipt", side_effect=KeyboardInterrupt):

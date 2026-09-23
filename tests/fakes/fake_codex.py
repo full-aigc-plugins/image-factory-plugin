@@ -9,7 +9,8 @@ model call. Modes:
     generate      as `success`, and also drop a PNG into the generation directory
     failure       emit an error item, exit 1
     usage_limit   emit an image-generation failure carrying the image_gen limit id
-    timeout       sleep past any reasonable timeout
+    timeout       emit a session event, then sleep past any reasonable timeout
+    stream        emit progress with a delay before producing an image
     silent        exit 0 without producing anything
 
 The script records the argv it received next to the control file so a test can
@@ -114,6 +115,7 @@ def main() -> int:
         last_message = Path(argv[argv.index("--output-last-message") + 1])
 
     if mode == "timeout":
+        emit({"type": "session.started", "session_id": session})
         time.sleep(float(control.get("sleep_seconds", 30)))
         return 0
 
@@ -148,7 +150,11 @@ def main() -> int:
 
     produced = None
     generation_dir = control.get("generation_dir")
-    if mode == "generate" and generation_dir:
+    if mode == "stream":
+        emit({"type": "session.started", "session_id": session})
+        emit({"type": "item.started", "item": {"type": "image_generation"}})
+        time.sleep(float(control.get("stream_delay_seconds", 0.25)))
+    if mode in ("generate", "stream") and generation_dir:
         produced = write_png(
             Path(generation_dir),
             session,
@@ -156,7 +162,8 @@ def main() -> int:
             control.get("png_source"),
         )
 
-    emit({"type": "session.started", "session_id": session})
+    if mode != "stream":
+        emit({"type": "session.started", "session_id": session})
     emit(
         {
             "type": "item.completed",

@@ -22,9 +22,13 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
+import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from artifact_collector import new_entries, snapshot
 
@@ -68,6 +72,7 @@ class GenerationOutcome:
     exit_code: int | None = None
     attempts_made: int = 0
     new_files: tuple[str, ...] = ()
+    attributed_files: tuple[str, ...] = ()
     before_snapshot: dict = field(default_factory=dict)
 
 
@@ -219,6 +224,154 @@ def _session_id(events: tuple[dict, ...], new_files: tuple[str, ...]) -> str | N
     return None
 
 
+def reported_candidate_paths(
+    events: tuple[dict, ...], generation_dir: Path
+) -> tuple[str, ...]:
+    """Return safe generation-relative paths explicitly reported by Codex."""
+    root = Path(generation_dir).resolve(strict=False)
+    reported: list[str] = []
+
+    def visit(node: object) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in ("saved_path", "output_path", "artifact_path") and isinstance(value, str) and value:
+                    candidate = Path(value)
+                    absolute = (
+                        candidate.resolve(strict=False)
+                        if candidate.is_absolute()
+                        else (root / candidate).resolve(strict=False)
+                    )
+                    try:
+                        relative = absolute.relative_to(root).as_posix()
+                    except ValueError:
+                        continue
+                    if relative.lower().endswith(".png"):
+                        reported.append(relative)
+                else:
+                    visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    for event in events:
+        visit(event)
+    return tuple(dict.fromkeys(reported))
+
+
+def attribute_candidates(
+    candidates: tuple[str, ...],
+    session_id: str | None,
+    reported_paths: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    """Select candidates owned by the reported session, with one legacy fallback.
+
+    A reported session is authoritative: a file under another session must never
+    be collected merely because it appeared during the same wall-clock window.
+    Older Codex streams that report no session retain the strict single-file
+    fallback for compatibility.
+    """
+    if session_id:
+        session_candidates = tuple(
+            candidate
+            for candidate in candidates
+            if session_id in Path(candidate).parts[:-1]
+        )
+        if reported_paths:
+            reported = set(reported_paths)
+            return tuple(
+                candidate for candidate in session_candidates if candidate in reported
+            )
+        return session_candidates
+    if reported_paths:
+        reported = set(reported_paths)
+        exact = tuple(candidate for candidate in candidates if candidate in reported)
+        return exact if len(exact) == 1 else ()
+    return candidates if len(candidates) == 1 else ()
+
+
+def _stream_process(
+    process: subprocess.Popen,
+    *,
+    timeout_seconds: float,
+    progress_callback: Callable[[dict], None] | None,
+) -> tuple[int, str, str, tuple[dict, ...], bool]:
+    """Consume both pipes concurrently and publish parsed events immediately."""
+    messages: queue.Queue[tuple[str, str | None]] = queue.Queue()
+
+    def reader(name: str, stream: object) -> None:
+        try:
+            for line in stream:  # type: ignore[union-attr]
+                messages.put((name, line))
+        finally:
+            messages.put((name, None))
+
+    assert process.stdout is not None and process.stderr is not None
+    threads = [
+        threading.Thread(target=reader, args=("stdout", process.stdout), daemon=True),
+        threading.Thread(target=reader, args=("stderr", process.stderr), daemon=True),
+    ]
+    for thread in threads:
+        thread.start()
+
+    stdout: list[str] = []
+    stderr: list[str] = []
+    events: list[dict] = []
+    closed: set[str] = set()
+    deadline = time.monotonic() + timeout_seconds
+    timed_out = False
+
+    while len(closed) < 2:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 and process.poll() is None:
+            timed_out = True
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            continue
+        try:
+            source, line = messages.get(timeout=max(0.01, min(0.1, max(remaining, 0.01))))
+        except queue.Empty:
+            if process.poll() is not None and all(not thread.is_alive() for thread in threads):
+                break
+            continue
+        if line is None:
+            closed.add(source)
+            continue
+        if source == "stdout":
+            stdout.append(line)
+            stripped = line.strip()
+            if stripped.startswith("{"):
+                try:
+                    event = json.loads(stripped)
+                except ValueError:
+                    event = None
+                if isinstance(event, dict):
+                    events.append(event)
+                    if progress_callback is not None:
+                        try:
+                            progress_callback(event)
+                        except BaseException:
+                            if process.poll() is None:
+                                process.terminate()
+                                try:
+                                    process.wait(timeout=2)
+                                except subprocess.TimeoutExpired:
+                                    process.kill()
+                            process.stdout.close()
+                            process.stderr.close()
+                            raise
+        else:
+            stderr.append(line)
+
+    for thread in threads:
+        thread.join(timeout=1)
+    process.stdout.close()
+    process.stderr.close()
+    return process.wait(), "".join(stdout), "".join(stderr), tuple(events), timed_out
+
+
 def run_item(
     *,
     binary: str,
@@ -228,6 +381,8 @@ def run_item(
     output_dir: Path,
     generation_dir: Path,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    progress_callback: Callable[[dict], None] | None = None,
+    before_snapshot: dict | None = None,
 ) -> GenerationOutcome:
     """Invoke Codex once for one batch item. Never retries."""
     workdir = Path(workdir)
@@ -237,7 +392,7 @@ def run_item(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     last_message_path = output_dir / f"{getattr(item, 'id')}-round-{round_number}.last-message.txt"
-    before = snapshot(generation_dir)
+    before = snapshot(generation_dir) if before_snapshot is None else dict(before_snapshot)
     argv = build_item_argv(
         binary=binary,
         item=item,
@@ -246,23 +401,18 @@ def run_item(
     )
 
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             argv,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout_seconds,
-            check=False,
+            bufsize=1,
             cwd=str(workdir),
         )
-    except subprocess.TimeoutExpired:
-        return GenerationOutcome(
-            ok=False,
-            failure=GenerationFailure(
-                "timeout",
-                f"codex did not finish within {timeout_seconds:.0f}s; it is not retried automatically",
-            ),
-            attempts_made=1,
-            before_snapshot=before,
+        return_code, stdout, stderr, events, timed_out = _stream_process(
+            process,
+            timeout_seconds=timeout_seconds,
+            progress_callback=progress_callback,
         )
     except (FileNotFoundError, NotADirectoryError, PermissionError, OSError) as error:
         return GenerationOutcome(
@@ -272,7 +422,6 @@ def run_item(
             before_snapshot=before,
         )
 
-    events = _parse_events(completed.stdout or "")
     last_message = ""
     try:
         last_message = last_message_path.read_text(encoding="utf-8")
@@ -283,54 +432,72 @@ def run_item(
         "session_id": None,
         "last_message": last_message,
         "events": events,
-        "exit_code": completed.returncode,
+        "exit_code": return_code,
         "attempts_made": 1,
     }
 
-    if completed.returncode < 0:
+    after = snapshot(generation_dir)
+    fresh = new_entries(before, after)
+    session_id = _session_id(events, fresh)
+    reported_paths = reported_candidate_paths(events, generation_dir)
+    attributed = attribute_candidates(fresh, session_id, reported_paths)
+    common.update(
+        {
+            "session_id": session_id,
+            "new_files": fresh,
+            "attributed_files": attributed,
+        }
+    )
+
+    if timed_out:
         return GenerationOutcome(
             ok=False,
             failure=GenerationFailure(
-                "interrupted",
-                f"codex was terminated by signal {-completed.returncode}; its external outcome is unknown",
+                "timeout",
+                f"codex did not finish within {timeout_seconds:.0f}s; it is not retried automatically",
             ),
             before_snapshot=before,
             **common,
         )
 
-    limit = _usage_limit_failure(completed.stdout or "", completed.stderr or "", events)
+    if return_code < 0:
+        return GenerationOutcome(
+            ok=False,
+            failure=GenerationFailure(
+                "interrupted",
+                f"codex was terminated by signal {-return_code}; its external outcome is unknown",
+            ),
+            before_snapshot=before,
+            **common,
+        )
+
+    limit = _usage_limit_failure(stdout, stderr, events)
     if limit is not None:
         return GenerationOutcome(ok=False, failure=limit, before_snapshot=before, **common)
 
-    after = snapshot(generation_dir)
-    fresh = new_entries(before, after)
-
-    if completed.returncode != 0:
+    if return_code != 0:
         return GenerationOutcome(
             ok=False,
-            failure=GenerationFailure("generation_failed", _error_message(events, completed.stderr)),
+            failure=GenerationFailure("generation_failed", _error_message(events, stderr)),
             before_snapshot=before,
-            new_files=fresh,
-            **{**common, "session_id": _session_id(events, fresh)},
+            **common,
         )
 
-    if not fresh:
+    if not attributed:
         return GenerationOutcome(
             ok=False,
             failure=GenerationFailure(
                 "artifact_missing",
-                "codex reported success but no new image appeared in the generation directory",
+                "codex reported success but no image was attributable to the active attempt",
             ),
             before_snapshot=before,
-            new_files=(),
-            **{**common, "session_id": _session_id(events, ())},
+            **common,
         )
 
     return GenerationOutcome(
         ok=True,
-        new_files=fresh,
         before_snapshot=before,
-        **{**common, "session_id": _session_id(events, fresh)},
+        **common,
     )
 
 
@@ -352,6 +519,7 @@ def as_report(outcome: GenerationOutcome) -> dict:
         "exit_code": outcome.exit_code,
         "attempts_made": outcome.attempts_made,
         "new_files": list(outcome.new_files),
+        "attributed_files": list(outcome.attributed_files),
     }
 
 

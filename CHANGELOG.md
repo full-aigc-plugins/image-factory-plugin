@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 — 2026-09-23
+
+- Stream Codex JSONL through `Popen` and persist per-attempt events plus atomic progress snapshots while generation is still running.
+- Attribute artifacts to reported session and call evidence; retain only a strict one-file fallback for legacy event streams without session metadata.
+- Preserve timeout and interruption handles so `recover` can collect a late artifact from the original attempt without spending another generation call.
+- Add conservative capacity preflight across work, generation, and destination filesystems before the first approved call.
+- Add read-only `status --watch`, the closed attempt-progress schema, and fault-injection coverage for cross-process files, symlink escape, interruption, and recovery.
+
 ## 0.4.0 — 2026-09-23
 
 - Add image_batch 1.3.0 series consistency profiles with entity registries, fixed traits, allowed variations, and style/identity anchors.

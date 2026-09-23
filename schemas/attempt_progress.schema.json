@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/full-aigc-plugins/image-factory-plugin/schemas/attempt_progress.schema.json",
+  "title": "Image Factory Attempt Progress",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "item_id",
+    "status",
+    "session_id",
+    "event_count",
+    "candidate_artifacts",
+    "attributed_artifacts",
+    "before_snapshot",
+    "generation_dir",
+    "started_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "attempt_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "item_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "status": {"enum": ["running", "completed", "failed", "unknown", "recovered"]},
+    "session_id": {"type": ["string", "null"], "maxLength": 256},
+    "event_count": {"type": "integer", "minimum": 0},
+    "candidate_artifacts": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "attributed_artifacts": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "before_snapshot": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "integer", "minimum": 0},
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "generation_dir": {"type": ["string", "null"]},
+    "started_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"}
+  }
+}

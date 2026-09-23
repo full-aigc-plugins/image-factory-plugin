@@ -22,13 +22,16 @@ import json
 import math
 import shutil
 import sys
+import time
 import uuid
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 import artifact_collector
+import attempt_store
 import atomic_json
 import capability_probe
+import capacity_preflight
 import contract_migrations
 import evaluator
 import generation_runner
@@ -492,6 +495,28 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
     reference_attempt_ids: dict[str, str] = {}
 
     if args.approve:
+        if job_path.is_file():
+            preview_ledger = job_ledger.JobLedger(job_path)
+            pending_count = len(preview_ledger.pending_items(result.items))
+        else:
+            pending_count = len(result.items)
+        if pending_count:
+            capacity = capacity_preflight.check_capacity(
+                (destination / ".work", generation_dir, destination),
+                image_count=pending_count,
+            )
+            if not capacity.ok:
+                return EXIT_FAILURE, _emit(
+                    {
+                        "ok": False,
+                        "stage": "capacity",
+                        "error_category": "insufficient_space",
+                        "required_bytes": capacity.required_bytes,
+                        "available_bytes": capacity.available_bytes,
+                        "checks": list(capacity.checks),
+                    },
+                    args.json,
+                )
         try:
             if job_path.is_file():
                 preview_ledger = job_ledger.JobLedger(job_path)
@@ -577,6 +602,10 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
     for item in pending:
         attempt_id = reference_attempt_ids.get(item.idempotency_key) or uuid.uuid4().hex
         ledger.start_attempt(item, attempt_id)
+        before_snapshot = artifact_collector.snapshot(generation_dir)
+        attempt_store.begin_attempt(
+            job_path, attempt_id, item.id, before_snapshot, generation_dir
+        )
         outcome = generation_runner.run_item(
             binary=codex_binary,
             item=item,
@@ -585,6 +614,24 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
             output_dir=destination / ".last-messages",
             generation_dir=generation_dir,
             timeout_seconds=args.timeout,
+            progress_callback=lambda event, current=attempt_id: attempt_store.append_event(
+                job_path, current, event
+            ),
+            before_snapshot=before_snapshot,
+        )
+        attempt_status = "completed" if outcome.ok else (
+            "unknown"
+            if outcome.failure is not None
+            and outcome.failure.code in ("timeout", "artifact_missing", "interrupted")
+            else "failed"
+        )
+        attempt_store.finish_attempt(
+            job_path,
+            attempt_id,
+            status=attempt_status,
+            session_id=outcome.session_id,
+            candidate_artifacts=outcome.new_files,
+            attributed_artifacts=outcome.attributed_files,
         )
         if not outcome.ok:
             assert outcome.failure is not None
@@ -614,6 +661,7 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
             # records what exists, evaluation decides whether two files being equal
             # is a problem for this batch.
             reject_duplicates=False,
+            candidates=outcome.attributed_files,
         )
         if not collected.ok:
             assert collected.failure is not None
@@ -698,6 +746,62 @@ def command_recover(args: argparse.Namespace) -> tuple[int, str]:
         rows_by_id[row["item_id"]] = row
         keys_seen.add(row["idempotency_key"])
 
+    # A timed-out process can publish after the runner stopped waiting. Search
+    # only within that attempt's durable session evidence; never generate again.
+    late_recovered: list[str] = []
+    for item in result.items:
+        row = rows_by_id.get(item.id)
+        if row is None or row["state"] not in ("Attempting", "Unknown"):
+            continue
+        attempt_id = row.get("attempt_id")
+        if not isinstance(attempt_id, str):
+            continue
+        try:
+            progress = attempt_store.load_attempt(job_path, attempt_id)
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if progress.get("status") not in ("running", "unknown"):
+            continue
+        stored_generation_dir = progress.get("generation_dir")
+        if not isinstance(stored_generation_dir, str) or not stored_generation_dir:
+            continue
+        recovery_generation_dir = Path(stored_generation_dir)
+        current_snapshot = artifact_collector.snapshot(recovery_generation_dir)
+        candidates = artifact_collector.new_entries(
+            attempt_store.before_snapshot(progress), current_snapshot
+        )
+        reported_paths = generation_runner.reported_candidate_paths(
+            tuple(attempt_store.load_events(job_path, attempt_id)),
+            recovery_generation_dir,
+        )
+        attributed = generation_runner.attribute_candidates(
+            candidates, progress.get("session_id"), reported_paths
+        )
+        if not attributed:
+            continue
+        collected = artifact_collector.collect_artifact(
+            item=item,
+            batch_id=result.batch_id,
+            generation_dir=recovery_generation_dir,
+            destination_dir=destination,
+            before=attempt_store.before_snapshot(progress),
+            min_dimension=result.min_dimension,
+            reject_duplicates=False,
+            candidates=attributed,
+        )
+        if not collected.ok or collected.receipt is None:
+            continue
+        receipt_store.write_receipt(job_path, collected.receipt)
+        attempt_store.finish_attempt(
+            job_path,
+            attempt_id,
+            status="recovered",
+            session_id=progress.get("session_id"),
+            candidate_artifacts=candidates,
+            attributed_artifacts=attributed,
+        )
+        late_recovered.append(item.id)
+
     # Verification and all consistency checks complete before ledger mutation.
     verified = receipt_store.load_verified_receipts(job_path, destination, current_keys)
     plan_by_key = {item.idempotency_key: item for item in result.items}
@@ -714,7 +818,11 @@ def command_recover(args: argparse.Namespace) -> tuple[int, str]:
             or receipt["item_id"] != item.id
         ):
             raise ValueError("verified receipt does not match the recovery plan")
-        expected_prompt_sha256 = hashlib.sha256(item.prompt.encode("utf-8")).hexdigest()
+        expected_prompt_sha256 = (
+            item.effective_prompt_sha256
+            if item.effective_prompt_sha256
+            else hashlib.sha256(item.prompt.encode("utf-8")).hexdigest()
+        )
         if receipt["prompt_sha256"] != expected_prompt_sha256:
             raise ValueError("verified receipt prompt hash does not match the planned prompt")
         if item.id not in rows_by_id:
@@ -787,6 +895,7 @@ def command_recover(args: argparse.Namespace) -> tuple[int, str]:
         "completed_count": generated_count,
         "failed_count": failed_count,
         "unknown_count": unknown_count,
+        "late_recovered": late_recovered,
     }
     code = EXIT_RECOVERY_REQUIRED if unknown_count else EXIT_OK
     return code, _emit(payload, args.json)
@@ -1051,11 +1160,11 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
 # ---------------------------------------------------------------------- status
 
 
-def command_status(args: argparse.Namespace) -> tuple[int, str]:
+def _status_report(job_path: Path) -> dict:
     try:
-        payload = job_ledger.load_ledger(Path(args.job))
+        payload = job_ledger.load_ledger(job_path)
     except job_ledger.LedgerCorruptError as error:
-        return EXIT_FAILURE, _emit({"ok": False, "error": str(error)}, args.json)
+        raise ValueError(str(error)) from error
     counts = {
         name: 0
         for name in ("attempting", "failed", "generated", "pending", "skipped", "unknown")
@@ -1066,9 +1175,7 @@ def command_status(args: argparse.Namespace) -> tuple[int, str]:
     try:
         current_rows = list(current_rows_by_key(payload, current_keys).values())
     except ValueError as error:
-        return EXIT_FAILURE, _emit(
-            {"ok": False, "error": str(error)}, args.json
-        )
+        raise ValueError(str(error)) from error
     for row in current_rows:
         key = row["state"].lower()
         if key in counts:
@@ -1100,7 +1207,40 @@ def command_status(args: argparse.Namespace) -> tuple[int, str]:
         "optimization": payload["optimization"],
         "limit": payload["usage_limit"],
         "error_category": payload["error_category"],
+        "attempt": attempt_store.latest_attempt(job_path),
     }
+    return report
+
+
+def command_status(args: argparse.Namespace) -> tuple[int, str]:
+    try:
+        report = _status_report(Path(args.job))
+    except ValueError as error:
+        return EXIT_FAILURE, _emit({"ok": False, "error": str(error)}, args.json)
+    if not args.watch:
+        return EXIT_OK, _emit(report, args.json)
+
+    initial = (
+        report["revision"],
+        (report.get("attempt") or {}).get("event_count"),
+        (report.get("attempt") or {}).get("status"),
+    )
+    deadline = time.monotonic() + args.watch_timeout
+    while time.monotonic() < deadline:
+        time.sleep(args.poll_interval)
+        try:
+            current = _status_report(Path(args.job))
+        except ValueError as error:
+            return EXIT_FAILURE, _emit({"ok": False, "error": str(error)}, args.json)
+        fingerprint = (
+            current["revision"],
+            (current.get("attempt") or {}).get("event_count"),
+            (current.get("attempt") or {}).get("status"),
+        )
+        if fingerprint != initial:
+            current["watch_timed_out"] = False
+            return EXIT_OK, _emit(current, args.json)
+    report["watch_timed_out"] = True
     return EXIT_OK, _emit(report, args.json)
 
 
@@ -1167,6 +1307,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = subparsers.add_parser("status", parents=[shared])
     status.add_argument("--job", required=True)
+    status.add_argument("--watch", action="store_true")
+    status.add_argument("--watch-timeout", type=_positive_finite_float, default=30.0)
+    status.add_argument("--poll-interval", type=_positive_finite_float, default=0.2)
 
     return parser
 
