@@ -32,6 +32,7 @@ import attempt_store
 import atomic_json
 import capability_probe
 import capacity_preflight
+import calibration
 import contract_migrations
 import evaluator
 import generation_runner
@@ -40,8 +41,10 @@ import job_ledger
 import optimizer
 import plan_validator
 import prompt_library
+import provenance
 import receipt_store
 import schema_lite
+import visual_summary
 
 EXIT_OK = 0
 EXIT_FAILURE = 1
@@ -118,7 +121,13 @@ def mutating_command_paths(args: argparse.Namespace) -> dict[str, Path]:
             "codex_bin": Path(binary),
         }
     if args.command == "evaluate":
-        paths = {**common, "scores": Path(args.scores)}
+        scores_path = Path(args.scores)
+        paths = {
+            **common,
+            "scores": scores_path,
+            "calibration": scores_path.with_suffix(scores_path.suffix + ".calibration.json"),
+            "visual_summary": scores_path.parent / f"{scores_path.stem}.summary",
+        }
         if args.labels:
             paths["labels"] = Path(args.labels)
         if args.advisory:
@@ -129,6 +138,12 @@ def mutating_command_paths(args: argparse.Namespace) -> dict[str, Path]:
         if args.rewrites:
             paths["rewrites"] = Path(args.rewrites)
         return paths
+    if args.command == "summarize":
+        return {
+            **common,
+            "scores": Path(args.scores),
+            "visual_summary": Path(args.out_dir),
+        }
     return common
 
 
@@ -492,6 +507,11 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
         return EXIT_CAPABILITY_UNAVAILABLE, _emit(payload, args.json)
 
     codex_binary = args._effective_codex_binary
+    receipt_provenance = provenance.build_provenance(
+        plugin_revision=provenance.detect_plugin_revision(),
+        capability_report=capability_probe.as_report(capability),
+        consistency_profile_sha256=result.consistency_profile_sha256,
+    )
     reference_attempt_ids: dict[str, str] = {}
 
     if args.approve:
@@ -662,6 +682,7 @@ def command_run(args: argparse.Namespace) -> tuple[int, str]:
             # is a problem for this batch.
             reject_duplicates=False,
             candidates=outcome.attributed_files,
+            provenance=receipt_provenance,
         )
         if not collected.ok:
             assert collected.failure is not None
@@ -788,6 +809,10 @@ def command_recover(args: argparse.Namespace) -> tuple[int, str]:
             min_dimension=result.min_dimension,
             reject_duplicates=False,
             candidates=attributed,
+            provenance=provenance.build_provenance(
+                plugin_revision=provenance.detect_plugin_revision(),
+                consistency_profile_sha256=result.consistency_profile_sha256,
+            ),
         )
         if not collected.ok or collected.receipt is None:
             continue
@@ -983,7 +1008,11 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
             continue
         if row["state"] != "Generated":
             raise ValueError(f"unsupported ledger state for plan item {item.id!r}")
-        expected_prompt = hashlib.sha256(item.prompt.encode("utf-8")).hexdigest()
+        expected_prompt = (
+            item.effective_prompt_sha256
+            if item.effective_prompt_sha256
+            else hashlib.sha256(item.prompt.encode("utf-8")).hexdigest()
+        )
         if (
             receipt is None
             or receipt["batch_id"] != result.batch_id
@@ -1016,9 +1045,20 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
         require_human_labels=result.require_human_labels,
         advisory=advisory,
         human_labels=labels,
+        near_duplicate_hamming_distance=result.near_duplicate_hamming_distance,
     )
     scores_path = Path(args.scores)
     atomic_json.write_json_atomic(scores_path, evaluation.scores)
+    calibration_path = scores_path.with_suffix(scores_path.suffix + ".calibration.json")
+    atomic_json.write_json_atomic(
+        calibration_path, calibration.build_report(evaluation.scores)
+    )
+    summary_paths = visual_summary.build_summary(
+        receipts=receipts,
+        scores=evaluation.scores,
+        destination_dir=Path(args.destination),
+        output_dir=scores_path.parent / f"{scores_path.stem}.summary",
+    )
     scores_sha256 = hashlib.sha256(scores_path.read_bytes()).hexdigest()
     numeric_summary = evaluator.summarize_numeric(
         evaluation.scores, evaluation.scores["pass_threshold"]
@@ -1032,6 +1072,8 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
         "decision": evaluation.scores["decision"],
         "all_gates_passed": evaluation.scores["deterministic_gates"]["all_passed"],
         "scores": str(scores_path),
+        "calibration": str(calibration_path),
+        **summary_paths,
     }
     code = EXIT_FAILURE if evaluation.scores["decision"] == "fail" else EXIT_OK
     return code, _emit(payload, args.json)
@@ -1055,7 +1097,7 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
     plan = migration.document
     scores_path = Path(args.scores)
     scores_bytes = scores_path.read_bytes()
-    scores = json.loads(scores_bytes)
+    scores = contract_migrations.migrate_scores(json.loads(scores_bytes)).document
     scores_schema = json.loads(SCORES_SCHEMA_PATH.read_text(encoding="utf-8"))
     scores_errors = schema_lite.validate(scores, scores_schema)
     if scores_errors:
@@ -1155,6 +1197,52 @@ def command_optimize(args: argparse.Namespace) -> tuple[int, str]:
         "plan": str(args.out),
     }
     return EXIT_OK, _emit(payload, args.json)
+
+
+# -------------------------------------------------------------------- summarize
+
+
+def command_summarize(args: argparse.Namespace) -> tuple[int, str]:
+    """Rebuild derived review evidence without generation or ledger mutation."""
+    result, _plan_path = _validated_plan(args)
+    if not result.ok:
+        return EXIT_USAGE, _emit(_plan_error_payload(result), args.json)
+    scores = contract_migrations.migrate_scores(_load_json(Path(args.scores))).document
+    scores_schema = json.loads(SCORES_SCHEMA_PATH.read_text(encoding="utf-8"))
+    errors = schema_lite.validate(scores, scores_schema)
+    if errors:
+        raise ValueError(f"scores schema invalid: {'; '.join(errors)}")
+    if scores.get("batch_id") != result.batch_id or scores.get("round") != result.round:
+        raise ValueError("scores batch and round must match the summary plan")
+
+    current_keys = {item.idempotency_key for item in result.items}
+    verified = receipt_store.load_verified_receipts(
+        Path(args.job), Path(args.destination), current_keys
+    )
+    receipts: dict[str, dict] = {}
+    for item in result.items:
+        receipt = verified.get(item.idempotency_key)
+        if (
+            receipt is None
+            or receipt.get("batch_id") != result.batch_id
+            or receipt.get("round") != result.round
+            or receipt.get("item_id") != item.id
+        ):
+            raise ValueError(f"verified receipt is missing or mismatched for {item.id!r}")
+        receipts[item.id] = receipt
+    expected_ids = {item.id for item in result.items}
+    gate_ids = {
+        row["item_id"] for row in scores["deterministic_gates"]["per_item"]
+    }
+    if gate_ids != expected_ids:
+        raise ValueError("scores must contain one deterministic row for every plan item")
+    paths = visual_summary.build_summary(
+        receipts=receipts,
+        scores=scores,
+        destination_dir=Path(args.destination),
+        output_dir=Path(args.out_dir),
+    )
+    return EXIT_OK, _emit({"ok": True, **paths}, args.json)
 
 
 # ---------------------------------------------------------------------- status
@@ -1305,6 +1393,12 @@ def build_parser() -> argparse.ArgumentParser:
     optimize.add_argument("--rewrites", default=None)
     optimize.add_argument("--retry-unchanged", action="append", default=None)
 
+    summarize = subparsers.add_parser("summarize", parents=[shared])
+    summarize.add_argument("--job", required=True)
+    summarize.add_argument("--plan", required=True)
+    summarize.add_argument("--scores", required=True)
+    summarize.add_argument("--out-dir", required=True)
+
     status = subparsers.add_parser("status", parents=[shared])
     status.add_argument("--job", required=True)
     status.add_argument("--watch", action="store_true")
@@ -1323,6 +1417,7 @@ HANDLERS = {
     "recover": command_recover,
     "evaluate": command_evaluate,
     "optimize": command_optimize,
+    "summarize": command_summarize,
     "status": command_status,
 }
 
@@ -1335,7 +1430,7 @@ def run_cli(argv: list[str]) -> tuple[int, str]:
         return EXIT_USAGE, f"invalid arguments ({error.code})"
     handler = HANDLERS[args.command]
     try:
-        if args.command in {"run", "evaluate", "optimize", "recover"}:
+        if args.command in {"run", "evaluate", "optimize", "recover", "summarize"}:
             try:
                 preflight_mutating_command_paths(args)
             except ValueError as error:

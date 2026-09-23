@@ -20,10 +20,11 @@
     "prompt_sha256",
     "idempotency_key",
     "source",
+    "provenance",
     "collected_at"
   ],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"const": "1.1.0"},
     "plugin_id": {"const": "image-factory"},
     "batch_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
     "item_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
@@ -48,6 +49,19 @@
           "type": ["string", "null"],
           "description": "The model Codex reported, or null when Codex reported none. This plugin never infers or hardcodes a model name."
         }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plugin_revision", "host_version", "codex_version", "capability_signature", "reviewer_version", "consistency_profile_sha256"],
+      "properties": {
+        "plugin_revision": {"type": ["string", "null"], "minLength": 1},
+        "host_version": {"type": ["string", "null"], "minLength": 1},
+        "codex_version": {"type": ["string", "null"], "minLength": 1},
+        "capability_signature": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "reviewer_version": {"type": ["string", "null"], "minLength": 1},
+        "consistency_profile_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
       }
     },
     "collected_at": {"type": "string", "format": "date-time"}

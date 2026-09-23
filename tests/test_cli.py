@@ -241,6 +241,7 @@ class ValidatePlanCommandTests(unittest.TestCase):
             "migrated image batch 1.0.0 to 1.1.0",
             "migrated image batch 1.1.0 to 1.2.0",
             "migrated image batch 1.2.0 to 1.3.0",
+            "migrated image batch 1.3.0 to 1.4.0",
         ])
 
     def test_invalid_plan_exits_with_usage_error(self) -> None:
@@ -269,6 +270,7 @@ class QuoteCommandTests(unittest.TestCase):
             "migrated image batch 1.0.0 to 1.1.0",
             "migrated image batch 1.1.0 to 1.2.0",
             "migrated image batch 1.2.0 to 1.3.0",
+            "migrated image batch 1.3.0 to 1.4.0",
         ])
         self.assertFalse(self.fixture.job_path.exists())
 
@@ -1208,6 +1210,26 @@ class EvaluateAndOptimizeCommandTests(unittest.TestCase):
         ledger = self.fixture.read_job()
         self.assertEqual(ledger["state"], "PendingApproval")
         self.assertEqual(ledger["evaluation"]["scores_sha256"], hashlib.sha256(self.scores_path.read_bytes()).hexdigest())
+
+    def test_summarize_rebuilds_deleted_review_outputs_without_generation(self) -> None:
+        code, output = self.fixture.run_cli(
+            "evaluate", "--plan", str(self.fixture.plan_path), "--job", str(self.fixture.job_path),
+            "--scores", str(self.scores_path), *self.fixture.base_args(), "--json",
+        )
+        self.assertEqual(code, cli.EXIT_OK, output)
+        summary = self.fixture.base / "rebuilt-summary"
+
+        code, output = self.fixture.run_cli(
+            "summarize", "--plan", str(self.fixture.plan_path),
+            "--job", str(self.fixture.job_path), "--scores", str(self.scores_path),
+            "--out-dir", str(summary), *self.fixture.base_args(), "--json",
+        )
+
+        self.assertEqual(code, cli.EXIT_OK, output)
+        payload = json.loads(output)
+        self.assertTrue(Path(payload["contact_sheet"]).is_file())
+        self.assertTrue(Path(payload["storyboard_index"]).is_file())
+        self.assertEqual(list(summary.glob("*.png")), [])
 
     def test_required_human_labels_cannot_pass_unlabeled(self) -> None:
         code, payload = self.fixture.evaluate_without_labels()

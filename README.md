@@ -6,7 +6,7 @@
 
 > Turn a reference-driven image task into an auditable production run — validated plan, approved spend, and a hash-verified receipt for every artifact.
 
-[![Version](https://img.shields.io/badge/version-0.5.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.5.0)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.6.0)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [Install](#installation) · [Quick start](#quick-start) · [Command contract](#command-contract) · [Troubleshooting](#troubleshooting)
@@ -15,7 +15,7 @@
 
 `image-factory` exposes two complementary layers. After the user confirms generation, the Harness identifies the current session from explicit host metadata or actual tool capabilities. In Codex it prefers the built-in `imagegen` / `image_gen` path, which needs no provider API key. The unchanged Baoyu skills are offered in Codex only after explicit image-quota exhaustion; on ZCode, Kimi, or another host they are considered only when that session has no verified native image capability. The Factory workflow continues to handle governed batches with validation, approval, receipts, evaluation, and recovery.
 
-Version `0.5.0` adds streaming attempt evidence, session-bound artifact attribution, conservative capacity preflight, read-only status watching, and late-artifact recovery without another generation call. Character, prop, and style continuity still requires visual acceptance and is not implied by unit tests.
+Version `0.6.0` adds file-derived aspect-ratio and near-duplicate gates, closed series-review dimensions, rebuildable visual summaries, artifact provenance, and human/advisory calibration. Character, prop, and style continuity still requires visual acceptance and is not implied by unit tests.
 
 ### Who it is for
 
@@ -58,7 +58,7 @@ Image batch + receipts + evaluation record
 |---|---|
 | Plugin ID | `image-factory` |
 | Host | Codex CLI or ChatGPT desktop app |
-| Current version | `0.5.0` (supply-chain release candidate — see [Maturity](#maturity)) |
+| Current version | `0.6.0` (supply-chain release candidate — see [Maturity](#maturity)) |
 | Plugin manifest | `.codex-plugin/plugin.json` |
 | MCP configuration | none — the manifest forbids an MCP entry until an MCP server exists |
 | Primary language | Python 3.11+ |
@@ -157,7 +157,7 @@ CI runs on Linux, macOS, and Windows without installing any package at test time
 ### From the plugin marketplace
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.5.0
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.6.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
@@ -235,7 +235,7 @@ bin/image-factory quote image-plan.json
 
 Validation rejects an unknown field, a cap violation, or a duplicate idempotency key before anything is spent.
 
-Multi-image stories should use the image_batch 1.3.0 `consistency_profile`. Character,
+Multi-image stories should use the image_batch 1.4.0 `consistency_profile`. Character,
 prop, and style anchors are injected into every selected frame in a fixed order; `quote`
 reports the consistency mode, profile digest, and effective reference count per item.
 See the complete example in the [series consistency plan guide](docs/guides/series-consistency.md).
@@ -258,6 +258,11 @@ bin/image-factory status --job job.json --watch --json
 
 `recover` reconciles verified receipts and session-attributed late artifacts into the ledger without re-invoking Codex. See [`docs/guides/runtime-reliability.md`](docs/guides/runtime-reliability.md).
 
+`evaluate` also writes a calibration report and a rebuildable HTML/JSON visual summary.
+Series reviews use closed identity, wardrobe, prop, style, scene, text-absence, and
+aspect-ratio dimensions with observable evidence. Use `summarize` to rebuild the
+derived review files from verified receipts and scores without generation calls.
+
 ## Configuration
 
 | Setting | Where it lives | Notes |
@@ -279,6 +284,7 @@ bin/image-factory status --job job.json --watch --json
 | `run` | Execute the batch against the built-in image tool | `--approval` |
 | `recover` | Reconcile receipts into the ledger | — |
 | `evaluate` | Run deterministic gates over the batch | — |
+| `summarize` | Rebuild the contact sheet and storyboard from verified evidence | `--out-dir` |
 | `optimize` | Generate a new prompt round from failures | — |
 | `status` | Read the current ledger state | — |
 

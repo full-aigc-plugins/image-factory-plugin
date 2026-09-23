@@ -110,7 +110,7 @@ class NextRoundTests(unittest.TestCase):
         result = self.optimize(
             current, scores({"item-01": False}), rewrites={"item-01": "try again"}
         )
-        self.assertEqual(result.next_plan["schema_version"], "1.3.0")
+        self.assertEqual(result.next_plan["schema_version"], "1.4.0")
         self.assertIs(result.next_plan["limits"]["require_approval_before_run"], True)
         self.assertIs(result.next_plan["judge_policy"]["require_human_labels"], True)
         self.assertEqual(schema_lite.validate(result.next_plan, BATCH_SCHEMA), [])

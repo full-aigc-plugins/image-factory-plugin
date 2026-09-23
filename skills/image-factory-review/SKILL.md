@@ -37,8 +37,8 @@ results and capturing the user's decision, hand off to the
        "score": 0.72,
        "reason": "close to the declared layout",
        "dimensions": [
-         {"name": "composition", "score": 0.9, "evidence": "margins match the declared 15 percent"},
-         {"name": "materials", "score": 0.5, "evidence": "the mark reads amber, not the declared deep emerald"}
+         {"name": "character_identity", "score": 0.9, "evidence": "the left eyebrow scar and round glasses match the identity anchor"},
+         {"name": "wardrobe", "score": 0.5, "evidence": "the coat is amber rather than the declared deep emerald"}
        ]
      }
    }
@@ -48,6 +48,11 @@ results and capturing the user's decision, hand off to the
    evidence; the evaluator records it as incomplete, so it is reported but
    never counted as a gap. A missing dimension is honest; an invented one is
    not.
+
+   For a series item, names are closed to `character_identity`, `wardrobe`,
+   `prop_continuity`, `style`, `scene_state`, `text_absence`, and
+   `aspect_ratio`. OCR, anatomy, identity similarity, and semantic continuity
+   remain advisory observations; do not rewrite them as deterministic failures.
 
 3. **Let the score fall.** Compare against the previous critique for
    consistency, but do not match or raise the previous total to appear

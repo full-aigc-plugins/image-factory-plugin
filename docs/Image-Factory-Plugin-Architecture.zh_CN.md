@@ -4,7 +4,7 @@
 >
 > | 字段 | 值 |
 > |---|---|
-> | 状态 | 0.5.0 release candidate：系列一致性契约上新增流式 attempt 证据、session/call 归属、容量预检、watch 与晚到产物恢复；真实连续性效果尚未冒充为运行验收 |
+> | 状态 | 0.6.0 release candidate：生产质量门禁、系列封闭评审、可重建汇总、provenance 与校准；真实连续性效果尚未冒充为运行验收 |
 > | 范围 | 已实现的批量图像内核与提示词发现层 |
 > | 读者 | 本插件的维护者、审阅者与集成者 |
 > | 不在范围 | 工作台界面、父项目状态与非图片媒体管线 |
@@ -143,13 +143,13 @@ sequenceDiagram
 
 五份文档构成接口，每份都用 `additionalProperties: false` 封闭。
 
-**`schemas/image_batch.schema.json`**——一个批次轮次。要求 `schema_version`、`batch_id`、`round` 与 `items`。项携带 `id`、`prompt`，以及至多五张 `reference_images`。schema 刻意没有 `size`、`quality`、`background`、`n` 或 `model` 字段：内置工具一个都不接受，在这里接受它们等于许下平台无法兑现的承诺。
+**`schemas/image_batch.schema.json`**——一个批次轮次。1.4.0 新增可选的逐项 `aspect_ratio_range` 与固定算法 `near_duplicate_hamming_distance`，两者都是文件派生门禁。条目仍只接受 prompt 与至多五张参考图；schema 不承诺平台不支持的 size、quality、background、n 或 model。
 
-**`schemas/artifact_receipt.schema.json`**——一件已采集产物。携带 path、`sha256`、`bytes`、`width`、`height`、`prompt_sha256` 与 `idempotency_key`，并含一个 `source` 块标明生成会话与调用。`source.model_reported` 可为空，实践中就是 `null`：插件只记录 Codex 报告的内容，绝不推断模型。
+**`schemas/artifact_receipt.schema.json`**——一件已采集产物。除已核验文件和 source 字段外，1.1.0 还记录插件 revision、宿主/Codex 版本、能力签名、reviewer 版本与一致性档案摘要；无法可靠观察的值为 `null`，绝不猜测。
 
 **`schemas/factory_job.schema.json`**——1.1.0 台账。约束状态机、批准历史、计划哈希绑定与 `Attempting`/`Unknown` 的生命周期。旧版 1.0.0 文档在内存中迁移，既不臆造批准证据，也不改变既有观测结果。
 
-**`schemas/scores.schema.json`**——一次评测。把 `deterministic_gates` 与 `advisory`、`human_labels` 分开，并以 `pass`、`fail` 或 `pending_approval` 的 `decision` 收束。
+**`schemas/scores.schema.json`**——一次评测。文件派生 `deterministic_gates` 与系列封闭维度的 `advisory`、`human_labels` 分开；OCR、手部/解剖、人物相似度和语义连续性仍是 advisory。校准报告、contact sheet 与故事板均为可从已核验回执和评分重建的派生物，不是完成真相源。
 
 | 数据 | 所有者 | 位置 | 一致性 |
 |---|---|---|---|

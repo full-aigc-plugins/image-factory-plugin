@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | 0.5.0 release candidate: series consistency plus streaming attempt evidence, session attribution, capacity preflight, watch, and late-artifact recovery; live continuity is not represented as runtime acceptance evidence |
+> | Status | 0.6.0 release candidate: production quality gates, closed series review, rebuildable summaries, provenance, and calibration; live continuity is not represented as runtime acceptance evidence |
 > | Scope | The implemented batch image core and prompt-discovery layer |
 > | Audience | Maintainers, reviewers, and integrators of this plugin |
 > | Out of scope | Workbench UI, parent project state, and non-image media pipelines |
@@ -143,15 +143,15 @@ Failure, cancellation, and timeout semantics:
 
 Five documents form the interface, each closed with `additionalProperties: false`.
 
-**`schemas/image_batch.schema.json`** — one batch round. Requires `schema_version`, `batch_id`, `round`, and `items`. An item carries an `id`, a `prompt`, and at most five `reference_images`. The schema deliberately has no `size`, `quality`, `background`, `n`, or `model` field: the built-in tool accepts none of them, so accepting them here would be a promise the platform cannot keep.
+**`schemas/image_batch.schema.json`** — one batch round. Version 1.4.0 adds optional per-item `aspect_ratio_range` and a fixed-algorithm `near_duplicate_hamming_distance`; both are file-derived gates. An item still carries an `id`, a `prompt`, and at most five references. The schema deliberately has no `size`, `quality`, `background`, `n`, or `model` field: the built-in tool accepts none of them.
 
-**`schemas/artifact_receipt.schema.json`** — one collected artifact. Carries the path, `sha256`, `bytes`, `width`, `height`, `prompt_sha256`, and `idempotency_key`, plus a `source` block naming the generation session and call. `source.model_reported` is nullable and is `null` in practice: the plugin records what Codex reported and never infers a model.
+**`schemas/artifact_receipt.schema.json`** — one collected artifact. Besides the verified file and source fields, v1.1.0 carries nullable provenance for the plugin revision, host/Codex versions, capability signature, reviewer version, and consistency-profile digest. Unknown values remain `null`; the plugin never guesses them.
 
 **`schemas/attempt_progress.schema.json`** — one external attempt's observable state. It binds attempt id, item id, session id, streamed event count, pre-attempt snapshot, candidate files, and attributed files without changing the historical ledger schema.
 
 **`schemas/factory_job.schema.json`** — the 1.1.0 ledger. Governs the state machine, approval history, plan-hash binding, and the `Attempting`/`Unknown` item lifecycle. Legacy 1.0.0 documents migrate in memory without inventing approval evidence or changing observed outcomes.
 
-**`schemas/scores.schema.json`** — one evaluation. Separates `deterministic_gates` from `advisory` and `human_labels`, and ends in a `decision` of `pass`, `fail`, or `pending_approval`.
+**`schemas/scores.schema.json`** — one evaluation. Separates file-derived `deterministic_gates` from closed-dimension series `advisory` evidence and `human_labels`. OCR, anatomy, identity similarity, and semantic continuity remain advisory. The derived calibration report, contact sheet, and storyboard can be rebuilt from scores plus verified receipts and are not completion truth sources.
 
 | Data | Owner | Location | Consistency |
 |---|---|---|---|
@@ -201,7 +201,7 @@ Runtime prerequisites: a Codex installation the user already has, a signed-in ac
 
 Python 3.11 or later is required for `tomllib`. All scripts use the standard library only. GitHub Actions defines six offline cells: Linux, macOS, and Windows on Python 3.11 and 3.13. Each cell compiles sources, runs the full suite, validates the distribution, and checks the diff without installing runtime dependencies.
 
-This document describes the implemented 0.5.0 release candidate image core and prompt-discovery layer. Workbench UI, parent project state, and non-image media pipelines are separate product responsibilities and are not implemented or planned in this plugin repository.
+This document describes the implemented 0.6.0 release candidate image core and prompt-discovery layer. Workbench UI, parent project state, and non-image media pipelines are separate product responsibilities and are not implemented or planned in this plugin repository.
 
 The design leaves three clean seams:
 

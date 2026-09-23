@@ -57,9 +57,9 @@ def migrate_image_batch(document: object) -> MigrationResult:
         raise ValueError("image batch must be a JSON object")
     plan = copy.deepcopy(document)
     version = plan.get("schema_version")
-    if version == "1.3.0":
+    if version == "1.4.0":
         return MigrationResult(plan, ())
-    if version not in ("1.0.0", "1.1.0", "1.2.0"):
+    if version not in ("1.0.0", "1.1.0", "1.2.0", "1.3.0"):
         raise ValueError(f"unsupported image batch schema_version {version!r}")
     notes: list[str] = []
     if version == "1.0.0":
@@ -93,7 +93,50 @@ def migrate_image_batch(document: object) -> MigrationResult:
         # 1.2.0 -> 1.3.0 adds only optional series-consistency fields.
         plan["schema_version"] = "1.3.0"
         notes.append("migrated image batch 1.2.0 to 1.3.0")
+        version = "1.3.0"
+    if version == "1.3.0":
+        # 1.3.0 -> 1.4.0 adds optional, file-derived production quality gates.
+        plan["schema_version"] = "1.4.0"
+        notes.append("migrated image batch 1.3.0 to 1.4.0")
     return MigrationResult(plan, tuple(notes))
+
+
+def migrate_artifact_receipt(document: object) -> MigrationResult:
+    """Add explicit nullable provenance to legacy receipts without guessing values."""
+    if not isinstance(document, dict):
+        raise ValueError("artifact receipt must be a JSON object")
+    receipt = copy.deepcopy(document)
+    version = receipt.get("schema_version")
+    if version == "1.1.0":
+        return MigrationResult(receipt, ())
+    if version != "1.0.0":
+        raise ValueError(f"unsupported artifact receipt schema_version {version!r}")
+    receipt["schema_version"] = "1.1.0"
+    receipt["provenance"] = {
+        "plugin_revision": None,
+        "host_version": None,
+        "codex_version": None,
+        "capability_signature": None,
+        "reviewer_version": None,
+        "consistency_profile_sha256": None,
+    }
+    return MigrationResult(
+        receipt, ("migrated artifact receipt 1.0.0 to 1.1.0",)
+    )
+
+
+def migrate_scores(document: object) -> MigrationResult:
+    """Accept v1.1 scores; v1.2 only adds optional deterministic evidence fields."""
+    if not isinstance(document, dict):
+        raise ValueError("scores must be a JSON object")
+    scores = copy.deepcopy(document)
+    version = scores.get("schema_version")
+    if version == "1.2.0":
+        return MigrationResult(scores, ())
+    if version != "1.1.0":
+        raise ValueError(f"unsupported scores schema_version {version!r}")
+    scores["schema_version"] = "1.2.0"
+    return MigrationResult(scores, ("migrated scores 1.1.0 to 1.2.0",))
 
 
 def migrate_factory_job(document: object) -> MigrationResult:

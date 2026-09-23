@@ -1,6 +1,6 @@
 {
   "name": "image-factory",
-  "version": "0.5.0+codex.20260923",
+  "version": "0.6.0+codex.20260923",
   "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
   "author": {
     "name": "Full Stack Skills / PartMe.AI",

@@ -31,11 +31,13 @@ SUPPORTED_KEYWORDS = frozenset(
         "pattern",
         "format",
         "minimum",
+        "exclusiveMinimum",
         "maximum",
         "minLength",
         "maxLength",
         "minItems",
         "maxItems",
+        "uniqueItems",
         "required",
         "properties",
         "additionalProperties",
@@ -130,6 +132,8 @@ def validate(instance: object, schema: dict, root: dict | None = None, path: str
     if isinstance(instance, (int, float)) and not isinstance(instance, bool):
         if "minimum" in schema and instance < schema["minimum"]:
             errors.append(f"{path}: below minimum {schema['minimum']}")
+        if "exclusiveMinimum" in schema and instance <= schema["exclusiveMinimum"]:
+            errors.append(f"{path}: not above exclusiveMinimum {schema['exclusiveMinimum']}")
         if "maximum" in schema and instance > schema["maximum"]:
             errors.append(f"{path}: above maximum {schema['maximum']}")
 
@@ -138,6 +142,11 @@ def validate(instance: object, schema: dict, root: dict | None = None, path: str
             errors.append(f"{path}: fewer than minItems {schema['minItems']}")
         if "maxItems" in schema and len(instance) > schema["maxItems"]:
             errors.append(f"{path}: more than maxItems {schema['maxItems']}")
+        if schema.get("uniqueItems") is True:
+            for index, entry in enumerate(instance):
+                if any(entry == previous for previous in instance[:index]):
+                    errors.append(f"{path}: array entries are not unique")
+                    break
         item_schema = schema.get("items")
         if isinstance(item_schema, dict):
             for index, entry in enumerate(instance):

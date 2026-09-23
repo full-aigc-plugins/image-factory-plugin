@@ -72,12 +72,14 @@ Provider、风格矩阵、确认步骤或执行规则。
 - Factory CLI 通过本地 Codex CLI 执行，使用对应账户的图片配额；模型、size 与 quality
   由该执行路径的真实能力决定，不把 Baoyu Provider 能力描述成 Factory 能力。
 - 执行通道是 `<插件根>/bin/image-factory`；先 `probe`，再按路由技能执行
-  validate-plan、quote、run、evaluate、optimize、recover 或 status。
+  validate-plan、quote、run、evaluate、summarize、optimize、recover 或 status。
 - `--generation-dir` 保存计划、台账与执行中间状态，`--destination` 保存正式产物；两者分离。
 - 长任务使用 `status --watch` 只读观察 attempt 事件；不得用重复 `run` 充当进度查询。
 - timeout/interrupt 后先执行 `recover`。它只按原 attempt 的 session 归属查找晚到产物，不触发新生成。
 - 容量预检失败时原样报告 required/available bytes，不自动清理磁盘，也不绕过门禁。
 - JSON 输出、回执和台账是事实来源；叙述不得覆盖机器证据。
+- 系列批次使用封闭评审维度，并把比例、感知哈希、故事板、provenance 与人工校准
+  作为独立证据；`summarize` 只能从已核验回执重建派生汇总，不能触发生成。
 - 台账仅在 `error_category=quota_exceeded` 且 `usage_limit.limit_id=image_gen` 时证明图片
   配额耗尽；只有这类证据允许提出 Baoyu 降级。
 

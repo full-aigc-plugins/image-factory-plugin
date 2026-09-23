@@ -33,7 +33,7 @@ from plan_validator import PlanItem
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 PNG_HEADER_BYTES = 24
 PLUGIN_ID = "image-factory"
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 HASH_CHUNK = 64 * 1024
 SIBLING_POLICIES = ("reject", "newest")
 
@@ -172,6 +172,7 @@ def collect_artifact(
     sibling_policy: str = "reject",
     now: str | None = None,
     candidates: tuple[str, ...] | list[str] | None = None,
+    provenance: dict | None = None,
 ) -> CollectResult:
     if sibling_policy not in SIBLING_POLICIES:
         raise ValueError(f"sibling_policy must be one of {SIBLING_POLICIES}, got {sibling_policy!r}")
@@ -289,6 +290,14 @@ def collect_artifact(
             "call_id": call_id,
             # The plugin never infers the model: Codex selects it and reports it, or not.
             "model_reported": None,
+        },
+        "provenance": provenance or {
+            "plugin_revision": None,
+            "host_version": None,
+            "codex_version": None,
+            "capability_signature": None,
+            "reviewer_version": None,
+            "consistency_profile_sha256": None,
         },
         "collected_at": now or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }

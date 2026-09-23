@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | Implemented for the 0.5.0 release candidate: series consistency plus streaming attempt evidence, session/call attribution, capacity preflight, watch, and late-artifact recovery; live model continuity remains a separate runtime acceptance gate |
+> | Status | Implemented for the 0.6.0 release candidate: production quality gates, closed series review, rebuildable summaries, provenance, and calibration; live model continuity remains a separate runtime acceptance gate |
 > | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
 > | Audience | Implementers extending or reviewing this plugin |
 > | Runtime evidence | `docs/verification/` |
@@ -87,7 +87,7 @@ Image description:
 <the item's effective prompt>
 ```
 
-image_batch 1.3.0 can declare a `consistency_profile`. The validator compiles the
+image_batch 1.4.0 can declare a `consistency_profile`. The validator compiles the
 style bible, negative constraints, selected entities, fixed traits, allowed variations,
 and ordered reference roles into the effective prompt. Profile anchors, structured item
 `references`, and legacy `reference_images` share the five-reference platform limit.
@@ -97,6 +97,13 @@ tuples, and optimization deep-copies the profile and bindings.
 `prompt_sha256` in a receipt identifies the actual effective prompt. This makes continuity
 input reproducible; it does not turn probabilistic model identity into a deterministic
 guarantee. Anchor-to-frame similarity remains advisory or human review.
+
+Production quality evidence has two explicit tiers. Aspect-ratio ranges, exact hashes,
+dimensions, declared pixel checks, and the fixed `average-hash-8x8-luma-v1` distance are
+deterministic because they are derived from bytes on disk. OCR, anatomy, identity
+similarity, wardrobe/prop/style continuity, and scene meaning remain advisory and require
+observable evidence. Human labels are compared with those signals in a calibration report;
+candidate thresholds are reported but never applied automatically.
 
 ## 4. Generation modes
 
