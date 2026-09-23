@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "1.3.0"
+      "const": "1.4.0"
     },
     "batch_id": {
       "type": "string",
@@ -82,6 +82,30 @@
       "maxItems": 20,
       "items": {
         "$ref": "#/$defs/reviewerReport"
+      }
+    },
+    "near_duplicate_policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "algorithms", "thresholds", "min_matches"],
+      "properties": {
+        "version": {"enum": ["average-hash-8x8-luma-v1", "multi-hash-v1"]},
+        "algorithms": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "ahash": {"const": "average-hash-8x8-luma-v1"},
+            "dhash": {"const": "difference-hash-9x8-luma-v1"},
+            "phash": {"const": "dct-phash-32x32-luma-v1"}
+          }
+        },
+        "thresholds": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "ahash": {"type": "integer", "minimum": 0, "maximum": 64},
+            "dhash": {"type": "integer", "minimum": 0, "maximum": 64},
+            "phash": {"type": "integer", "minimum": 0, "maximum": 64}
+          }
+        },
+        "min_matches": {"type": "integer", "minimum": 1, "maximum": 3}
       }
     },
     "decision": {
@@ -185,11 +209,70 @@
             "value": {"type": "string", "pattern": "^[0-9a-f]{16}$"}
           }
         },
+        "perceptual_hashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ahash", "dhash", "phash"],
+          "properties": {
+            "ahash": {"$ref": "#/$defs/averageHash"},
+            "dhash": {"$ref": "#/$defs/differenceHash"},
+            "phash": {"$ref": "#/$defs/perceptualHash"}
+          }
+        },
+        "near_duplicate_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["peer_item_id", "policy_version", "distances", "matched"],
+            "properties": {
+              "peer_item_id": {"type": "string", "minLength": 1},
+              "policy_version": {"enum": ["average-hash-8x8-luma-v1", "multi-hash-v1"]},
+              "distances": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "ahash": {"type": "integer", "minimum": 0, "maximum": 64},
+                  "dhash": {"type": "integer", "minimum": 0, "maximum": 64},
+                  "phash": {"type": "integer", "minimum": 0, "maximum": 64}
+                }
+              },
+              "matched": {"type": "boolean"}
+            }
+          }
+        },
         "near_duplicate_with": {
           "type": "array",
           "uniqueItems": true,
           "items": {"type": "string", "minLength": 1}
         }
+      }
+    },
+    "averageHash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": {"const": "average-hash-8x8-luma-v1"},
+        "value": {"type": "string", "pattern": "^[0-9a-f]{16}$"}
+      }
+    },
+    "differenceHash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": {"const": "difference-hash-9x8-luma-v1"},
+        "value": {"type": "string", "pattern": "^[0-9a-f]{16}$"}
+      }
+    },
+    "perceptualHash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": {"const": "dct-phash-32x32-luma-v1"},
+        "value": {"type": "string", "pattern": "^[0-9a-f]{16}$"}
       }
     },
     "advisoryScore": {
@@ -329,7 +412,8 @@
             "string",
             "null"
           ]
-        }
+        },
+        "reason": {"type": "string", "maxLength": 2000}
       }
     }
   }

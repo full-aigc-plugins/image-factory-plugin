@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import artifact_collector  # noqa: E402
 import calibration  # noqa: E402
 import evaluator  # noqa: E402
+import image_quality  # noqa: E402
 import plan_validator  # noqa: E402
 import provenance  # noqa: E402
 import reviewer_adapter  # noqa: E402
@@ -164,6 +165,65 @@ class DeterministicQualityTests(unittest.TestCase):
         self.assertIn("near_duplicate_content", gates[second.id]["failures"])
         self.assertEqual(gates[first.id]["near_duplicate_with"], [second.id])
         self.assertEqual(gates[second.id]["near_duplicate_with"], [first.id])
+
+    def test_versioned_multi_hash_records_distances_and_avoids_ahash_false_positive(self) -> None:
+        first_path = self.fixture.base / "bars.png"
+        second_path = self.fixture.base / "checker.png"
+        _make_png(first_path, 32, 32, lambda x, y: (240, 240, 240, 255) if x % 4 < 2 else (20, 20, 20, 255))
+        _make_png(second_path, 32, 32, lambda x, y: (240, 240, 240, 255) if x % 4 >= 2 else (20, 20, 20, 255))
+        first, second = _item("frame-01"), _item("frame-02")
+        receipts = {first.id: self.fixture.receipt(first, first_path), second.id: self.fixture.receipt(second, second_path)}
+        policy = {"version": "multi-hash-v1", "thresholds": {"ahash": 2, "dhash": 3, "phash": 3}, "min_matches": 2}
+
+        result = self.fixture.evaluate([first, second], receipts, near_duplicate_hamming_distance=None, near_duplicate_policy=policy)
+
+        rows = {row["item_id"]: row for row in result.scores["deterministic_gates"]["per_item"]}
+        evidence = rows[first.id]["near_duplicate_evidence"][0]
+        self.assertEqual(evidence["policy_version"], "multi-hash-v1")
+        self.assertEqual(result.scores["near_duplicate_policy"]["thresholds"], policy["thresholds"])
+        self.assertEqual(set(evidence["distances"]), {"ahash", "dhash", "phash"})
+        self.assertEqual(evidence["distances"]["ahash"], 0)
+        self.assertGreater(evidence["distances"]["dhash"], 3)
+        self.assertFalse(evidence["matched"])
+        self.assertNotIn("near_duplicate_content", rows[first.id]["failures"])
+        schema = json.loads((ROOT / "schemas/scores.schema.json").read_text())
+        self.assertEqual(schema_lite.validate(result.scores, schema), [])
+
+    def test_multi_hash_detects_small_variation_and_crop_evidence_is_explicit(self) -> None:
+        base = self.fixture.base / "base.png"
+        tint = self.fixture.base / "tint.png"
+        crop = self.fixture.base / "crop.png"
+        def colour(x, y):
+            light = (x // 6 + y // 7) % 3 == 0 or (11 < x < 24 and 9 < y < 23)
+            return (220, 220, 220, 255) if light else (30, 30, 30, 255)
+        _make_png(base, 32, 32, colour)
+        _make_png(tint, 32, 32, lambda x, y: tuple(min(255, c + 1) for c in colour(x, y)[:3]) + (255,))
+        _make_png(crop, 24, 24, lambda x, y: colour(x + 4, y + 4))
+        first, second = _item("frame-01"), _item("frame-02")
+        receipts = {first.id: self.fixture.receipt(first, base), second.id: self.fixture.receipt(second, tint)}
+        policy = {"version": "multi-hash-v1", "thresholds": {"ahash": 4, "dhash": 4, "phash": 4}, "min_matches": 2}
+        result = self.fixture.evaluate([first, second], receipts, near_duplicate_hamming_distance=None, near_duplicate_policy=policy)
+        evidence = result.scores["deterministic_gates"]["per_item"][0]["near_duplicate_evidence"][0]
+        self.assertTrue(evidence["matched"])
+        self.assertEqual(evidence["distances"], {"ahash": 0, "dhash": 0, "phash": 0})
+        cropped_distances = image_quality.multi_hash_distances(image_quality.multi_hash(base), image_quality.multi_hash(crop))
+        self.assertEqual(set(cropped_distances), {"ahash", "dhash", "phash"})
+        self.assertTrue(any(value > 0 for value in cropped_distances.values()))
+        self.assertGreater(cropped_distances["ahash"], 4)
+        crop_receipt = self.fixture.receipt(second, crop)
+        cropped = self.fixture.evaluate([first, second], {first.id: receipts[first.id], second.id: crop_receipt}, near_duplicate_hamming_distance=None, near_duplicate_policy={"version": "multi-hash-v1", "thresholds": {"ahash": 4, "dhash": 24, "phash": 30}, "min_matches": 2})
+        crop_evidence = cropped.scores["deterministic_gates"]["per_item"][0]["near_duplicate_evidence"][0]
+        self.assertTrue(crop_evidence["matched"])
+        self.assertGreater(crop_evidence["distances"]["ahash"], 4)
+
+    def test_plan_multi_hash_policy_is_versioned_and_exclusive(self) -> None:
+        policy = {"version": "multi-hash-v1", "thresholds": {"ahash": 4, "dhash": 8, "phash": 8}, "min_matches": 2}
+        plan = {"schema_version": "1.6.0", "batch_id": "quality-study", "round": 1, "judge_policy": {"min_dimension": 16, "reject_duplicates": True, "pass_threshold": 0.8, "require_human_labels": True, "near_duplicate_policy": policy}, "items": [{"id": "frame-01", "prompt": "student"}]}
+        result = plan_validator.validate_plan(plan, base_dir=self.fixture.base)
+        self.assertTrue(result.ok, result.errors)
+        self.assertEqual(result.near_duplicate_policy, policy)
+        plan["judge_policy"]["near_duplicate_hamming_distance"] = 4
+        self.assertFalse(plan_validator.validate_plan(plan, base_dir=self.fixture.base).ok)
 
     def test_plan_declares_quality_gates_without_changing_generation_identity(self) -> None:
         plan = {
@@ -354,6 +414,57 @@ class EvidenceProductTests(unittest.TestCase):
         index = json.loads(first_index)
         self.assertEqual(index["items"][0]["sha256"], receipt["sha256"])
 
+    def test_review_workspace_contains_verified_anchor_regions_filters_and_local_label_export(self) -> None:
+        source = self.fixture.base / "portrait.png"
+        _make_png(source, 32, 32, lambda _x, _y: (60, 100, 150, 255))
+        anchor, current = _item("frame-01"), _item("frame-02")
+        receipts = {item.id: self.fixture.receipt(item, source) for item in (anchor, current)}
+        scores = self.fixture.evaluate([anchor, current], receipts).scores
+        scores["reviewer_reports"] = [{
+            "reviewer": {"id": "face", "version": "1.0.0", "capabilities": ["identity_embedding"]},
+            "items": [{"item_id": current.id, "findings": [{
+                "dimension": "character_identity", "score": 0.9, "confidence": 0.8,
+                "evidence": "different hairline", "region": {"x": 0.2, "y": 0.1, "width": 0.3, "height": 0.4}, "uncertain": False,
+            }]}], "authority": "advisory",
+        }]
+        scores["human_labels"] = [{"item_id": current.id, "label": "rejected", "reason": "hairline changed"}]
+        summary = visual_summary.build_summary(receipts=receipts, scores=scores, destination_dir=self.fixture.destination, output_dir=self.fixture.base / "review", anchors={current.id: anchor.id})
+        index = json.loads(Path(summary["storyboard_index"]).read_text())
+        row = next(row for row in index["items"] if row["item_id"] == current.id)
+        self.assertEqual(row["anchor_item_id"], anchor.id)
+        self.assertEqual(row["findings"][0]["region"]["x"], 0.2)
+        self.assertEqual(row["human_reason"], "hairline changed")
+        self.assertEqual(row["disagreements"][0]["dimension"], "character_identity")
+        page = Path(summary["contact_sheet"]).read_text(encoding="utf-8")
+        self.assertIn('name="dimension-filter"', page)
+        self.assertIn('name="review-reason"', page)
+        self.assertIn("download-review", page)
+        self.assertIn("@media(max-width:390px)", page)
+        self.assertIn(".compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))", page)
+        self.assertIn(".grid,.compare{grid-template-columns:minmax(0,1fr)}", page)
+        self.assertEqual(list((self.fixture.base / "review").glob("*.png")), [])
+
+    def test_review_html_escapes_untrusted_finding_text(self) -> None:
+        source = self.fixture.base / "portrait.png"
+        _make_png(source, 32, 32, lambda _x, _y: (60, 100, 150, 255))
+        item = _item("frame-01")
+        receipt = self.fixture.receipt(item, source)
+        scores = self.fixture.evaluate([item], {item.id: receipt}).scores
+        scores["reviewer_reports"] = [{"reviewer": {"id": "face", "version": "1.0.0"}, "items": [{"item_id": item.id, "findings": [{"dimension": "character_identity", "score": 0.1, "confidence": 0.9, "evidence": "</script><script>alert(1)</script>", "region": None, "uncertain": False}]}]}]
+        summary = visual_summary.build_summary(receipts={item.id: receipt}, scores=scores, destination_dir=self.fixture.destination, output_dir=self.fixture.base / "review")
+        page = Path(summary["contact_sheet"]).read_text(encoding="utf-8")
+        self.assertNotIn("</script><script>alert(1)</script>", page)
+        self.assertIn("&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;", page)
+
+    def test_review_anchor_must_be_a_verified_receipt(self) -> None:
+        source = self.fixture.base / "portrait.png"
+        _make_png(source, 32, 32, lambda _x, _y: (60, 100, 150, 255))
+        item = _item("frame-01")
+        receipt = self.fixture.receipt(item, source)
+        scores = self.fixture.evaluate([item], {item.id: receipt}).scores
+        with self.assertRaisesRegex(ValueError, "anchor"):
+            visual_summary.build_summary(receipts={item.id: receipt}, scores=scores, destination_dir=self.fixture.destination, output_dir=self.fixture.base / "review", anchors={item.id: "missing"})
+
     def test_calibration_exposes_disagreements_without_changing_threshold(self) -> None:
         scores = {
             "batch_id": "quality-study",
@@ -395,9 +506,52 @@ class EvidenceProductTests(unittest.TestCase):
         self.assertEqual(report["overall"]["disagreements"], 2)
         self.assertEqual(report["dimensions"][0]["name"], "character_identity")
         self.assertNotIn("style", {row["name"] for row in report["dimensions"]})
-        self.assertTrue(report["threshold_candidates"])
+        self.assertFalse(report["overall"]["sample_sufficient"])
+        self.assertEqual(report["threshold_candidates"], [])
         schema = json.loads((ROOT / "schemas/calibration_report.schema.json").read_text(encoding="utf-8"))
         self.assertEqual(schema_lite.validate(report, schema), [])
+
+    def test_calibration_requires_sample_sufficiency_and_reports_strata_and_drift(self) -> None:
+        rows = [{"item_id": f"frame-{i:02}", "score": 0.9, "dimensions": []} for i in range(1, 5)]
+        scores = {
+            "batch_id": "quality-study", "round": 1, "pass_threshold": 0.8,
+            "advisory": {"items": rows},
+            "human_labels": [{"item_id": row["item_id"], "label": "rejected"} for row in rows],
+            "reviewer_reports": [{"reviewer": {"id": "face", "version": "2.0.0"}, "items": []}],
+        }
+        context = {row["item_id"]: {"model": "model-a", "provider": "provider-a", "style": "storybook", "shot_type": "close-up"} for row in rows}
+        report = calibration.build_report(scores, min_samples=5, item_context=context, approved_baseline={"approved": True, "reviewer_id": "face", "reviewer_version": "1.0.0", "false_positive_rate": 0.0, "min_samples": 4}, drift_tolerance=0.1)
+        self.assertFalse(report["overall"]["sample_sufficient"])
+        self.assertEqual(report["threshold_candidates"], [])
+        self.assertEqual(report["overall"]["false_positive_rate"]["interval"]["method"], "wilson-95-v1")
+        interval = report["overall"]["false_positive_rate"]["interval"]
+        self.assertLessEqual(0, interval["low"])
+        self.assertLessEqual(interval["low"], interval["high"])
+        self.assertLessEqual(interval["high"], 1)
+        self.assertEqual(report["strata"][0]["axis"], "model")
+        self.assertEqual(report["strata"][0]["value"], "model-a")
+        self.assertTrue(report["drift"]["review_required"])
+        self.assertFalse(report["threshold_changed"])
+
+    def test_unapproved_drift_baseline_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "approved baseline"):
+            calibration.build_report({"batch_id": "quality-study", "round": 1, "pass_threshold": 0.8}, approved_baseline={"reviewer_id": "face", "reviewer_version": "1.0.0", "false_positive_rate": 0.0, "min_samples": 4})
+
+    def test_calibration_keeps_unobserved_error_rates_null(self) -> None:
+        scores = {"batch_id": "quality-study", "round": 1, "pass_threshold": 0.8, "advisory": {"items": [{"item_id": "frame-01", "score": 0.9}]}, "human_labels": [{"item_id": "frame-01", "label": "approved"}]}
+        report = calibration.build_report(scores, min_samples=2)
+        self.assertIsNone(report["overall"]["false_positive_rate"]["value"])
+        self.assertIsNone(report["overall"]["false_positive_rate"]["interval"]["low"])
+
+    def test_human_label_reason_survives_evaluation_and_schema(self) -> None:
+        source = self.fixture.base / "portrait.png"
+        _make_png(source, 32, 32, lambda _x, _y: (60, 100, 150, 255))
+        item = _item("frame-01")
+        receipt = self.fixture.receipt(item, source)
+        scores = self.fixture.evaluate([item], {item.id: receipt}, human_labels={item.id: {"label": "rejected", "reason": "missing red book"}}).scores
+        self.assertEqual(scores["human_labels"][0]["reason"], "missing red book")
+        schema = json.loads((ROOT / "schemas/scores.schema.json").read_text())
+        self.assertEqual(schema_lite.validate(scores, schema), [])
 
 
 if __name__ == "__main__":

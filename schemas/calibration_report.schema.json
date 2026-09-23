@@ -4,27 +4,63 @@
   "title": "CalibrationReport",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "batch_id", "round", "configured_threshold", "threshold_changed", "overall", "dimensions", "threshold_candidates"],
+  "required": ["schema_version", "batch_id", "round", "configured_threshold", "threshold_changed", "minimum_samples", "overall", "dimensions", "strata", "drift", "threshold_candidates"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"const": "1.1.0"},
     "batch_id": {"type": "string", "minLength": 1},
     "round": {"type": "integer", "minimum": 1},
     "configured_threshold": {"type": "number", "minimum": 0, "maximum": 1},
     "threshold_changed": {"const": false},
+    "minimum_samples": {"type": "integer", "minimum": 2},
     "overall": {"$ref": "#/$defs/statistics"},
     "dimensions": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "labeled_count", "agreements", "disagreements", "confusion"],
+        "required": ["name", "labeled_count", "agreements", "disagreements", "confusion", "sample_sufficient", "false_positive_rate", "false_negative_rate"],
         "properties": {
           "name": {"type": "string", "minLength": 1},
           "labeled_count": {"type": "integer", "minimum": 0},
           "agreements": {"type": "integer", "minimum": 0},
           "disagreements": {"type": "integer", "minimum": 0},
-          "confusion": {"$ref": "#/$defs/confusion"}
+          "confusion": {"$ref": "#/$defs/confusion"},
+          "sample_sufficient": {"type": "boolean"},
+          "false_positive_rate": {"$ref": "#/$defs/rate"},
+          "false_negative_rate": {"$ref": "#/$defs/rate"}
         }
+      }
+    },
+    "strata": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["axis", "value", "labeled_count", "agreements", "disagreements", "confusion", "sample_sufficient", "false_positive_rate", "false_negative_rate"],
+        "properties": {
+          "axis": {"enum": ["model", "provider", "style", "shot_type"]},
+          "value": {"type": "string", "minLength": 1},
+          "labeled_count": {"type": "integer", "minimum": 0},
+          "agreements": {"type": "integer", "minimum": 0},
+          "disagreements": {"type": "integer", "minimum": 0},
+          "confusion": {"$ref": "#/$defs/confusion"},
+          "sample_sufficient": {"type": "boolean"},
+          "false_positive_rate": {"$ref": "#/$defs/rate"},
+          "false_negative_rate": {"$ref": "#/$defs/rate"}
+        }
+      }
+    },
+    "drift": {
+      "type": "object", "additionalProperties": false,
+      "required": ["baseline_reviewer_version", "current_reviewer_version", "baseline_false_positive_rate", "current_false_positive_rate", "tolerance", "comparable", "review_required"],
+      "properties": {
+        "baseline_reviewer_version": {"type": ["string", "null"]},
+        "current_reviewer_version": {"type": ["string", "null"]},
+        "baseline_false_positive_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "current_false_positive_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "tolerance": {"type": "number", "minimum": 0, "maximum": 1},
+        "comparable": {"type": "boolean"},
+        "review_required": {"type": "boolean"}
       }
     },
     "threshold_candidates": {
@@ -45,12 +81,31 @@
     "statistics": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["labeled_count", "agreements", "disagreements", "confusion"],
+      "required": ["labeled_count", "agreements", "disagreements", "confusion", "sample_sufficient", "false_positive_rate", "false_negative_rate"],
       "properties": {
         "labeled_count": {"type": "integer", "minimum": 0},
         "agreements": {"type": "integer", "minimum": 0},
         "disagreements": {"type": "integer", "minimum": 0},
-        "confusion": {"$ref": "#/$defs/confusion"}
+        "confusion": {"$ref": "#/$defs/confusion"},
+        "sample_sufficient": {"type": "boolean"},
+        "false_positive_rate": {"$ref": "#/$defs/rate"},
+        "false_negative_rate": {"$ref": "#/$defs/rate"}
+      }
+    },
+    "rate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["value", "interval"],
+      "properties": {
+        "value": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "interval": {
+          "type": "object", "additionalProperties": false,
+          "required": ["method", "low", "high"],
+          "properties": {
+            "method": {"const": "wilson-95-v1"},
+            "low": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            "high": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+          }
+        }
       }
     },
     "confusion": {

@@ -13,7 +13,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "1.5.0"
+      "const": "1.6.0"
     },
     "batch_id": {
       "type": "string",
@@ -443,6 +443,25 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 64
+        },
+        "near_duplicate_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "thresholds", "min_matches"],
+          "properties": {
+            "version": {"const": "multi-hash-v1"},
+            "thresholds": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["ahash", "dhash", "phash"],
+              "properties": {
+                "ahash": {"type": "integer", "minimum": 0, "maximum": 64},
+                "dhash": {"type": "integer", "minimum": 0, "maximum": 64},
+                "phash": {"type": "integer", "minimum": 0, "maximum": 64}
+              }
+            },
+            "min_matches": {"type": "integer", "minimum": 1, "maximum": 3}
+          }
         },
         "require_human_labels": {
           "const": true

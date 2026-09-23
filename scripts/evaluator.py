@@ -37,7 +37,7 @@ from declared_checks import evaluate_checks
 import image_quality
 import png_pixels
 
-SCHEMA_VERSION = "1.3.0"
+SCHEMA_VERSION = "1.4.0"
 HUMAN_LABELS = ("approved", "rejected", "unlabeled")
 DECISIONS = ("pass", "fail", "pending_approval")
 MAX_DIMENSIONS = 16
@@ -164,6 +164,13 @@ def _validate_labels(labels: dict, known: set[str]) -> None:
     for item_id, label in labels.items():
         if item_id not in known:
             raise ValueError(f"label given for unknown item {item_id!r}")
+        if isinstance(label, dict):
+            if set(label) - {"label", "reason"}:
+                raise ValueError(f"unknown human label fields for {item_id!r}")
+            reason = label.get("reason")
+            if reason is not None and (not isinstance(reason, str) or len(reason) > 2000):
+                raise ValueError(f"human label reason for {item_id!r} must be text <= 2000 characters")
+            label = label.get("label")
         if label not in HUMAN_LABELS:
             raise ValueError(f"label for {item_id!r} must be one of {HUMAN_LABELS}")
 
@@ -201,6 +208,7 @@ def evaluate_batch(
     advisory: dict | None = None,
     human_labels: dict | None = None,
     near_duplicate_hamming_distance: int | None = None,
+    near_duplicate_policy: dict | None = None,
     reviewer_reports: list[dict] | None = None,
 ) -> EvaluationResult:
     destination_dir = Path(destination_dir)
@@ -251,10 +259,28 @@ def evaluate_batch(
             if digest is not None and counts.get(digest, 0) > 1:
                 gates[item_id] = gates[item_id] + ("duplicate_content",)
 
+    if near_duplicate_policy is not None and near_duplicate_hamming_distance is not None:
+        raise ValueError("near_duplicate_policy and legacy aHash threshold are mutually exclusive")
     perceptual_hashes: dict[str, str] = {}
+    multi_hashes: dict[str, dict[str, str]] = {}
+    near_duplicate_evidence: dict[str, list[dict]] = {item_id: [] for item_id in item_ids}
     near_duplicates: dict[str, set[str]] = {item_id: set() for item_id in item_ids}
-    if near_duplicate_hamming_distance is not None:
-        if not 0 <= near_duplicate_hamming_distance <= 64:
+    if near_duplicate_hamming_distance is not None or near_duplicate_policy is not None:
+        if near_duplicate_policy is not None:
+            if near_duplicate_policy.get("version") != image_quality.MULTI_HASH_VERSION:
+                raise ValueError("unsupported near_duplicate_policy version")
+            thresholds = near_duplicate_policy.get("thresholds")
+            if not isinstance(thresholds, dict) or set(thresholds) != set(image_quality.ALGORITHM_VERSIONS):
+                raise ValueError("multi-hash thresholds must declare ahash, dhash and phash")
+            if any(type(value) is not int or not 0 <= value <= 64 for value in thresholds.values()):
+                raise ValueError("multi-hash thresholds must be integer distances from 0 to 64")
+            min_matches = near_duplicate_policy.get("min_matches")
+            if type(min_matches) is not int or not 1 <= min_matches <= 3:
+                raise ValueError("multi-hash min_matches must be between 1 and 3")
+        else:
+            thresholds = None
+            min_matches = None
+        if near_duplicate_hamming_distance is not None and not 0 <= near_duplicate_hamming_distance <= 64:
             raise ValueError("near_duplicate_hamming_distance must be between 0 and 64")
         for item in items:
             receipt = receipts.get(item.id)
@@ -264,20 +290,39 @@ def evaluate_batch(
             if target is None or not target.is_file() or "not_a_png" in gates[item.id]:
                 continue
             try:
-                perceptual_hashes[item.id] = image_quality.average_hash(target)
+                if near_duplicate_policy is None:
+                    perceptual_hashes[item.id] = image_quality.average_hash(target)
+                else:
+                    multi_hashes[item.id] = image_quality.multi_hash(target)
             except (OSError, ValueError, png_pixels.UnsupportedPNGError):
                 gates[item.id] = gates[item.id] + ("perceptual_hash_unavailable",)
         for index, left in enumerate(item_ids):
-            left_hash = perceptual_hashes.get(left)
+            left_hash = (perceptual_hashes if near_duplicate_policy is None else multi_hashes).get(left)
             if left_hash is None:
                 continue
             for right in item_ids[index + 1 :]:
-                right_hash = perceptual_hashes.get(right)
+                right_hash = (perceptual_hashes if near_duplicate_policy is None else multi_hashes).get(right)
                 if right_hash is None:
                     continue
                 if reject_duplicates and hashes.get(left) == hashes.get(right):
                     continue
-                if image_quality.hamming_distance(left_hash, right_hash) <= near_duplicate_hamming_distance:
+                if near_duplicate_policy is None:
+                    distance = image_quality.hamming_distance(left_hash, right_hash)
+                    matched = distance <= near_duplicate_hamming_distance
+                    details = {"ahash": distance}
+                    policy_version = "average-hash-8x8-luma-v1"
+                else:
+                    details = image_quality.multi_hash_distances(left_hash, right_hash)
+                    matched = sum(details[name] <= thresholds[name] for name in thresholds) >= min_matches
+                    policy_version = image_quality.MULTI_HASH_VERSION
+                for item_id, peer_id in ((left, right), (right, left)):
+                    near_duplicate_evidence[item_id].append({
+                        "peer_item_id": peer_id,
+                        "policy_version": policy_version,
+                        "distances": details,
+                        "matched": matched,
+                    })
+                if matched:
                     near_duplicates[left].add(right)
                     near_duplicates[right].add(left)
         for item_id, related in near_duplicates.items():
@@ -314,6 +359,13 @@ def evaluate_batch(
                 "algorithm": "average-hash-8x8-luma-v1",
                 "value": perceptual_hashes[item_id],
             }
+        if item_id in multi_hashes:
+            row["perceptual_hashes"] = {
+                name: {"algorithm": image_quality.ALGORITHM_VERSIONS[name], "value": value}
+                for name, value in multi_hashes[item_id].items()
+            }
+        if near_duplicate_evidence[item_id]:
+            row["near_duplicate_evidence"] = near_duplicate_evidence[item_id]
         if near_duplicates[item_id]:
             row["near_duplicate_with"] = sorted(near_duplicates[item_id])
         if item_id in details_by_item:
@@ -342,14 +394,12 @@ def evaluate_batch(
 
     label_rows = []
     for item_id in item_ids:
-        label = human_labels.get(item_id, "unlabeled")
-        label_rows.append(
-            {
-                "item_id": item_id,
-                "label": label,
-                "at": _timestamp() if label != "unlabeled" else None,
-            }
-        )
+        entry = human_labels.get(item_id, "unlabeled")
+        label = entry["label"] if isinstance(entry, dict) else entry
+        row = {"item_id": item_id, "label": label, "at": _timestamp() if label != "unlabeled" else None}
+        if isinstance(entry, dict) and entry.get("reason") is not None:
+            row["reason"] = entry["reason"]
+        label_rows.append(row)
 
     rejected = any(row["label"] == "rejected" for row in label_rows)
     unlabeled = any(row["label"] == "unlabeled" for row in label_rows)
@@ -377,6 +427,20 @@ def evaluate_batch(
         "human_labels": label_rows,
         "decision": decision,
     }
+    if near_duplicate_policy is not None:
+        scores["near_duplicate_policy"] = {
+            "version": image_quality.MULTI_HASH_VERSION,
+            "algorithms": image_quality.ALGORITHM_VERSIONS,
+            "thresholds": near_duplicate_policy["thresholds"],
+            "min_matches": near_duplicate_policy["min_matches"],
+        }
+    elif near_duplicate_hamming_distance is not None:
+        scores["near_duplicate_policy"] = {
+            "version": "average-hash-8x8-luma-v1",
+            "algorithms": {"ahash": image_quality.ALGORITHM_VERSIONS["ahash"]},
+            "thresholds": {"ahash": near_duplicate_hamming_distance},
+            "min_matches": 1,
+        }
     # `ok` means "nothing is wrong with this batch". A pending approval is not a
     # failure: the artifacts are sound and a person still has to look at them.
     return EvaluationResult(ok=decision in ("pass", "pending_approval"), scores=scores)
