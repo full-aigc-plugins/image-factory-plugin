@@ -4,7 +4,7 @@
 >
 > | 字段 | 值 |
 > |---|---|
-> | 状态 | 0.4.0 release candidate：新增系列一致性档案、有效 prompt 编译和角色化锚点；真实连续性效果尚未冒充为运行验收 |
+> | 状态 | 0.5.0 release candidate：系列一致性契约上新增流式 attempt 证据、session/call 归属、容量预检、watch 与晚到产物恢复；真实连续性效果尚未冒充为运行验收 |
 > | 范围 | 已实现的批量图像内核与提示词发现层 |
 > | 读者 | 本插件的维护者、审阅者与集成者 |
 > | 不在范围 | 工作台界面、父项目状态与非图片媒体管线 |
@@ -141,7 +141,7 @@ sequenceDiagram
 
 ## 8. 契约、状态与数据
 
-四份文档构成接口，每份都用 `additionalProperties: false` 封闭。
+五份文档构成接口，每份都用 `additionalProperties: false` 封闭。
 
 **`schemas/image_batch.schema.json`**——一个批次轮次。要求 `schema_version`、`batch_id`、`round` 与 `items`。项携带 `id`、`prompt`，以及至多五张 `reference_images`。schema 刻意没有 `size`、`quality`、`background`、`n` 或 `model` 字段：内置工具一个都不接受，在这里接受它们等于许下平台无法兑现的承诺。
 

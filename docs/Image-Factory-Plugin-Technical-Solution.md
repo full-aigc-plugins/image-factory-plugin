@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | Implemented for the 0.4.0 release candidate: series profiles, effective-prompt compilation, and role-aware reference binding; live model continuity remains a separate runtime acceptance gate |
+> | Status | Implemented for the 0.5.0 release candidate: series consistency plus streaming attempt evidence, session/call attribution, capacity preflight, watch, and late-artifact recovery; live model continuity remains a separate runtime acceptance gate |
 > | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
 > | Audience | Implementers extending or reviewing this plugin |
 > | Runtime evidence | `docs/verification/` |
@@ -38,13 +38,15 @@ The alternative — a plugin that called an image API directly with its own cred
 .codex-plugin/plugin.json          compatibility manifest
 .agents/plugins/marketplace.json   URL marketplace entry
 bin/image-factory                  CLI entry point (shim, resolves repo root)
-schemas/                           four closed JSON Schemas
+schemas/                           five closed JSON Schemas
 scripts/
   schema_lite.py                   schema subset enforcement, stdlib only
   capability_probe.py              offline environment probe
   plan_validator.py                plan validation, idempotency keys, caps
   prompt_library.py                offline attributed prompt discovery
   generation_runner.py             one Codex call per item
+  attempt_store.py                 streamed event and progress evidence
+  capacity_preflight.py            conservative free-space gate
   artifact_collector.py            locate, verify, publish, receipt
   job_ledger.py                    durable state machine and schema migration
   job_lock.py                      cross-platform process lock

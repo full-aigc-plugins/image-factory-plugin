@@ -4,6 +4,8 @@
 
 Make character, object, and style continuity explicit, reproducible generation input for governed image batches.
 
+## Requirements
+
 ### Requirement: A series profile SHALL be validated before approval
 
 The Factory SHALL reject unknown entity ids, missing anchor files, invalid reference roles, and more than five effective references for an item before quoting or approval.

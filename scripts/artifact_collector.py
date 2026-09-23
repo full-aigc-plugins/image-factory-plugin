@@ -171,14 +171,38 @@ def collect_artifact(
     reject_duplicates: bool = True,
     sibling_policy: str = "reject",
     now: str | None = None,
+    candidates: tuple[str, ...] | list[str] | None = None,
 ) -> CollectResult:
     if sibling_policy not in SIBLING_POLICIES:
         raise ValueError(f"sibling_policy must be one of {SIBLING_POLICIES}, got {sibling_policy!r}")
 
     generation_dir = Path(generation_dir)
     destination_dir = Path(destination_dir)
-    after = snapshot(generation_dir)
-    source, ignored, failure = _select_new_file(new_entries(before, after), generation_dir, sibling_policy)
+    if candidates is None:
+        after = snapshot(generation_dir)
+        selected_candidates = new_entries(before, after)
+    else:
+        selected_candidates = tuple(sorted(dict.fromkeys(str(value) for value in candidates)))
+        generation_root = generation_dir.resolve(strict=False)
+        for relative in selected_candidates:
+            candidate = Path(relative)
+            if candidate.is_absolute() or ".." in candidate.parts:
+                raise ValueError("artifact candidates must be safe paths relative to generation_dir")
+            target = generation_dir / candidate
+            if target.exists():
+                resolved_target = target.resolve(strict=True)
+                if resolved_target != generation_root and generation_root not in resolved_target.parents:
+                    raise ValueError("artifact candidate resolves outside generation_dir")
+            if not target.is_file():
+                return CollectResult(
+                    ok=False,
+                    failure=CollectFailure(
+                        "artifact_missing", f"attributed artifact is missing: {relative}"
+                    ),
+                )
+    source, ignored, failure = _select_new_file(
+        selected_candidates, generation_dir, sibling_policy
+    )
     if failure is not None:
         return CollectResult(ok=False, failure=failure, ignored=ignored)
     assert source is not None

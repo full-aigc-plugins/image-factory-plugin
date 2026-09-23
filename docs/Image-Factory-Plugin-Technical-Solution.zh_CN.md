@@ -4,7 +4,7 @@
 >
 > | 字段 | 值 |
 > |---|---|
-> | 状态 | 0.4.0 release candidate 的已实现方案：新增系列一致性档案、有效 prompt 编译与角色化参考图绑定；真实模型连续性仍需独立运行验收 |
+> | 状态 | 0.5.0 release candidate 的已实现方案：在系列一致性契约之上新增流式 attempt 证据、session/call 归属、容量预检与晚到产物恢复；真实模型连续性仍需独立运行验收 |
 > | 范围 | 技术决策、执行契约、失败模型，以及支撑它们的平台事实 |
 > | 读者 | 扩展或评审本插件的实现者 |
 > | 运行证据 | `docs/verification/` |
@@ -38,13 +38,15 @@
 .codex-plugin/plugin.json          compatibility manifest
 .agents/plugins/marketplace.json   URL marketplace entry
 bin/image-factory                  CLI entry point (shim, resolves repo root)
-schemas/                           four closed JSON Schemas
+schemas/                           five closed JSON Schemas
 scripts/
   schema_lite.py                   schema subset enforcement, stdlib only
   capability_probe.py              offline environment probe
   plan_validator.py                plan validation, idempotency keys, caps
   prompt_library.py                offline attributed prompt discovery
   generation_runner.py             one Codex call per item
+  attempt_store.py                 streamed event and progress evidence
+  capacity_preflight.py            conservative free-space gate
   artifact_collector.py            locate, verify, publish, receipt
   job_ledger.py                    durable state machine and schema migration
   job_lock.py                      cross-platform process lock
@@ -70,6 +72,7 @@ docs/                              this document and its pair
 ```
 
 - `--json` 产出 JSONL 事件流，这是可靠识别用量上限失败的方式，而不是去匹配 stderr 上的散文。
+- 运行器使用 `Popen` 并并发逐行消费 stdout/stderr；每条 JSON 事件在最终分类前先写入 attempt evidence。
 - `-o` 把最终消息写入文件，因此一次运行"自己怎么说"会被保留为证据，但不被当作证明。
 - `-i` 附加参考图；平台最多允许五张。
 - 工作目录不存在就创建，并同时设为进程工作目录，使相对路径解析可预期。
@@ -103,6 +106,7 @@ Image description:
 | Run | `run --approve` | 生成每个待处理项，为每件产物采集回执。 |
 | Resume | 对已有台账执行 `run` | 跳过已有回执的项。 |
 | Stop | 触达用量上限 | 记录上限与重置时间；不再尝试任何项。 |
+| Watch | `status --watch` | 只读等待 ledger revision、事件数或 attempt 状态变化，不触发生成。 |
 
 ## 5. 测试策略
 
@@ -128,8 +132,11 @@ GitHub Actions 在六个格中运行同样的门禁：Ubuntu、macOS 与 Windows
 - `run --approve` 记录一次绑定"已校验计划 SHA-256、当前轮次与剩余项数"的批准。
 - 从批准绑定一直到最后一次状态迁移，全程持有基于任务路径的进程锁。抢锁失败的写者在外部调用之前就失败。
 - 每次调用之前都会有一次带 `attempt_id` 的原子 `Attempting` 预留。此后被中断即视为结果含糊。
+- 每个 attempt 在 `job.json.attempts/<attempt_id>/` 写入 append-only `events.jsonl` 和原子 `progress.json`；后者遵循 `attempt_progress` 1.0.0 schema。
+- 有 session 时只接收该 session 目录下的候选，并优先采用事件明确报告的保存路径；无 session 的旧事件流只保留“全局唯一新文件”兼容回退。
+- 批准运行在首次外部调用前同时检查 work、generation 与 destination 所在文件系统；不足时零调用退出且不自动清理。
 - schema 合法且经哈希校验的逐项回执是完成的唯一事实源；聚合清单由这些回执重建。
-- 恢复过程不调用任何生成器。它只推进有回执证明的工作，并把未解决尝试标为 `Unknown`，而常规 run 拒绝重试这类项。
+- 恢复过程不调用任何生成器。它推进有回执证明的工作，也可按原 attempt/session 收集晚到产物；无法归属的尝试保持 `Unknown`，而常规 run 拒绝重试这类项。
 - 旧版 1.0.0 的计划与任务会确定性迁移到 schema 1.1.0，且不伪造批准证据。
 - 需要人工标注时，标注缺失会强制 `pending_approval`；模型评估无法越过这道门禁。
 

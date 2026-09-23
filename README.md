@@ -6,7 +6,7 @@
 
 > Turn a reference-driven image task into an auditable production run — validated plan, approved spend, and a hash-verified receipt for every artifact.
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.4.0)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.5.0)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [Install](#installation) · [Quick start](#quick-start) · [Command contract](#command-contract) · [Troubleshooting](#troubleshooting)
@@ -15,7 +15,7 @@
 
 `image-factory` exposes two complementary layers. After the user confirms generation, the Harness identifies the current session from explicit host metadata or actual tool capabilities. In Codex it prefers the built-in `imagegen` / `image_gen` path, which needs no provider API key. The unchanged Baoyu skills are offered in Codex only after explicit image-quota exhaustion; on ZCode, Kimi, or another host they are considered only when that session has no verified native image capability. The Factory workflow continues to handle governed batches with validation, approval, receipts, evaluation, and recovery.
 
-Version `0.4.0` adds series profiles, effective-prompt compilation, role-aware references, and anchor-preserving rework. Character, prop, and style constraints become approval- and receipt-bound generation inputs; live model continuity still requires visual acceptance and is not implied by unit tests.
+Version `0.5.0` adds streaming attempt evidence, session-bound artifact attribution, conservative capacity preflight, read-only status watching, and late-artifact recovery without another generation call. Character, prop, and style continuity still requires visual acceptance and is not implied by unit tests.
 
 ### Who it is for
 
@@ -58,7 +58,7 @@ Image batch + receipts + evaluation record
 |---|---|
 | Plugin ID | `image-factory` |
 | Host | Codex CLI or ChatGPT desktop app |
-| Current version | `0.4.0` (supply-chain release candidate — see [Maturity](#maturity)) |
+| Current version | `0.5.0` (supply-chain release candidate — see [Maturity](#maturity)) |
 | Plugin manifest | `.codex-plugin/plugin.json` |
 | MCP configuration | none — the manifest forbids an MCP entry until an MCP server exists |
 | Primary language | Python 3.11+ |
@@ -157,7 +157,7 @@ CI runs on Linux, macOS, and Windows without installing any package at test time
 ### From the plugin marketplace
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.4.0
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.5.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
@@ -246,17 +246,17 @@ See the complete example in the [series consistency plan guide](docs/guides/seri
 bin/image-factory run image-plan.json --approval image-approval.json
 ```
 
-Each attempt runs as a fresh subprocess against the built-in image tool. There is no retry loop, because a silent retry is how one bad prompt becomes a large bill.
+Each attempt runs as a fresh streaming subprocess against the built-in image tool. Events and session attribution are persisted beside the ledger while the process is active. There is no retry loop, because a silent retry is how one bad prompt becomes a large bill.
 
 ### 4. Evaluate, optimize, or recover
 
 ```bash
 bin/image-factory evaluate image-plan.json
 bin/image-factory recover image-plan.json
-bin/image-factory status image-plan.json
+bin/image-factory status --job job.json --watch --json
 ```
 
-`recover` reconciles verified receipts into the ledger without re-invoking Codex, so an interrupted run resumes instead of regenerating.
+`recover` reconciles verified receipts and session-attributed late artifacts into the ledger without re-invoking Codex. See [`docs/guides/runtime-reliability.md`](docs/guides/runtime-reliability.md).
 
 ## Configuration
 
@@ -303,7 +303,8 @@ Recorded on the ledger entry: `capability_unavailable`, `codex_missing`, `quota_
 - No automatic retry anywhere. `scripts/generation_runner.py` states the reason plainly: a silent retry is how one bad prompt becomes a large bill.
 - A failed item is terminal; the way forward is `optimize`, which produces a new prompt round for approval.
 - Idempotency keys bind the effective prompt plus reference bytes and roles, so re-running an identical plan does not duplicate work; changing an identity reference into a layout reference creates a new work identity.
-- The ledger is written atomically, and an interrupted run resumes through `recover` rather than regenerating.
+- The ledger and attempt progress are written atomically; event JSONL is durable, and an interrupted run resumes through the original attempt rather than regenerating.
+- Approved runs stop before the first external call when the work, generation, or destination filesystem is below the conservative capacity budget.
 - An advisory model score is recorded alongside your approve or reject labels, so the score can later be calibrated against real decisions.
 
 ## Data and state
