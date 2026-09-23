@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/full-aigc-plugins/image-factory-plugin/schemas/calibration_report.schema.json",
+  "title": "CalibrationReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "batch_id", "round", "configured_threshold", "threshold_changed", "overall", "dimensions", "threshold_candidates"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "batch_id": {"type": "string", "minLength": 1},
+    "round": {"type": "integer", "minimum": 1},
+    "configured_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "threshold_changed": {"const": false},
+    "overall": {"$ref": "#/$defs/statistics"},
+    "dimensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "labeled_count", "agreements", "disagreements", "confusion"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "labeled_count": {"type": "integer", "minimum": 0},
+          "agreements": {"type": "integer", "minimum": 0},
+          "disagreements": {"type": "integer", "minimum": 0},
+          "confusion": {"$ref": "#/$defs/confusion"}
+        }
+      }
+    },
+    "threshold_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["threshold", "agreements", "disagreements"],
+        "properties": {
+          "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+          "agreements": {"type": "integer", "minimum": 0},
+          "disagreements": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "statistics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["labeled_count", "agreements", "disagreements", "confusion"],
+      "properties": {
+        "labeled_count": {"type": "integer", "minimum": 0},
+        "agreements": {"type": "integer", "minimum": 0},
+        "disagreements": {"type": "integer", "minimum": 0},
+        "confusion": {"$ref": "#/$defs/confusion"}
+      }
+    },
+    "confusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tp", "fp", "tn", "fn"],
+      "properties": {
+        "tp": {"type": "integer", "minimum": 0},
+        "fp": {"type": "integer", "minimum": 0},
+        "tn": {"type": "integer", "minimum": 0},
+        "fn": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

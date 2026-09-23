@@ -17,7 +17,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "1.1.0"
+      "const": "1.2.0"
     },
     "batch_id": {
       "type": "string",
@@ -111,6 +111,9 @@
               "hash_mismatch",
               "missing_artifact",
               "failed_pixel_check"
+              ,"aspect_ratio_out_of_range"
+              ,"near_duplicate_content"
+              ,"perceptual_hash_unavailable"
             ]
           }
         },
@@ -147,6 +150,37 @@
               }
             }
           }
+        },
+        "aspect_ratio": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["measured", "expected"],
+          "properties": {
+            "measured": {"type": "number", "exclusiveMinimum": 0},
+            "expected": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["min", "max"],
+              "properties": {
+                "min": {"type": "number", "exclusiveMinimum": 0},
+                "max": {"type": "number", "exclusiveMinimum": 0}
+              }
+            }
+          }
+        },
+        "perceptual_hash": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "value"],
+          "properties": {
+            "algorithm": {"const": "average-hash-8x8-luma-v1"},
+            "value": {"type": "string", "pattern": "^[0-9a-f]{16}$"}
+          }
+        },
+        "near_duplicate_with": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
         }
       }
     },

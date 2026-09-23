@@ -1,13 +1,13 @@
 # 系列一致性计划指南
 
-image_batch 1.3.0 把人物、道具和画风稳定性从重复文案升级为可校验的生成输入。
+image_batch 1.4.0 把人物、道具和画风稳定性从重复文案升级为可校验的生成输入与质量证据。
 这能降低跨帧漂移，但不承诺底层模型绝对保持身份；最终仍需逐图验收。
 
 ## 最小计划
 
 ```json
 {
-  "schema_version": "1.3.0",
+  "schema_version": "1.4.0",
   "batch_id": "diligence-story",
   "round": 1,
   "consistency_profile": {

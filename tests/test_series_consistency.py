@@ -216,7 +216,7 @@ class SeriesExecutionTests(unittest.TestCase):
             evaluation=evaluation,
             rewrites={"scene-01": "A Mu practices again with steadier hands."},
         )
-        self.assertEqual(result.next_plan["schema_version"], "1.3.0")
+        self.assertEqual(result.next_plan["schema_version"], "1.4.0")
         self.assertEqual(result.next_plan["consistency_profile"], current["consistency_profile"])
         next_item = result.next_plan["items"][0]
         self.assertEqual(next_item["entity_ids"], ["amu"])

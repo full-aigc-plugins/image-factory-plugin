@@ -84,7 +84,7 @@ class SchemaContractTests(unittest.TestCase):
         schema = load_schema("image_batch.schema.json")
         props = schema["properties"]
         self.assertEqual(schema["required"], ["schema_version", "batch_id", "round", "items"])
-        self.assertEqual(props["schema_version"]["const"], "1.3.0")
+        self.assertEqual(props["schema_version"]["const"], "1.4.0")
         self.assertEqual(props["batch_id"]["pattern"], "^[a-z0-9][a-z0-9_-]{2,63}$")
         self.assertEqual(props["round"]["minimum"], 1)
         self.assertIsInstance(props["schema_version"]["const"], str)
@@ -114,7 +114,7 @@ class SchemaContractTests(unittest.TestCase):
 
     def test_image_plan_1_3_requires_both_human_gates(self) -> None:
         schema = load_schema("image_batch.schema.json")
-        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.3.0")
+        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.4.0")
         limits = schema["$defs"]["batchLimits"]
         policy = schema["$defs"]["judgePolicy"]
         self.assertEqual(limits["properties"]["require_approval_before_run"], {"const": True})
@@ -143,7 +143,7 @@ class SchemaContractTests(unittest.TestCase):
         ):
             self.assertIn(field, schema["required"], field)
         self.assertEqual(props["plugin_id"]["const"], PLUGIN_ID)
-        self.assertEqual(props["schema_version"]["const"], "1.0.0")
+        self.assertEqual(props["schema_version"]["const"], "1.1.0")
         self.assertEqual(props["sha256"]["pattern"], "^[0-9a-f]{64}$")
         self.assertEqual(props["prompt_sha256"]["pattern"], "^[0-9a-f]{64}$")
         self.assertEqual(props["idempotency_key"]["pattern"], "^[0-9a-f]{64}$")
@@ -250,7 +250,7 @@ class SchemaContractTests(unittest.TestCase):
             schema["required"],
             ["schema_version", "batch_id", "round", "pass_threshold", "deterministic_gates", "advisory", "human_labels", "decision"],
         )
-        self.assertEqual(props["schema_version"]["const"], "1.1.0")
+        self.assertEqual(props["schema_version"]["const"], "1.2.0")
         self.assertEqual(props["decision"]["enum"], ["pass", "fail", "pending_approval"])
         self.assertEqual(props["advisory"]["properties"]["enabled"]["type"], "boolean")
         item_score = schema["$defs"]["advisoryScore"]
@@ -280,6 +280,9 @@ class SchemaContractTests(unittest.TestCase):
             "hash_mismatch",
             "missing_artifact",
             "failed_pixel_check",
+            "aspect_ratio_out_of_range",
+            "near_duplicate_content",
+            "perceptual_hash_unavailable",
         ])
         detail = gate["properties"]["pixel_checks"]["items"]
         self.assertEqual(detail["required"], ["kind", "passed", "measured", "expected"])

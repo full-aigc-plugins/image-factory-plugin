@@ -8,6 +8,7 @@ from pathlib import Path
 
 import artifact_collector
 import atomic_json
+import contract_migrations
 import schema_lite
 
 
@@ -31,15 +32,19 @@ def manifest_path(job_path: Path) -> Path:
 
 
 def _validate(receipt: object, source: Path | None = None) -> dict:
+    try:
+        migrated = contract_migrations.migrate_artifact_receipt(receipt).document
+    except ValueError as error:
+        location = f" at {source}" if source is not None else ""
+        raise ReceiptStoreError(f"receipt{location} cannot be migrated: {error}") from error
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    violations = schema_lite.validate(receipt, schema)
+    violations = schema_lite.validate(migrated, schema)
     if violations:
         location = f" at {source}" if source is not None else ""
         raise ReceiptStoreError(
             f"receipt{location} does not conform to its schema: {'; '.join(violations)}"
         )
-    assert isinstance(receipt, dict)
-    return receipt
+    return migrated
 
 
 def write_receipt(job_path: Path, receipt: dict) -> Path:
@@ -135,9 +140,7 @@ def load_verified_receipts(
 def rebuild_manifest(job_path: Path, receipts: dict[str, dict]) -> Path:
     # The compatibility manifest historically used append order. The verified
     # loader inserts legacy entries first and newly persisted entries after them.
-    ordered = list(receipts.values())
-    for receipt in ordered:
-        _validate(receipt)
+    ordered = [_validate(receipt) for receipt in receipts.values()]
     target = manifest_path(job_path)
     atomic_json.write_json_atomic(target, ordered)
     return target

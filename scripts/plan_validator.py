@@ -66,6 +66,8 @@ class PlanItem:
     reference_bindings: tuple[ReferenceBinding, ...] = ()
     entity_ids: tuple[str, ...] = ()
     allowed_variations: tuple[str, ...] = ()
+    aspect_ratio_range: tuple[float, float] | None = None
+    series_mode: bool = False
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,7 @@ class PlanResult:
     require_human_labels: bool
     migration_notes: tuple[str, ...]
     consistency_profile_sha256: str | None = None
+    near_duplicate_hamming_distance: int | None = None
 
 
 def file_sha256(target: Path) -> str:
@@ -446,6 +449,21 @@ def validate_plan(
                 check_errors = True
         if check_errors:
             continue
+        ratio_declaration = row.get("aspect_ratio_range")
+        aspect_ratio_range = None
+        if ratio_declaration is not None:
+            ratio_min = float(ratio_declaration["min"])
+            ratio_max = float(ratio_declaration["max"])
+            if ratio_min > ratio_max:
+                errors.append(
+                    PlanError(
+                        "plan_aspect_ratio_range_invalid",
+                        "aspect_ratio_range min must not exceed max",
+                        item_id,
+                    )
+                )
+                continue
+            aspect_ratio_range = (ratio_min, ratio_max)
         items.append(
             PlanItem(
                 id=item_id,
@@ -471,6 +489,8 @@ def validate_plan(
                 reference_bindings=reference_bindings,
                 entity_ids=entity_ids,
                 allowed_variations=allowed_variations,
+                aspect_ratio_range=aspect_ratio_range,
+                series_mode=profile is not None,
             )
         )
 
@@ -479,6 +499,7 @@ def validate_plan(
     min_dimension = policy.get("min_dimension", 256)
     reject_duplicates = policy.get("reject_duplicates", True)
     advisory_enabled = policy.get("advisory_enabled", False)
+    near_duplicate_hamming_distance = policy.get("near_duplicate_hamming_distance")
     plan_sha256 = ""
     if not errors:
         plan_sha256 = canonical_plan_sha256(
@@ -496,6 +517,7 @@ def validate_plan(
                     "pass_threshold": pass_threshold,
                     "advisory_enabled": advisory_enabled,
                     "require_human_labels": require_human_labels,
+                    "near_duplicate_hamming_distance": near_duplicate_hamming_distance,
                 },
                 "consistency_profile_sha256": profile_sha256,
                 "items": [
@@ -513,6 +535,14 @@ def validate_plan(
                             for binding in item.reference_bindings
                         ],
                         "idempotency_key": item.idempotency_key,
+                        "aspect_ratio_range": (
+                            None
+                            if item.aspect_ratio_range is None
+                            else {
+                                "min": item.aspect_ratio_range[0],
+                                "max": item.aspect_ratio_range[1],
+                            }
+                        ),
                     }
                     for item in items
                 ],
@@ -536,4 +566,5 @@ def validate_plan(
         require_human_labels=require_human_labels,
         migration_notes=migration.notes,
         consistency_profile_sha256=profile_sha256,
+        near_duplicate_hamming_distance=near_duplicate_hamming_distance,
     )

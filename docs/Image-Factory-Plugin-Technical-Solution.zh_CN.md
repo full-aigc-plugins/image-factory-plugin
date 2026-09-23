@@ -4,7 +4,7 @@
 >
 > | 字段 | 值 |
 > |---|---|
-> | 状态 | 0.5.0 release candidate 的已实现方案：在系列一致性契约之上新增流式 attempt 证据、session/call 归属、容量预检与晚到产物恢复；真实模型连续性仍需独立运行验收 |
+> | 状态 | 0.6.0 release candidate 的已实现方案：生产质量门禁、系列封闭评审、可重建汇总、provenance 与校准；真实模型连续性仍需独立运行验收 |
 > | 范围 | 技术决策、执行契约、失败模型，以及支撑它们的平台事实 |
 > | 读者 | 扩展或评审本插件的实现者 |
 > | 运行证据 | `docs/verification/` |
@@ -88,7 +88,7 @@ Image description:
 <the item's effective prompt>
 ```
 
-包装是固定的。image_batch 1.3.0 可以声明 `consistency_profile`；验证器按固定顺序把
+包装是固定的。image_batch 1.4.0 可以声明 `consistency_profile`；验证器按固定顺序把
 风格圣经、负向约束、本帧实体、固定特征、允许变化和参考图角色编译成有效 prompt。
 实体与风格锚点、条目 `references` 和旧 `reference_images` 合计最多五张。幂等键绑定
 有效 prompt 与有序 `(role, entity_id, sha256)`，同一图片从 `identity` 改为 `layout`
@@ -96,6 +96,11 @@ Image description:
 
 回执里的 `prompt_sha256` 精确标识实际有效 prompt。这套契约提高输入稳定性，但不把
 底层生成模型的身份一致性描述成确定性保证；逐图对锚评分仍属于 advisory 或人工验收。
+
+生产质量证据明确分两层：宽高比、精确哈希、尺寸、声明式像素检查以及固定的
+`average-hash-8x8-luma-v1` 距离来自磁盘字节，可以作为 deterministic gate；OCR、手部/
+解剖、人物相似度、服装/道具/画风连续性与场景语义仍是 advisory，且必须给出可观察证据。
+人工标签会与这些信号形成校准报告，候选阈值只报告，不自动应用。
 
 ## 4. 生成模式
 

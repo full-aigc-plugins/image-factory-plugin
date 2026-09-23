@@ -13,7 +13,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "1.3.0"
+      "const": "1.4.0"
     },
     "batch_id": {
       "type": "string",
@@ -143,6 +143,15 @@
                 "maximum": 0.45
               }
             }
+          }
+        },
+        "aspect_ratio_range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": {
+            "min": {"type": "number", "exclusiveMinimum": 0, "maximum": 20},
+            "max": {"type": "number", "exclusiveMinimum": 0, "maximum": 20}
           }
         }
       }
@@ -313,6 +322,11 @@
         },
         "advisory_enabled": {
           "type": "boolean"
+        },
+        "near_duplicate_hamming_distance": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
         },
         "require_human_labels": {
           "const": true

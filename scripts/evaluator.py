@@ -34,12 +34,25 @@ from pathlib import Path
 
 from artifact_collector import file_sha256, parse_png_size
 from declared_checks import evaluate_checks
+import image_quality
+import png_pixels
 
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "1.2.0"
 HUMAN_LABELS = ("approved", "rejected", "unlabeled")
 DECISIONS = ("pass", "fail", "pending_approval")
 MAX_DIMENSIONS = 16
 DIMENSION_FIELDS = frozenset({"name", "score", "evidence"})
+SERIES_DIMENSIONS = frozenset(
+    {
+        "character_identity",
+        "wardrobe",
+        "prop_continuity",
+        "style",
+        "scene_state",
+        "text_absence",
+        "aspect_ratio",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -58,6 +71,7 @@ def _gate(
     destination_dir: Path,
     min_dimension: int,
     pixel_checks: tuple[dict, ...] = (),
+    aspect_ratio_range: tuple[float, float] | None = None,
 ) -> tuple[str, ...]:
     if receipt is None:
         return ("missing_artifact",)
@@ -71,6 +85,10 @@ def _gate(
         failures.append("not_a_png")
     elif size[0] < min_dimension or size[1] < min_dimension:
         failures.append("below_min_dimension")
+    if size is not None and aspect_ratio_range is not None:
+        ratio = size[0] / size[1]
+        if not aspect_ratio_range[0] <= ratio <= aspect_ratio_range[1]:
+            failures.append("aspect_ratio_out_of_range")
     if file_sha256(target) != receipt.get("sha256"):
         failures.append("hash_mismatch")
     if pixel_checks and any(
@@ -107,7 +125,7 @@ def _validate_dimension(dimension: object, item_id: str) -> None:
         )
 
 
-def _validate_advisory(advisory: dict, known: set[str]) -> None:
+def _validate_advisory(advisory: dict, known: set[str], series_items: set[str]) -> None:
     for item_id, entry in advisory.items():
         if item_id not in known:
             raise ValueError(f"advisory score given for unknown item {item_id!r}")
@@ -119,8 +137,21 @@ def _validate_advisory(advisory: dict, known: set[str]) -> None:
                     f"advisory dimensions for {item_id!r} must be a list "
                     f"of at most {MAX_DIMENSIONS} entries"
                 )
+            names: set[str] = set()
             for dimension in dimensions:
                 _validate_dimension(dimension, item_id)
+                name = str(dimension["name"]).strip()
+                if name in names:
+                    raise ValueError(
+                        f"advisory dimension {name!r} is duplicated for {item_id!r}"
+                    )
+                names.add(name)
+                if item_id in series_items and name not in SERIES_DIMENSIONS:
+                    allowed = ", ".join(sorted(SERIES_DIMENSIONS))
+                    raise ValueError(
+                        f"advisory dimension {name!r} for {item_id!r} is not one of "
+                        f"the closed series dimensions: {allowed}"
+                    )
         else:
             score = entry[0] if isinstance(entry, (tuple, list)) else entry
         if not isinstance(score, (int, float)) or isinstance(score, bool):
@@ -169,12 +200,18 @@ def evaluate_batch(
     require_human_labels: bool,
     advisory: dict | None = None,
     human_labels: dict | None = None,
+    near_duplicate_hamming_distance: int | None = None,
 ) -> EvaluationResult:
     destination_dir = Path(destination_dir)
     advisory = dict(advisory or {})
     human_labels = dict(human_labels or {})
     known = {item.id for item in items}
-    _validate_advisory(advisory, known)
+    series_items = {
+        item.id
+        for item in items
+        if getattr(item, "series_mode", False) or getattr(item, "entity_ids", ())
+    }
+    _validate_advisory(advisory, known, series_items)
     _validate_labels(human_labels, known)
 
     item_ids = [item.id for item in items]
@@ -183,7 +220,13 @@ def evaluate_batch(
 
     for item in items:
         receipt = receipts.get(item.id)
-        gates[item.id] = _gate(receipt, destination_dir, min_dimension, getattr(item, "pixel_checks", ()))
+        gates[item.id] = _gate(
+            receipt,
+            destination_dir,
+            min_dimension,
+            getattr(item, "pixel_checks", ()),
+            getattr(item, "aspect_ratio_range", None),
+        )
         resolved = destination_dir / str(receipt.get("path", "")) if receipt else None
         hashes[item.id] = (
             file_sha256(resolved) if resolved is not None and resolved.is_file() else None
@@ -197,6 +240,39 @@ def evaluate_batch(
         for item_id, digest in hashes.items():
             if digest is not None and counts.get(digest, 0) > 1:
                 gates[item_id] = gates[item_id] + ("duplicate_content",)
+
+    perceptual_hashes: dict[str, str] = {}
+    near_duplicates: dict[str, set[str]] = {item_id: set() for item_id in item_ids}
+    if near_duplicate_hamming_distance is not None:
+        if not 0 <= near_duplicate_hamming_distance <= 64:
+            raise ValueError("near_duplicate_hamming_distance must be between 0 and 64")
+        for item in items:
+            receipt = receipts.get(item.id)
+            target = (
+                destination_dir / str(receipt.get("path", "")) if receipt is not None else None
+            )
+            if target is None or not target.is_file() or "not_a_png" in gates[item.id]:
+                continue
+            try:
+                perceptual_hashes[item.id] = image_quality.average_hash(target)
+            except (OSError, ValueError, png_pixels.UnsupportedPNGError):
+                gates[item.id] = gates[item.id] + ("perceptual_hash_unavailable",)
+        for index, left in enumerate(item_ids):
+            left_hash = perceptual_hashes.get(left)
+            if left_hash is None:
+                continue
+            for right in item_ids[index + 1 :]:
+                right_hash = perceptual_hashes.get(right)
+                if right_hash is None:
+                    continue
+                if reject_duplicates and hashes.get(left) == hashes.get(right):
+                    continue
+                if image_quality.hamming_distance(left_hash, right_hash) <= near_duplicate_hamming_distance:
+                    near_duplicates[left].add(right)
+                    near_duplicates[right].add(left)
+        for item_id, related in near_duplicates.items():
+            if related:
+                gates[item_id] = gates[item_id] + ("near_duplicate_content",)
 
     checks_by_item = {
         item.id: tuple(getattr(item, "pixel_checks", ()) or ()) for item in items
@@ -212,6 +288,24 @@ def evaluate_batch(
     per_item = []
     for item_id in item_ids:
         row = {"item_id": item_id, "passed": not gates[item_id], "failures": list(gates[item_id])}
+        item = next(candidate for candidate in items if candidate.id == item_id)
+        receipt = receipts.get(item_id)
+        size = None
+        if receipt is not None:
+            size = parse_png_size(destination_dir / str(receipt.get("path", "")))
+        ratio_range = getattr(item, "aspect_ratio_range", None)
+        if size is not None and ratio_range is not None:
+            row["aspect_ratio"] = {
+                "measured": size[0] / size[1],
+                "expected": {"min": ratio_range[0], "max": ratio_range[1]},
+            }
+        if item_id in perceptual_hashes:
+            row["perceptual_hash"] = {
+                "algorithm": "average-hash-8x8-luma-v1",
+                "value": perceptual_hashes[item_id],
+            }
+        if near_duplicates[item_id]:
+            row["near_duplicate_with"] = sorted(near_duplicates[item_id])
         if item_id in details_by_item:
             row["pixel_checks"] = details_by_item[item_id]
         per_item.append(row)

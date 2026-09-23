@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 — 2026-09-23
+
+- Add image_batch 1.4.0 aspect-ratio ranges and optional fixed-algorithm perceptual-hash near-duplicate gates while preserving generation idempotency.
+- Close series advisory review to identity, wardrobe, prop, style, scene-state, text-absence, and aspect-ratio dimensions with observable evidence.
+- Generate rebuildable HTML contact sheets and JSON storyboards from verified receipts; add the no-generation `summarize` command.
+- Add receipt provenance with honest nulls, human/advisory calibration reports, v1.1 receipt and v1.2 scores migrations, and synthetic production-quality coverage.
+- Keep OCR, anatomy, identity similarity, and semantic continuity advisory; no paid generation or fresh visual-continuity acceptance is claimed by this release.
+
 ## 0.5.0 — 2026-09-23
 
 - Stream Codex JSONL through `Popen` and persist per-attempt events plus atomic progress snapshots while generation is still running.

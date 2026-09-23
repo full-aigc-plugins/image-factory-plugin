@@ -73,6 +73,8 @@ class ReceiptStoreTests(unittest.TestCase):
         self.assertEqual(len(json.loads(manifest.read_text(encoding="utf-8"))), 2)
         self.assertTrue(first.is_file())
         self.assertTrue(second.is_file())
+        self.assertTrue(all(row["schema_version"] == "1.1.0" for row in receipts.values()))
+        self.assertTrue(all(row["provenance"]["plugin_revision"] is None for row in receipts.values()))
 
     def test_closed_schema_rejects_unknown_receipt_fields(self) -> None:
         receipt = self.fixture.receipt("a" * 64)
