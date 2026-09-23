@@ -202,6 +202,11 @@ class LinkTests(unittest.TestCase):
 
 
 class RepositoryStructureTests(unittest.TestCase):
+    def test_skill_sync_uses_repository_token_without_retired_secret_alias(self) -> None:
+        workflow = (ROOT / ".github/workflows/skills-sync.yml").read_text(encoding="utf-8")
+        self.assertIn("secrets.GITHUB_TOKEN", workflow)
+        self.assertNotIn("FULL_AIGC_SKILLS_SYNC_TOKEN", workflow)
+
     def test_release_bump_updates_repository_pins_and_filters_market_sync(self) -> None:
         script = (ROOT / "scripts/bump-plugin.mjs").read_text(encoding="utf-8")
         self.assertIn("bumpRepositoryMarketplace", script)
