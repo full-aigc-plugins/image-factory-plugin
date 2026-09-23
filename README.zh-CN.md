@@ -322,6 +322,8 @@ python -m unittest discover -s tests -v
 python scripts/validate_distribution.py .
 ```
 
+技能源仓使用自身的 `SKILLS_SYNC_TOKEN` 完成跨仓 `repository_dispatch`。事件到达本仓后，`.github/workflows/skills-sync.yml` 只使用本仓受限的 `GITHUB_TOKEN` 校验不可变来源身份、更新受管快照、推送评审分支并创建同步 PR；已退役的 `FULL_AIGC_SKILLS_SYNC_TOKEN` 别名不再使用。
+
 仓库中已记录的证据：
 
 - [离线验证](docs/verification/offline.md) 与 [运行期验证](docs/verification/runtime.md)——逐条记录外部门禁的 `PASS`／`NOT_RUN` 状态。

@@ -325,6 +325,8 @@ python -m unittest discover -s tests -v
 python scripts/validate_distribution.py .
 ```
 
+The producer repository authenticates cross-repository `repository_dispatch` with its `SKILLS_SYNC_TOKEN`. After the event reaches this repository, `.github/workflows/skills-sync.yml` uses only this repository's scoped `GITHUB_TOKEN` to verify the immutable source identity, update the vendored snapshot, push the review branch, and open the sync PR. The retired `FULL_AIGC_SKILLS_SYNC_TOKEN` alias is not used.
+
 Recorded evidence:
 
 - [Offline verification](docs/verification/offline.md) and [runtime verification](docs/verification/runtime.md) — including the `NOT_RUN` usage-limit line and the release-candidate verdict.
