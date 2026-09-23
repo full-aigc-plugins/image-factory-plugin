@@ -6,7 +6,7 @@
 
 > 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
 
-[![版本](https://img.shields.io/badge/version-0.6.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.6.0)
+[![版本](https://img.shields.io/badge/version-0.7.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.7.0)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [命令契约](#命令契约) · [故障排查](#故障排查)
@@ -15,7 +15,7 @@
 
 `image-factory` 提供两层互补能力。用户确认生图后，Harness 依据显式宿主元数据或当前会话实际工具能力识别环境；在 Codex 中优先使用无需 Provider API Key 的内置 `imagegen` / `image_gen`。只有明确观测到图片额度耗尽，才会在 Codex 中提供 Baoyu 降级；ZCode、Kimi 或其他宿主则只在没有可验证原生图片能力时考虑 Baoyu。Factory 工作流继续负责计划校验、批准、回执、评测与恢复等受治理批次能力。
 
-版本 `0.6.0` 新增文件派生宽高比与近重复门禁、系列封闭评审维度、可重建视觉汇总、产物 provenance 与人机校准；真实模型连续性仍需逐图验收，不被单测冒充。
+版本 `0.7.0` 新增 image_batch 1.5.0 结构化故事状态、4/8/12 镜头连续性基准合同、版本化视觉评审器与 scores 1.3.0 来源记录。内置“勤能补拙”基准当前为 synthetic；真实模型连续性仍需逐图验收，不被单测冒充。
 
 ### 适合谁
 
@@ -58,7 +58,7 @@
 |---|---|
 | 插件 ID | `image-factory` |
 | 宿主 | Codex CLI 或 ChatGPT 桌面应用 |
-| 当前版本 | `0.6.0`（供应链 release candidate，详见[成熟度](#成熟度)） |
+| 当前版本 | `0.7.0`（P0 Foundation release candidate，详见[成熟度](#成熟度)） |
 | 插件清单 | `.codex-plugin/plugin.json` |
 | MCP 配置 | 无——在 MCP 服务器存在之前，清单一律禁止写 MCP 条目 |
 | 主要语言 | Python 3.11+ |
@@ -157,7 +157,7 @@ CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖�
 ### 从插件市场安装
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.6.0
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.7.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
@@ -232,9 +232,10 @@ bin/image-factory quote image-plan.json
 
 校验会在花费之前拒绝未知字段、超限与重复幂等键。
 
-多图故事应使用 image_batch 1.4.0 的 `consistency_profile`。人物、道具和画风锚点会
-按固定顺序进入每一帧；`quote` 会显示 `consistency_mode`、档案摘要和每项有效参考图数量。
-完整示例见[系列一致性计划指南](docs/guides/series-consistency.md)。
+多图故事应使用 image_batch 1.5.0 的 `consistency_profile`。人物、道具和画风锚点会
+按固定顺序进入每一帧；`story_state` 进一步把永久锁定、场次锁定和镜头转换编译进实际
+提示词。`quote` 会显示 `consistency_mode`、档案摘要和每项有效参考图数量。完整示例见
+[系列一致性计划指南](docs/guides/series-consistency.md)。
 
 ### 3. 批准并运行
 
@@ -257,6 +258,11 @@ bin/image-factory status image-plan.json
 `evaluate` 还会写出校准报告以及可重建的 HTML/JSON 视觉汇总。系列评审使用人物身份、
 服装、道具、画风、场景状态、无文字和宽高比七个封闭维度，并要求可观察证据；派生汇总
 被删除后可用 `summarize` 从已核验回执与评分重建，全程不调用生成。
+
+标准视觉评审器可通过重复的 `--reviewer-report` 接入；评审器 id、版本、能力、置信度、
+不确定度和证据区域会保留在 scores 1.3.0 中，低置信度 finding 不驱动返工。离线连续性
+基准使用 `benchmark --pack ... --run ... --out ...` 聚合一次通过率、人物漂移率、元素丢失率、
+返工、成本和耗时。参见[视觉连续性 Foundation](docs/guides/visual-consistency-foundation.zh-CN.md)。
 
 ## 配置
 

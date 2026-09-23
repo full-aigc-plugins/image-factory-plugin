@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0.0",
+  "benchmark_id": "diligence-story-4",
+  "title": "勤能补拙四镜头连续性合同基准",
+  "evidence_tier": "synthetic",
+  "minimum_sample_size": 3,
+  "shots": [
+    {
+      "id": "frame-01",
+      "prompt": "十二岁短黑发圆脸学生穿蓝色外套，白天在深色木桌前看着合上的字帖，正面中景，略显笨拙但认真。",
+      "coverage": {
+        "viewpoint": "front",
+        "distance": "medium",
+        "occluded": false,
+        "time_of_day": "day",
+        "emotion": "uncertain"
+      }
+    },
+    {
+      "id": "frame-02",
+      "prompt": "同一学生、同一蓝色外套和木桌，从侧面近景翻开同一本字帖，握笔练习，神情专注。",
+      "coverage": {
+        "viewpoint": "side",
+        "distance": "close",
+        "occluded": false,
+        "time_of_day": "day",
+        "emotion": "focused"
+      }
+    },
+    {
+      "id": "frame-03",
+      "prompt": "同一学生在夜晚台灯下继续练字，手臂部分遮挡蓝色外套，字帖、毛笔和木桌保持一致，侧后方远景。",
+      "coverage": {
+        "viewpoint": "three-quarter",
+        "distance": "wide",
+        "occluded": true,
+        "time_of_day": "night",
+        "emotion": "tired but persistent"
+      }
+    },
+    {
+      "id": "frame-04",
+      "prompt": "清晨，同一学生、蓝色外套、字帖和木桌，展示进步后的工整字迹，正面近景，自信微笑。",
+      "coverage": {
+        "viewpoint": "front",
+        "distance": "close",
+        "occluded": false,
+        "time_of_day": "morning",
+        "emotion": "confident"
+      }
+    }
+  ]
+}

@@ -20,6 +20,10 @@ SCHEMA_FILES = (
     "artifact_receipt.schema.json",
     "factory_job.schema.json",
     "scores.schema.json",
+    "continuity_benchmark.schema.json",
+    "continuity_benchmark_run.schema.json",
+    "continuity_benchmark_report.schema.json",
+    "reviewer_report.schema.json",
 )
 
 # Governed by codex-rs ext/image-generation/src/tool.rs:59 (MAX_EDIT_IMAGES).
@@ -84,7 +88,7 @@ class SchemaContractTests(unittest.TestCase):
         schema = load_schema("image_batch.schema.json")
         props = schema["properties"]
         self.assertEqual(schema["required"], ["schema_version", "batch_id", "round", "items"])
-        self.assertEqual(props["schema_version"]["const"], "1.4.0")
+        self.assertEqual(props["schema_version"]["const"], "1.5.0")
         self.assertEqual(props["batch_id"]["pattern"], "^[a-z0-9][a-z0-9_-]{2,63}$")
         self.assertEqual(props["round"]["minimum"], 1)
         self.assertIsInstance(props["schema_version"]["const"], str)
@@ -112,14 +116,31 @@ class SchemaContractTests(unittest.TestCase):
         self.assertEqual(limits["required"], ["max_images", "max_rounds", "require_approval_before_run"])
         self.assertEqual(limits["properties"]["require_approval_before_run"], {"const": True})
 
-    def test_image_plan_1_3_requires_both_human_gates(self) -> None:
+    def test_image_plan_1_5_requires_both_human_gates(self) -> None:
         schema = load_schema("image_batch.schema.json")
-        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.4.0")
+        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.5.0")
         limits = schema["$defs"]["batchLimits"]
         policy = schema["$defs"]["judgePolicy"]
         self.assertEqual(limits["properties"]["require_approval_before_run"], {"const": True})
         self.assertIn("require_human_labels", policy["required"])
         self.assertEqual(policy["properties"]["require_human_labels"], {"const": True})
+
+    def test_story_state_contract_is_closed_and_versioned(self) -> None:
+        schema = load_schema("image_batch.schema.json")
+        story = schema["$defs"]["storyState"]
+        self.assertIs(story["additionalProperties"], False)
+        self.assertEqual(story["required"], ["permanent_locks", "scenes", "variables"])
+        transition = schema["$defs"]["stateTransition"]
+        self.assertEqual(transition["required"], ["path", "from", "to"])
+        self.assertIn("scene_id", schema["$defs"]["batchItem"]["properties"])
+
+    def test_visual_consistency_contracts_are_closed(self) -> None:
+        pack = load_schema("continuity_benchmark.schema.json")
+        self.assertEqual(pack["properties"]["schema_version"]["const"], "1.0.0")
+        self.assertEqual(pack["properties"]["evidence_tier"]["enum"], ["synthetic", "live"])
+        reviewer = load_schema("reviewer_report.schema.json")
+        self.assertEqual(reviewer["properties"]["schema_version"]["const"], "1.0.0")
+        self.assertIn("version", reviewer["$defs"]["reviewer"]["required"])
 
     def test_artifact_receipt_shape(self) -> None:
         schema = load_schema("artifact_receipt.schema.json")
@@ -248,9 +269,9 @@ class SchemaContractTests(unittest.TestCase):
         props = schema["properties"]
         self.assertEqual(
             schema["required"],
-            ["schema_version", "batch_id", "round", "pass_threshold", "deterministic_gates", "advisory", "human_labels", "decision"],
+            ["schema_version", "batch_id", "round", "pass_threshold", "deterministic_gates", "advisory", "reviewer_reports", "human_labels", "decision"],
         )
-        self.assertEqual(props["schema_version"]["const"], "1.2.0")
+        self.assertEqual(props["schema_version"]["const"], "1.3.0")
         self.assertEqual(props["decision"]["enum"], ["pass", "fail", "pending_approval"])
         self.assertEqual(props["advisory"]["properties"]["enabled"]["type"], "boolean")
         item_score = schema["$defs"]["advisoryScore"]
@@ -267,6 +288,9 @@ class SchemaContractTests(unittest.TestCase):
         self.assertEqual(dimension["properties"]["name"]["maxLength"], 64)
         self.assertEqual(dimension["properties"]["score"]["minimum"], 0)
         self.assertEqual(dimension["properties"]["score"]["maximum"], 1)
+        reviewer = schema["$defs"]["reviewerReport"]
+        self.assertIn("authority", reviewer["required"])
+        self.assertEqual(reviewer["properties"]["authority"], {"const": "advisory"})
         self.assertEqual(dimension["properties"]["evidence"]["maxLength"], 2000)
         self.assertIn("complete", dimension["properties"])
         gate = schema["$defs"]["gateResult"]

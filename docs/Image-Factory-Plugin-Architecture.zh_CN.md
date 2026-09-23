@@ -4,7 +4,7 @@
 >
 > | 字段 | 值 |
 > |---|---|
-> | 状态 | 0.6.0 release candidate：生产质量门禁、系列封闭评审、可重建汇总、provenance 与校准；真实连续性效果尚未冒充为运行验收 |
+> | 状态 | 0.7.0 P0 Foundation release candidate：结构化故事状态、连续性基准合同与版本化视觉评审；真实连续性效果仍为 `NOT_RUN` |
 > | 范围 | 已实现的批量图像内核与提示词发现层 |
 > | 读者 | 本插件的维护者、审阅者与集成者 |
 > | 不在范围 | 工作台界面、父项目状态与非图片媒体管线 |
@@ -71,6 +71,7 @@ Codex 对话就是产品界面。Skills 呈现方向选择、一张紧凑的创�
 | 显式尺寸、质量或模型控制 | 按平台设计不可用 | 不变 | 属于范围之外，而非"计划中" |
 | 用量上限证据 | `NOT_RUN`；耗尽额度既无必要也未被授权 | 不变 | 有意未执行 |
 | 远程 CI、源码/远程/标签一致性、全新安装、付费金丝雀 | 未运行 | 已验证 | 外部门禁 |
+| 4/8/12 镜头连续性基准 | synthetic 合同与聚合器已实现 | 足量 live 分层数据 | 真实模型运行仍为 `NOT_RUN` |
 
 ## 5. 原则与决策
 
@@ -96,6 +97,9 @@ Codex 对话就是产品界面。Skills 呈现方向选择、一张紧凑的创�
 | `scripts/job_ledger.py` | 持久任务状态、原子写、拒绝秘密 | 花费决策 |
 | `scripts/evaluator.py` | 确定性门禁、参考记录、人工标注 | 调用模型 |
 | `scripts/optimizer.py` | 决定哪些项要重做，以及下一轮文档 | 撰写改写内容 |
+| `scripts/story_state.py` | 解析永久/场次锁定、继承变量与状态转换 | 视觉推理 |
+| `scripts/reviewer_adapter.py` | 校验版本化评审器报告并隔离低置信度 finding | 把评审变成判决 |
+| `scripts/continuity_benchmark.py` | 离线聚合连续性人工真值、成本与分层指标 | 调用生成模型或修改台账 |
 | `scripts/image_factory_cli.py` | 花费门禁与 Skills 调用的子命令 | 上述任何逻辑 |
 | `skills/*` | 决定运行哪条命令并报告结果 | 确定性状态 |
 
@@ -143,13 +147,15 @@ sequenceDiagram
 
 五份文档构成接口，每份都用 `additionalProperties: false` 封闭。
 
-**`schemas/image_batch.schema.json`**——一个批次轮次。1.4.0 新增可选的逐项 `aspect_ratio_range` 与固定算法 `near_duplicate_hamming_distance`，两者都是文件派生门禁。条目仍只接受 prompt 与至多五张参考图；schema 不承诺平台不支持的 size、quality、background、n 或 model。
+**`schemas/image_batch.schema.json`**——一个批次轮次。1.5.0 在 1.4.0 文件门禁上增加可选 `story_state`：永久锁定、场次锁定、变量初值和显式转换。未声明状态线性继承，非法旧值或锁定路径修改在花费前失败；条目仍只接受 prompt 与至多五张参考图。
 
 **`schemas/artifact_receipt.schema.json`**——一件已采集产物。除已核验文件和 source 字段外，1.1.0 还记录插件 revision、宿主/Codex 版本、能力签名、reviewer 版本与一致性档案摘要；无法可靠观察的值为 `null`，绝不猜测。
 
 **`schemas/factory_job.schema.json`**——1.1.0 台账。约束状态机、批准历史、计划哈希绑定与 `Attempting`/`Unknown` 的生命周期。旧版 1.0.0 文档在内存中迁移，既不臆造批准证据，也不改变既有观测结果。
 
-**`schemas/scores.schema.json`**——一次评测。文件派生 `deterministic_gates` 与系列封闭维度的 `advisory`、`human_labels` 分开；OCR、手部/解剖、人物相似度和语义连续性仍是 advisory。校准报告、contact sheet 与故事板均为可从已核验回执和评分重建的派生物，不是完成真相源。
+**`schemas/scores.schema.json`**——一次评测。1.3.0 在文件派生门禁、advisory 与人工标签之外，无损保存版本化 reviewer report、置信度、uncertain 和证据区域。OCR、手部/解剖、人物相似度和语义连续性仍是 advisory。
+
+**连续性基准三份 schema**——pack 限定 4/8/12 镜头和 evidence tier，run 记录逐维人工标签、成本与耗时，report 输出样本充足性、一次通过、漂移、丢失和 model/provider/prompt-strategy 分层。synthetic 结果不能冒充 live acceptance。
 
 | 数据 | 所有者 | 位置 | 一致性 |
 |---|---|---|---|

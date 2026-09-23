@@ -14,7 +14,7 @@ PLUGIN_ID = "image-factory"
 DISPLAY_NAME = "Image Factory"
 REPOSITORY = "https://github.com/full-aigc-plugins/image-factory-plugin"
 BRAND_COLOR = "#10B981"
-RELEASE_VERSION = "0.6.0"
+RELEASE_VERSION = "0.7.0"
 
 
 def load_json(relative: str) -> dict:

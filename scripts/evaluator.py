@@ -37,7 +37,7 @@ from declared_checks import evaluate_checks
 import image_quality
 import png_pixels
 
-SCHEMA_VERSION = "1.2.0"
+SCHEMA_VERSION = "1.3.0"
 HUMAN_LABELS = ("approved", "rejected", "unlabeled")
 DECISIONS = ("pass", "fail", "pending_approval")
 MAX_DIMENSIONS = 16
@@ -201,10 +201,12 @@ def evaluate_batch(
     advisory: dict | None = None,
     human_labels: dict | None = None,
     near_duplicate_hamming_distance: int | None = None,
+    reviewer_reports: list[dict] | None = None,
 ) -> EvaluationResult:
     destination_dir = Path(destination_dir)
     advisory = dict(advisory or {})
     human_labels = dict(human_labels or {})
+    reviewer_reports = list(reviewer_reports or [])
     known = {item.id for item in items}
     series_items = {
         item.id
@@ -213,6 +215,14 @@ def evaluate_batch(
     }
     _validate_advisory(advisory, known, series_items)
     _validate_labels(human_labels, known)
+    for report in reviewer_reports:
+        if report.get("authority") != "advisory":
+            raise ValueError("reviewer report authority must remain advisory")
+        if report.get("batch_id") != batch_id or report.get("round") != round_number:
+            raise ValueError("reviewer report does not match the evaluated batch round")
+        report_ids = [row.get("item_id") for row in report.get("items", [])]
+        if len(report_ids) != len(set(report_ids)) or not set(report_ids) <= known:
+            raise ValueError("reviewer report items must be unique and belong to the batch")
 
     item_ids = [item.id for item in items]
     gates: dict[str, tuple[str, ...]] = {}
@@ -363,6 +373,7 @@ def evaluate_batch(
         "pass_threshold": pass_threshold,
         "deterministic_gates": {"all_passed": all_passed, "per_item": per_item},
         "advisory": {"enabled": advisory_enabled, "items": advisory_items},
+        "reviewer_reports": reviewer_reports,
         "human_labels": label_rows,
         "decision": decision,
     }

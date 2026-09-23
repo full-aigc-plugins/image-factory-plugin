@@ -33,6 +33,7 @@ import atomic_json
 import capability_probe
 import capacity_preflight
 import calibration
+import continuity_benchmark
 import contract_migrations
 import evaluator
 import generation_runner
@@ -43,6 +44,7 @@ import plan_validator
 import prompt_library
 import provenance
 import receipt_store
+import reviewer_adapter
 import schema_lite
 import visual_summary
 
@@ -132,6 +134,8 @@ def mutating_command_paths(args: argparse.Namespace) -> dict[str, Path]:
             paths["labels"] = Path(args.labels)
         if args.advisory:
             paths["advisory"] = Path(args.advisory)
+        for index, report in enumerate(getattr(args, "reviewer_report", None) or ()):
+            paths[f"reviewer_report:{index}"] = Path(report)
         return paths
     if args.command == "optimize":
         paths = {**common, "scores": Path(args.scores), "out": Path(args.out)}
@@ -1027,7 +1031,20 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
         receipts[item.id] = receipt
 
     try:
-        advisory = _advisory_from_file(args.advisory)
+        if args.advisory and args.reviewer_report:
+            raise ValueError("--advisory and --reviewer-report cannot be combined")
+        reviewer_reports = [
+            reviewer_adapter.adapt(_load_json(Path(path)))
+            for path in (args.reviewer_report or ())
+        ]
+        for report in reviewer_reports:
+            if report["batch_id"] != result.batch_id or report["round"] != result.round:
+                raise ValueError("reviewer report does not match the evaluation plan")
+        advisory = (
+            reviewer_adapter.merge_advisory(reviewer_reports)
+            if reviewer_reports
+            else _advisory_from_file(args.advisory)
+        )
         labels = _load_json(Path(args.labels)) if args.labels else {}
     except ValueError as error:
         return EXIT_USAGE, _emit({"ok": False, "error": str(error)}, args.json)
@@ -1046,6 +1063,7 @@ def command_evaluate(args: argparse.Namespace) -> tuple[int, str]:
         advisory=advisory,
         human_labels=labels,
         near_duplicate_hamming_distance=result.near_duplicate_hamming_distance,
+        reviewer_reports=reviewer_reports,
     )
     scores_path = Path(args.scores)
     atomic_json.write_json_atomic(scores_path, evaluation.scores)
@@ -1346,6 +1364,32 @@ def command_prompt_search(args: argparse.Namespace) -> tuple[int, str]:
     return EXIT_OK, _emit(prompt_library.search(args.query, args.limit), args.json)
 
 
+def command_benchmark(args: argparse.Namespace) -> tuple[int, str]:
+    """Aggregate existing benchmark records without generation or ledger writes."""
+    pack_path = Path(args.pack)
+    run_paths = [Path(path) for path in args.run]
+    out_path = Path(args.out)
+    named_paths = {"pack": pack_path, "out": out_path}
+    named_paths.update({f"run:{index}": path for index, path in enumerate(run_paths)})
+    refuse_path_aliases(named_paths)
+    report = continuity_benchmark.summarize(
+        _load_json(pack_path),
+        [_load_json(path) for path in run_paths],
+    )
+    atomic_json.write_json_atomic(out_path, report)
+    return EXIT_OK, _emit(
+        {
+            "ok": True,
+            "report": str(out_path),
+            "benchmark_id": report["benchmark_id"],
+            "evidence_tier": report["evidence_tier"],
+            "run_count": report["overall"]["run_count"],
+            "sample_status": report["overall"]["sample_status"],
+        },
+        args.json,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument("--codex-home", default=None)
@@ -1361,6 +1405,11 @@ def build_parser() -> argparse.ArgumentParser:
     search = subparsers.add_parser("prompt-search", parents=[shared])
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=3)
+
+    benchmark = subparsers.add_parser("benchmark", parents=[shared])
+    benchmark.add_argument("--pack", required=True)
+    benchmark.add_argument("--run", action="append", required=True)
+    benchmark.add_argument("--out", required=True)
 
     validate = subparsers.add_parser("validate-plan", parents=[shared])
     validate.add_argument("plan")
@@ -1383,6 +1432,7 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--job", required=True)
     evaluate.add_argument("--scores", required=True)
     evaluate.add_argument("--advisory", default=None)
+    evaluate.add_argument("--reviewer-report", action="append", default=None)
     evaluate.add_argument("--labels", default=None)
 
     optimize = subparsers.add_parser("optimize", parents=[shared])
@@ -1410,6 +1460,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 HANDLERS = {
     "prompt-search": command_prompt_search,
+    "benchmark": command_benchmark,
     "probe": command_probe,
     "validate-plan": command_validate_plan,
     "quote": command_quote,

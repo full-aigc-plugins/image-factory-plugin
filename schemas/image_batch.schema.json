@@ -13,7 +13,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "1.4.0"
+      "const": "1.5.0"
     },
     "batch_id": {
       "type": "string",
@@ -94,6 +94,17 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 300
+          }
+        },
+        "scene_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "state_transitions": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/stateTransition"
           }
         },
         "notes": {
@@ -269,6 +280,111 @@
           "maxItems": 50,
           "items": {
             "$ref": "#/$defs/consistencyEntity"
+          }
+        },
+        "story_state": {
+          "$ref": "#/$defs/storyState"
+        }
+      }
+    },
+    "stateBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "value"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$",
+          "maxLength": 200
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "storyVariable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "initial_value"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$",
+          "maxLength": 200
+        },
+        "initial_value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "storyScene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "locks"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "locks": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/stateBinding"
+          }
+        }
+      }
+    },
+    "stateTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "from", "to"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$",
+          "maxLength": 200
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "storyState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["permanent_locks", "scenes", "variables"],
+      "properties": {
+        "permanent_locks": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/stateBinding"
+          }
+        },
+        "scenes": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/storyScene"
+          }
+        },
+        "variables": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/storyVariable"
           }
         }
       }

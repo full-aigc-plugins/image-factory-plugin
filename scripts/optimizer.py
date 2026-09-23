@@ -33,6 +33,7 @@ import copy
 from dataclasses import dataclass, field
 
 import contract_migrations
+import story_state as story_state_module
 
 DEFAULT_MAX_ROUNDS = 20
 DEFAULT_FULL_STEP = 0.1
@@ -104,6 +105,43 @@ def _dimension_gaps_by_item(evaluation: dict, threshold: float) -> dict[str, tup
         if named:
             gaps[row["item_id"]] = named
     return gaps
+
+
+def _materialize_rework_story_transitions(
+    current_plan: dict,
+    rows: list[dict],
+    rework_ids: set[str],
+) -> dict[str, list[dict]]:
+    """Keep inherited variable state when passed frames are omitted next round."""
+    profile = current_plan.get("consistency_profile")
+    model, model_errors = story_state_module.build_model(profile)
+    if model is None or model_errors:
+        return {}
+
+    variable_paths = tuple(path for path, _initial in model.variables)
+    current = model.initial_variables()
+    snapshots: dict[str, dict[str, str]] = {}
+    for row in rows:
+        resolved, current, frame_errors = story_state_module.resolve_frame(model, row, current)
+        if resolved is None or frame_errors:
+            return {}
+        bindings = dict(resolved.bindings)
+        snapshots[row["id"]] = {path: bindings[path] for path in variable_paths}
+
+    materialized: dict[str, list[dict]] = {}
+    next_current = model.initial_variables()
+    for row in rows:
+        item_id = row["id"]
+        if item_id not in rework_ids:
+            continue
+        desired = snapshots[item_id]
+        materialized[item_id] = [
+            {"path": path, "from": next_current[path], "to": desired[path]}
+            for path in variable_paths
+            if next_current[path] != desired[path]
+        ]
+        next_current = dict(desired)
+    return materialized
 
 
 def needs_rework(
@@ -383,11 +421,18 @@ def plan_next_round(
         )
 
     rework_set = set(rework_ids)
+    rework_story_transitions = _materialize_rework_story_transitions(
+        current_plan,
+        rows,
+        rework_set,
+    )
     items = []
     for row in rows:
         if row["id"] not in rework_set:
             continue
         replacement = copy.deepcopy(row)
+        if row["id"] in rework_story_transitions:
+            replacement["state_transitions"] = rework_story_transitions[row["id"]]
         if row["id"] in rewrites:
             replacement["prompt"] = str(rewrites[row["id"]]).strip()
         items.append(replacement)
