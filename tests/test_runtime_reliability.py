@@ -199,6 +199,30 @@ class AttemptStoreTests(unittest.TestCase):
             self.assertEqual(progress["event_count"], 1)
             self.assertEqual(attempt_store.load_events(job, attempt_id)[0]["type"], "session.started")
 
+    def test_jsonl_is_authoritative_when_progress_count_lags_after_a_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            job = Path(directory) / "job.json"
+            attempt_id = uuid.uuid4().hex
+            attempt_store.begin_attempt(job, attempt_id, "scene-01", {})
+            events = attempt_store.attempt_directory(job, attempt_id) / "events.jsonl"
+            events.write_text('{"type":"session.started","session_id":"session-a"}\n', encoding="utf-8")
+            self.assertEqual(attempt_store.load_attempt(job, attempt_id)["event_count"], 1)
+
+    def test_invalid_progress_status_is_rejected_before_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            job = Path(directory) / "job.json"
+            attempt_id = uuid.uuid4().hex
+            attempt_store.begin_attempt(job, attempt_id, "scene-01", {})
+            with self.assertRaises(ValueError):
+                attempt_store.finish_attempt(
+                    job,
+                    attempt_id,
+                    status="invented",
+                    session_id=None,
+                    candidate_artifacts=(),
+                    attributed_artifacts=(),
+                )
+
 
 class CapacityTests(unittest.TestCase):
     def test_capacity_rejects_any_checked_path_below_budget(self) -> None:

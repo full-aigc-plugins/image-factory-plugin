@@ -40,6 +40,21 @@ def _events_path(job_path: Path, attempt_id: str) -> Path:
     return attempt_directory(job_path, attempt_id) / "events.jsonl"
 
 
+def _validate_progress(payload: dict) -> None:
+    violations = schema_lite.validate(
+        payload, json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    )
+    if violations:
+        raise ValueError(
+            f"attempt progress does not conform to its schema: {'; '.join(violations)}"
+        )
+
+
+def _write_progress(job_path: Path, attempt_id: str, payload: dict) -> None:
+    _validate_progress(payload)
+    atomic_json.write_json_atomic(_progress_path(job_path, attempt_id), payload)
+
+
 def begin_attempt(
     job_path: Path,
     attempt_id: str,
@@ -70,7 +85,7 @@ def begin_attempt(
         "started_at": stamp,
         "updated_at": stamp,
     }
-    atomic_json.write_json_atomic(_progress_path(job_path, attempt_id), progress)
+    _write_progress(job_path, attempt_id, progress)
     return progress
 
 
@@ -78,11 +93,16 @@ def load_attempt(job_path: Path, attempt_id: str) -> dict:
     payload = json.loads(_progress_path(job_path, attempt_id).read_text(encoding="utf-8"))
     if payload.get("attempt_id") != attempt_id:
         raise ValueError("attempt progress id does not match its directory")
-    violations = schema_lite.validate(
-        payload, json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    )
-    if violations:
-        raise ValueError(f"attempt progress does not conform to its schema: {'; '.join(violations)}")
+    _validate_progress(payload)
+    # An append is durable before the atomic progress replacement. If the host
+    # stops between those writes, readers report the JSONL truth without mutating
+    # either evidence file.
+    events = load_events(job_path, attempt_id)
+    payload["event_count"] = len(events)
+    for event in events:
+        session_id = _find_key(event, "session_id")
+        if isinstance(session_id, str) and session_id:
+            payload["session_id"] = session_id
     return payload
 
 
@@ -101,7 +121,7 @@ def append_event(job_path: Path, attempt_id: str, event: dict) -> dict:
     if isinstance(session_id, str) and session_id:
         progress["session_id"] = session_id
     progress["updated_at"] = _timestamp()
-    atomic_json.write_json_atomic(_progress_path(job_path, attempt_id), progress)
+    _write_progress(job_path, attempt_id, progress)
     return progress
 
 
@@ -124,7 +144,7 @@ def finish_attempt(
             "updated_at": _timestamp(),
         }
     )
-    atomic_json.write_json_atomic(_progress_path(job_path, attempt_id), progress)
+    _write_progress(job_path, attempt_id, progress)
     return progress
 
 
@@ -150,7 +170,7 @@ def latest_attempt(job_path: Path) -> dict | None:
     candidates = sorted(root.glob("*/progress.json"), key=lambda path: path.stat().st_mtime_ns)
     if not candidates:
         return None
-    return json.loads(candidates[-1].read_text(encoding="utf-8"))
+    return load_attempt(job_path, candidates[-1].parent.name)
 
 
 def before_snapshot(progress: dict) -> dict:
