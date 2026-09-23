@@ -57,9 +57,9 @@ def migrate_image_batch(document: object) -> MigrationResult:
         raise ValueError("image batch must be a JSON object")
     plan = copy.deepcopy(document)
     version = plan.get("schema_version")
-    if version == "1.4.0":
+    if version == "1.5.0":
         return MigrationResult(plan, ())
-    if version not in ("1.0.0", "1.1.0", "1.2.0", "1.3.0"):
+    if version not in ("1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"):
         raise ValueError(f"unsupported image batch schema_version {version!r}")
     notes: list[str] = []
     if version == "1.0.0":
@@ -98,6 +98,12 @@ def migrate_image_batch(document: object) -> MigrationResult:
         # 1.3.0 -> 1.4.0 adds optional, file-derived production quality gates.
         plan["schema_version"] = "1.4.0"
         notes.append("migrated image batch 1.3.0 to 1.4.0")
+        version = "1.4.0"
+    if version == "1.4.0":
+        # 1.4.0 -> 1.5.0 adds only optional structured story-state fields.
+        # There is no safe state to infer for an older plan.
+        plan["schema_version"] = "1.5.0"
+        notes.append("migrated image batch 1.4.0 to 1.5.0")
     return MigrationResult(plan, tuple(notes))
 
 
@@ -126,17 +132,25 @@ def migrate_artifact_receipt(document: object) -> MigrationResult:
 
 
 def migrate_scores(document: object) -> MigrationResult:
-    """Accept v1.1 scores; v1.2 only adds optional deterministic evidence fields."""
+    """Upgrade scores without inventing reviewer evidence."""
     if not isinstance(document, dict):
         raise ValueError("scores must be a JSON object")
     scores = copy.deepcopy(document)
     version = scores.get("schema_version")
-    if version == "1.2.0":
+    if version == "1.3.0":
         return MigrationResult(scores, ())
-    if version != "1.1.0":
+    if version not in ("1.1.0", "1.2.0"):
         raise ValueError(f"unsupported scores schema_version {version!r}")
-    scores["schema_version"] = "1.2.0"
-    return MigrationResult(scores, ("migrated scores 1.1.0 to 1.2.0",))
+    notes: list[str] = []
+    if version == "1.1.0":
+        scores["schema_version"] = "1.2.0"
+        notes.append("migrated scores 1.1.0 to 1.2.0")
+        version = "1.2.0"
+    if version == "1.2.0":
+        scores["schema_version"] = "1.3.0"
+        scores["reviewer_reports"] = []
+        notes.append("migrated scores 1.2.0 to 1.3.0")
+    return MigrationResult(scores, tuple(notes))
 
 
 def migrate_factory_job(document: object) -> MigrationResult:

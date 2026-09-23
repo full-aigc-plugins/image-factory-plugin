@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0.0",
+  "benchmark_id": "diligence-story-12",
+  "title": "勤能补拙十二镜头连续性合同基准",
+  "evidence_tier": "synthetic",
+  "minimum_sample_size": 3,
+  "shots": [
+    {
+      "id": "frame-01",
+      "prompt": "十二岁短黑发圆脸学生穿蓝色外套，白天在深色木桌前看着合上的字帖，正面中景，略显笨拙但认真。",
+      "coverage": {"viewpoint": "front", "distance": "medium", "occluded": false, "time_of_day": "day", "emotion": "uncertain"}
+    },
+    {
+      "id": "frame-02",
+      "prompt": "同一学生从侧面近景翻开同一本字帖，第一次落笔写歪，蓝色外套、木桌和毛笔保持一致，神情窘迫。",
+      "coverage": {"viewpoint": "side", "distance": "close", "occluded": false, "time_of_day": "day", "emotion": "embarrassed"}
+    },
+    {
+      "id": "frame-03",
+      "prompt": "正面近景，同一学生看着歪斜字迹皱眉，抬起的手遮住部分下巴，打开的字帖仍在木桌中央。",
+      "coverage": {"viewpoint": "front", "distance": "close", "occluded": true, "time_of_day": "day", "emotion": "frustrated"}
+    },
+    {
+      "id": "frame-04",
+      "prompt": "午后侧后方中景，同一学生重新坐直，按同一字帖笔画反复练习，发型、年龄和服装保持不变。",
+      "coverage": {"viewpoint": "three-quarter", "distance": "medium", "occluded": false, "time_of_day": "afternoon", "emotion": "focused"}
+    },
+    {
+      "id": "frame-05",
+      "prompt": "俯视中景，同一学生的手与毛笔遮住部分字帖，一行行重复临摹，木桌纹理与蓝色袖口清晰可辨。",
+      "coverage": {"viewpoint": "mixed", "distance": "medium", "occluded": true, "time_of_day": "afternoon", "emotion": "patient"}
+    },
+    {
+      "id": "frame-06",
+      "prompt": "黄昏远景，同一学生仍坐在同一木桌前，打开的字帖、毛笔和未点亮的台灯位置保持一致。",
+      "coverage": {"viewpoint": "side", "distance": "wide", "occluded": false, "time_of_day": "dusk", "emotion": "persistent"}
+    },
+    {
+      "id": "frame-07",
+      "prompt": "夜幕降临，台灯已经点亮，同一学生正面中景继续练字，前臂遮挡蓝色外套胸口，神情疲惫。",
+      "coverage": {"viewpoint": "front", "distance": "medium", "occluded": true, "time_of_day": "night", "emotion": "tired"}
+    },
+    {
+      "id": "frame-08",
+      "prompt": "深夜侧面近景，同一学生揉眼后再次握住同一毛笔，短黑发、圆脸、蓝色外套和打开的字帖保持不变。",
+      "coverage": {"viewpoint": "side", "distance": "close", "occluded": false, "time_of_day": "night", "emotion": "determined"}
+    },
+    {
+      "id": "frame-09",
+      "prompt": "深夜背面远景，同一学生在台灯下形成小小剪影，木桌、打开的字帖和毛笔仍处于同一场景状态。",
+      "coverage": {"viewpoint": "back", "distance": "wide", "occluded": false, "time_of_day": "night", "emotion": "persistent"}
+    },
+    {
+      "id": "frame-10",
+      "prompt": "次日清晨侧后方中景，同一学生翻看已经写满的字帖，蓝色外套、发型、年龄和木桌保持一致，神情惊喜。",
+      "coverage": {"viewpoint": "three-quarter", "distance": "medium", "occluded": false, "time_of_day": "morning", "emotion": "surprised"}
+    },
+    {
+      "id": "frame-11",
+      "prompt": "清晨正面近景，同一学生完成最后一个字，手掌部分遮挡字帖下角，笔画已经明显工整，神情平静。",
+      "coverage": {"viewpoint": "front", "distance": "close", "occluded": true, "time_of_day": "morning", "emotion": "calm"}
+    },
+    {
+      "id": "frame-12",
+      "prompt": "清晨正面中景，同一学生在同一木桌前展示进步后的整页字迹，蓝色外套、短黑发和圆脸保持一致，自信微笑。",
+      "coverage": {"viewpoint": "front", "distance": "medium", "occluded": false, "time_of_day": "morning", "emotion": "confident"}
+    }
+  ]
+}

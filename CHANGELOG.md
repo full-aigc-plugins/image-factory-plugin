@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0 — 2026-09-23
+
+- Add image_batch 1.5.0 structured story state with permanent locks, scene locks, inherited variables, explicit transitions, deterministic prompt compilation, and state-preserving rework.
+- Add closed benchmark pack/run/report contracts for 4/8/12-shot continuity evaluation, plus a no-generation `benchmark` CLI that reports first-pass, rework, drift, omission, observed cost/latency, and model/provider/prompt-strategy strata.
+- Add the synthetic “勤能补拙” four-shot benchmark manifest while keeping all live continuity claims explicitly unverified.
+- Add versioned reviewer reports with capability declarations, confidence thresholds, uncertainty, evidence regions, advisory-only aggregation, and scores 1.3.0 provenance.
+- Archive the completed pixel-check and loop-convergence OpenSpec changes; retain P1 evidence UX and P2 live/runtime acceptance as open tasks in `operationalize-visual-consistency`.
+
 ## 0.6.0 — 2026-09-23
 
 - Add image_batch 1.4.0 aspect-ratio ranges and optional fixed-algorithm perceptual-hash near-duplicate gates while preserving generation idempotency.

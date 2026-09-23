@@ -1,6 +1,17 @@
-# Runtime and release verification: 0.6.0 candidate status
+# Runtime and release verification: 0.7.0 candidate status
 
-The `0.6.0` candidate adds production quality gates, closed series-review dimensions, rebuildable visual summaries, provenance, and calibration on top of the `0.5.0` durable runtime. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh installation, remote SHA, paid-generation proof, or live character-continuity acceptance. Current-candidate local evidence covers deterministic contracts and synthetic tests; fresh installation and visual continuity generation remain separate release gates.
+The `0.7.0` candidate adds structured story state, fixed synthetic 4/8/12-shot benchmark packs, a no-generation benchmark aggregator, and versioned visual reviewer evidence on top of the `0.6.0` quality contracts. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh installation, remote SHA, paid-generation proof, or live character-continuity acceptance. Current-candidate local evidence covers 510 deterministic and synthetic tests. The bundled diligence-story packs are explicitly `synthetic`; fresh installation and live continuity generation remain separate release gates.
+
+## 0.7.0 visual-continuity acceptance boundary
+
+| Case | Status | Evidence |
+| --- | --- | --- |
+| `structured_story_state_contract` | `PASS` | Local schema, migration, prompt-compilation, idempotency and cross-round rework tests. |
+| `synthetic_continuity_benchmark` | `PASS` | Four-shot diligence-story manifest plus offline aggregation tests; no model call. |
+| `versioned_reviewer_contract` | `PASS` | Reviewer version/capability/confidence/uncertainty and human-authority tests. |
+| `live_4_8_12_continuity_benchmark` | `NOT_RUN` | No paid 0.7.0 story generation has been performed. |
+| `cross_host_visual_continuity` | `NOT_RUN` | Codex/ZCode/Kimi live comparison is a later OpenSpec task. |
+| `fault_injection_acceptance_matrix` | `NOT_RUN` | Unit coverage exists, but the structured runtime matrix has not yet been executed. |
 
 This file is the evidence ledger for the Image Factory 0.1.2 release
 candidate. It intentionally does not reuse runtime, installation, remote commit,

@@ -273,8 +273,8 @@ class GateIntegrationTests(unittest.TestCase):
         self.assertEqual(result.scores["decision"], "pass")
 
     def test_schema_versions_are_current(self) -> None:
-        self.assertEqual(BATCH_SCHEMA["properties"]["schema_version"]["const"], "1.4.0")
-        self.assertEqual(SCORES_SCHEMA["properties"]["schema_version"]["const"], "1.2.0")
+        self.assertEqual(BATCH_SCHEMA["properties"]["schema_version"]["const"], "1.5.0")
+        self.assertEqual(SCORES_SCHEMA["properties"]["schema_version"]["const"], "1.3.0")
 
 
 if __name__ == "__main__":

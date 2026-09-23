@@ -18,7 +18,7 @@ Image Factory 把“文件事实”和“视觉判断”分开，避免把模型
 
 ```json
 {
-  "schema_version": "1.4.0",
+  "schema_version": "1.5.0",
   "judge_policy": {
     "min_dimension": 512,
     "reject_duplicates": true,
@@ -61,3 +61,11 @@ bin/image-factory summarize \
 版本和一致性档案摘要。无法观察时写 `null`，不填“看起来合理”的值。单元测试可以证明
 合同与算法，不等于真实模型已通过人物连续性验收；后者仍需在磁盘与额度允许时用真实批次
 逐图验收。
+
+## 版本化视觉评审器
+
+`evaluate --reviewer-report reviewer.json` 接受带 reviewer id、版本、能力集合、置信度和
+可观察证据的标准报告。低于报告 `confidence_threshold` 的 finding 会保留为
+`uncertain`，但不会进入返工分数；原始 finding、证据区域和来源仍写入 scores 1.3.0。
+多份报告可重复传入 `--reviewer-report`，派生 advisory 只聚合高置信度 finding，原始报告
+不会被覆盖。评审器始终是 advisory，不能制造确定性失败，也不能推翻人工决定。

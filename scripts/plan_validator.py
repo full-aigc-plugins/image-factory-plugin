@@ -23,6 +23,7 @@ from pathlib import Path
 import contract_migrations
 import declared_checks as declared_checks_module
 import schema_lite
+import story_state as story_state_module
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "image_batch.schema.json"
 
@@ -68,6 +69,9 @@ class PlanItem:
     allowed_variations: tuple[str, ...] = ()
     aspect_ratio_range: tuple[float, float] | None = None
     series_mode: bool = False
+    scene_id: str | None = None
+    resolved_story_state: tuple[tuple[str, str], ...] = ()
+    state_transitions: tuple[tuple[str, str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -163,6 +167,8 @@ def _compile_effective_prompt(
     allowed_variations: tuple[str, ...],
     bindings: tuple[ReferenceBinding, ...],
     structured_references: bool,
+    resolved_story_state: tuple[tuple[str, str], ...] = (),
+    state_transitions: tuple[tuple[str, str, str], ...] = (),
 ) -> str:
     if profile is None and not structured_references:
         return prompt
@@ -190,6 +196,14 @@ def _compile_effective_prompt(
         for index, binding in enumerate(bindings, start=1):
             suffix = f", entity={binding.entity_id}" if binding.entity_id else ""
             lines.append(f"{index}. role={binding.role}{suffix}")
+    if resolved_story_state:
+        lines.append("[RESOLVED STORY STATE]")
+        for path, value in resolved_story_state:
+            lines.append(f"- {path} = {value}")
+    if state_transitions:
+        lines.append("State changes in this frame:")
+        for path, before, after in state_transitions:
+            lines.append(f"- {path}: {before} -> {after}")
     lines.extend(("[SCENE REQUEST]", prompt))
     return "\n".join(lines)
 
@@ -292,6 +306,14 @@ def validate_plan(
                 )
                 continue
             entities_by_id[entity_id] = entity
+    story_model, story_errors = story_state_module.build_model(profile)
+    errors.extend(
+        PlanError(error.code, error.message)
+        for error in story_errors
+    )
+    inherited_story_variables = (
+        story_model.initial_variables() if story_model is not None else {}
+    )
 
     if len(rows) > max_images:
         errors.append(
@@ -429,6 +451,36 @@ def validate_plan(
         allowed_variations = tuple(
             str(value).strip() for value in (row.get("allowed_variations") or ())
         )
+        resolved_story_state: tuple[tuple[str, str], ...] = ()
+        state_transitions: tuple[tuple[str, str, str], ...] = ()
+        scene_id = row.get("scene_id")
+        if story_model is not None:
+            resolved, next_story_variables, frame_errors = story_state_module.resolve_frame(
+                story_model,
+                row,
+                inherited_story_variables,
+            )
+            if frame_errors:
+                errors.extend(
+                    PlanError(error.code, error.message, item_id)
+                    for error in frame_errors
+                )
+                continue
+            assert resolved is not None
+            inherited_story_variables = next_story_variables
+            resolved_story_state = resolved.bindings
+            state_transitions = resolved.transitions
+            scene_id = resolved.scene_id
+        elif scene_id is not None or row.get("state_transitions"):
+            errors.append(
+                PlanError(
+                    "plan_story_state_profile_required",
+                    f"item {item_id!r} declares story state without a story_state profile",
+                    item_id,
+                )
+            )
+            continue
+
         effective_prompt = _compile_effective_prompt(
             prompt=prompt,
             profile=profile,
@@ -436,6 +488,8 @@ def validate_plan(
             allowed_variations=allowed_variations,
             bindings=reference_bindings,
             structured_references=bool(row.get("references")),
+            resolved_story_state=resolved_story_state,
+            state_transitions=state_transitions,
         )
         effective_prompt_sha256 = _sha256_text(effective_prompt)
         declared_checks = tuple(row.get("pixel_checks") or ())
@@ -491,6 +545,9 @@ def validate_plan(
                 allowed_variations=allowed_variations,
                 aspect_ratio_range=aspect_ratio_range,
                 series_mode=profile is not None,
+                scene_id=scene_id,
+                resolved_story_state=resolved_story_state,
+                state_transitions=state_transitions,
             )
         )
 
@@ -543,6 +600,15 @@ def validate_plan(
                                 "max": item.aspect_ratio_range[1],
                             }
                         ),
+                        "scene_id": item.scene_id,
+                        "resolved_story_state": [
+                            {"path": path, "value": value}
+                            for path, value in item.resolved_story_state
+                        ],
+                        "state_transitions": [
+                            {"path": path, "from": before, "to": after}
+                            for path, before, after in item.state_transitions
+                        ],
                     }
                     for item in items
                 ],

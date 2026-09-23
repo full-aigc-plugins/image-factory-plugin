@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | 0.6.0 release candidate: production quality gates, closed series review, rebuildable summaries, provenance, and calibration; live continuity is not represented as runtime acceptance evidence |
+> | Status | 0.7.0 P0 Foundation release candidate: structured story state, continuity benchmark contracts, and versioned visual review; live continuity remains `NOT_RUN` |
 > | Scope | The implemented batch image core and prompt-discovery layer |
 > | Audience | Maintainers, reviewers, and integrators of this plugin |
 > | Out of scope | Workbench UI, parent project state, and non-image media pipelines |
@@ -143,7 +143,7 @@ Failure, cancellation, and timeout semantics:
 
 Five documents form the interface, each closed with `additionalProperties: false`.
 
-**`schemas/image_batch.schema.json`** — one batch round. Version 1.4.0 adds optional per-item `aspect_ratio_range` and a fixed-algorithm `near_duplicate_hamming_distance`; both are file-derived gates. An item still carries an `id`, a `prompt`, and at most five references. The schema deliberately has no `size`, `quality`, `background`, `n`, or `model` field: the built-in tool accepts none of them.
+**`schemas/image_batch.schema.json`** — one batch round. Version 1.5.0 adds optional structured story state on top of the 1.4.0 file-derived gates: permanent locks, scene locks, initial variables, and explicit transitions are resolved into the effective prompt before spending.
 
 **`schemas/artifact_receipt.schema.json`** — one collected artifact. Besides the verified file and source fields, v1.1.0 carries nullable provenance for the plugin revision, host/Codex versions, capability signature, reviewer version, and consistency-profile digest. Unknown values remain `null`; the plugin never guesses them.
 
@@ -151,7 +151,9 @@ Five documents form the interface, each closed with `additionalProperties: false
 
 **`schemas/factory_job.schema.json`** — the 1.1.0 ledger. Governs the state machine, approval history, plan-hash binding, and the `Attempting`/`Unknown` item lifecycle. Legacy 1.0.0 documents migrate in memory without inventing approval evidence or changing observed outcomes.
 
-**`schemas/scores.schema.json`** — one evaluation. Separates file-derived `deterministic_gates` from closed-dimension series `advisory` evidence and `human_labels`. OCR, anatomy, identity similarity, and semantic continuity remain advisory. The derived calibration report, contact sheet, and storyboard can be rebuilt from scores plus verified receipts and are not completion truth sources.
+**`schemas/scores.schema.json`** — one evaluation. Version 1.3.0 retains versioned reviewer identity, capabilities, confidence, uncertainty, and evidence regions beside deterministic gates, advisory evidence, and human labels. Probabilistic reviewers remain advisory.
+
+**Continuity benchmark schemas** — a pack declares 4/8/12 shots and evidence tier, a run records dimensioned human truth and observed cost/latency, and a report exposes sample sufficiency plus model/provider/prompt-strategy strata. Synthetic evidence never establishes live continuity.
 
 | Data | Owner | Location | Consistency |
 |---|---|---|---|
@@ -201,7 +203,7 @@ Runtime prerequisites: a Codex installation the user already has, a signed-in ac
 
 Python 3.11 or later is required for `tomllib`. All scripts use the standard library only. GitHub Actions defines six offline cells: Linux, macOS, and Windows on Python 3.11 and 3.13. Each cell compiles sources, runs the full suite, validates the distribution, and checks the diff without installing runtime dependencies.
 
-This document describes the implemented 0.6.0 release candidate image core and prompt-discovery layer. Workbench UI, parent project state, and non-image media pipelines are separate product responsibilities and are not implemented or planned in this plugin repository.
+This document describes the implemented 0.7.0 P0 Foundation image core and prompt-discovery layer. Workbench UI, parent project state, and non-image media pipelines are separate product responsibilities and are not implemented or planned in this plugin repository.
 
 The design leaves three clean seams:
 

@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import continuity_benchmark  # noqa: E402
+import image_factory_cli  # noqa: E402
+import optimizer  # noqa: E402
 import plan_validator  # noqa: E402
 import reviewer_adapter  # noqa: E402
 import schema_lite  # noqa: E402
@@ -178,6 +180,25 @@ def reviewer_report() -> dict:
 
 
 class ContinuityBenchmarkTests(unittest.TestCase):
+    def test_bundled_story_groups_fix_four_eight_and_twelve_shots(self) -> None:
+        benchmark_dir = ROOT / "data" / "benchmarks"
+        observed_counts = set()
+        for path in sorted(benchmark_dir.glob("diligence-story-*.synthetic.json")):
+            pack = continuity_benchmark.validate_pack(
+                json.loads(path.read_text(encoding="utf-8"))
+            )
+            observed_counts.add(len(pack["shots"]))
+            coverage = [shot["coverage"] for shot in pack["shots"]]
+            self.assertIn("front", {row["viewpoint"] for row in coverage})
+            self.assertIn("side", {row["viewpoint"] for row in coverage})
+            self.assertIn("wide", {row["distance"] for row in coverage})
+            self.assertIn(True, {row["occluded"] for row in coverage})
+            self.assertIn("day", {row["time_of_day"] for row in coverage})
+            self.assertIn("night", {row["time_of_day"] for row in coverage})
+            self.assertGreaterEqual(len({row["emotion"] for row in coverage}), 3)
+            self.assertEqual(pack["evidence_tier"], "synthetic")
+        self.assertEqual(observed_counts, {4, 8, 12})
+
     def test_only_four_eight_or_twelve_shots_are_allowed(self) -> None:
         for count in (4, 8, 12):
             continuity_benchmark.validate_pack(benchmark_pack(count))
@@ -210,6 +231,30 @@ class ContinuityBenchmarkTests(unittest.TestCase):
             {row["prompt_strategy"] for row in report["strata"]},
             {"structured-state-v1", "free-text"},
         )
+
+    def test_cli_writes_report_without_a_job_or_generation_call(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            pack_path = base / "pack.json"
+            run_path = base / "run.json"
+            out_path = base / "report.json"
+            pack_path.write_text(json.dumps(benchmark_pack()), encoding="utf-8")
+            run_path.write_text(json.dumps(benchmark_run()), encoding="utf-8")
+            code, output = image_factory_cli.run_cli(
+                [
+                    "benchmark",
+                    "--pack",
+                    str(pack_path),
+                    "--run",
+                    str(run_path),
+                    "--out",
+                    str(out_path),
+                    "--json",
+                ]
+            )
+            self.assertEqual(code, 0, output)
+            self.assertTrue(out_path.is_file())
+            self.assertEqual(json.loads(out_path.read_text())["evidence_tier"], "synthetic")
 
 
 class StructuredStoryStateTests(unittest.TestCase):
@@ -251,6 +296,37 @@ class StructuredStoryStateTests(unittest.TestCase):
         result = self.validate(plan)
         self.assertIn("plan_story_state_unknown_scene", [error.code for error in result.errors])
 
+    def test_rework_keeps_state_inherited_from_a_passed_frame(self) -> None:
+        plan = story_plan()
+        plan["items"].append(
+            {
+                "id": "frame-03",
+                "prompt": "学生继续阅读已经打开的书",
+                "entity_ids": ["student"],
+                "scene_id": "study-room",
+            }
+        )
+        evaluation = {
+            "deterministic_gates": {
+                "per_item": [
+                    {"item_id": "frame-01", "passed": True, "failures": []},
+                    {"item_id": "frame-02", "passed": True, "failures": []},
+                    {"item_id": "frame-03", "passed": False, "failures": ["not_a_png"]},
+                ]
+            },
+            "human_labels": [],
+            "advisory": {"items": []},
+        }
+        outcome = optimizer.plan_next_round(
+            current_plan=plan,
+            evaluation=evaluation,
+            rewrites={"frame-03": "学生继续认真阅读已经打开的书"},
+        )
+        self.assertEqual([row["id"] for row in outcome.next_plan["items"]], ["frame-03"])
+        next_result = self.validate(outcome.next_plan)
+        self.assertTrue(next_result.ok, next_result.errors)
+        self.assertIn("prop.book.state = open", next_result.items[0].effective_prompt)
+
 
 class VersionedReviewerTests(unittest.TestCase):
     def test_missing_reviewer_version_is_rejected(self) -> None:
@@ -266,6 +342,9 @@ class VersionedReviewerTests(unittest.TestCase):
         self.assertTrue(identity["uncertain"])
         self.assertFalse(adapted["items"][0]["findings"][1]["uncertain"])
         self.assertEqual(adapted["authority"], "advisory")
+        advisory = reviewer_adapter.merge_advisory([adapted])
+        self.assertEqual(advisory["frame-01"]["score"], 0.9)
+        self.assertEqual(advisory["frame-01"]["dimensions"][0]["name"], "wardrobe")
 
     def test_unknown_capability_is_rejected(self) -> None:
         report = reviewer_report()

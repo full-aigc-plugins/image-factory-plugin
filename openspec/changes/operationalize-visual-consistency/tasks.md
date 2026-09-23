@@ -7,27 +7,27 @@
 
 ## 2. P0 Foundation — continuity benchmark
 
-- [ ] 2.1 先写失败测试，覆盖 4/8/12 镜头约束、证据层级、缺失标签分母和单样本不足
-- [ ] 2.2 新增 benchmark pack、run 和 report schema，未知成本/耗时只允许 `null`
-- [ ] 2.3 实现确定性聚合器：一次通过率、返工轮次、人物漂移、元素丢失、成本、耗时和三维分层
-- [ ] 2.4 添加“勤能补拙”4 镜头 synthetic 基准清单，明确它不是 live acceptance
-- [ ] 2.5 接入 CLI 的离线 benchmark summarize 命令，不调用生成、不修改台账
+- [x] 2.1 先写失败测试，覆盖 4/8/12 镜头约束、证据层级、缺失标签分母和单样本不足
+- [x] 2.2 新增 benchmark pack、run 和 report schema，未知成本/耗时只允许 `null`
+- [x] 2.3 实现确定性聚合器：一次通过率、返工轮次、人物漂移、元素丢失、成本、耗时和三维分层
+- [x] 2.4 添加“勤能补拙”4/8/12 镜头 synthetic 基准清单，明确它们不是 live acceptance
+- [x] 2.5 接入 CLI 的离线 benchmark summarize 命令，不调用生成、不修改台账
 
 ## 3. P0 Foundation — structured story state
 
-- [ ] 3.1 先写失败测试，覆盖锁定/变量冲突、旧值不匹配、未知场次、继承和确定性 prompt
-- [ ] 3.2 升级 `image_batch` schema，加入永久锁定、场次锁定、变量初值和条目状态转换
-- [ ] 3.3 实现线性状态解析与有效提示词编译，确保幂等键绑定解析后的状态
-- [ ] 3.4 保留 story state 跨优化轮次，场景改写不得改变状态合同
-- [ ] 3.5 增加旧版本合同迁移，禁止为旧计划编造 story state
+- [x] 3.1 先写失败测试，覆盖锁定/变量冲突、旧值不匹配、未知场次、继承和确定性 prompt
+- [x] 3.2 升级 `image_batch` schema，加入永久锁定、场次锁定、变量初值和条目状态转换
+- [x] 3.3 实现线性状态解析与有效提示词编译，确保幂等键绑定解析后的状态
+- [x] 3.4 保留 story state 跨优化轮次，场景改写不得改变状态合同
+- [x] 3.5 增加旧版本合同迁移，禁止为旧计划编造 story state
 
 ## 4. P0 Foundation — versioned reviewer interface
 
-- [ ] 4.1 先写失败测试，覆盖缺少版本、未知能力、越界分数/置信度、低置信度与人工权威
-- [ ] 4.2 新增版本化 reviewer report schema 和标准库适配器
-- [ ] 4.3 让 evaluate 可读取 reviewer report 并保留 reviewer id/version/capability provenance
-- [ ] 4.4 扩展 scores 合同以无损记录来源、置信度、uncertain 和证据区域
-- [ ] 4.5 验证评审器信号始终为 advisory，无法成为确定性失败或推翻人工决定
+- [x] 4.1 先写失败测试，覆盖缺少版本、未知能力、越界分数/置信度、低置信度与人工权威
+- [x] 4.2 新增版本化 reviewer report schema 和标准库适配器
+- [x] 4.3 让 evaluate 可读取 reviewer report 并保留 reviewer id/version/capability provenance
+- [x] 4.4 扩展 scores 合同以无损记录来源、置信度、uncertain 和证据区域
+- [x] 4.5 验证评审器信号始终为 advisory，无法成为确定性失败或推翻人工决定
 
 ## 5. P1 Evidence — duplicate, calibration and drift
 
@@ -53,9 +53,9 @@
 
 ## 8. Release and verification
 
-- [ ] 8.1 更新中英文架构、技术方案、生产质量指南、README 和 CHANGELOG
-- [ ] 8.2 运行目标测试、全量测试、合同迁移、`validate_distribution.py` 和离线 vendor check
-- [ ] 8.3 运行严格 OpenSpec 全量验证并核对未触碰受管技能与 `skills.lock.json`
-- [ ] 8.4 按完成阶段 bump minor 版本，同步四份 manifest 与市场 catalog
+- [x] 8.1 更新中英文架构、技术方案、生产质量指南、README 和 CHANGELOG
+- [x] 8.2 运行目标测试、全量测试、合同迁移、`validate_distribution.py` 和离线 vendor check
+- [x] 8.3 运行严格 OpenSpec 全量验证并核对未触碰受管技能与 `skills.lock.json`
+- [x] 8.4 按完成阶段 bump minor 版本，同步四份 manifest 与市场 catalog
 - [ ] 8.5 提交、推送、PR/CI、tag/release、市场同步和已安装 Codex 缓存验收
 - [ ] 8.6 只有全部 P0/P1/P2 证据完成后才归档本 change；任何 live 缺口继续保持未完成

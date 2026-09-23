@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | Implemented for the 0.6.0 release candidate: production quality gates, closed series review, rebuildable summaries, provenance, and calibration; live model continuity remains a separate runtime acceptance gate |
+> | Status | Implemented for the 0.7.0 P0 Foundation release candidate: structured story state, continuity benchmark contracts, and versioned visual review; live model continuity remains a separate runtime acceptance gate |
 > | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
 > | Audience | Implementers extending or reviewing this plugin |
 > | Runtime evidence | `docs/verification/` |
@@ -87,7 +87,7 @@ Image description:
 <the item's effective prompt>
 ```
 
-image_batch 1.4.0 can declare a `consistency_profile`. The validator compiles the
+image_batch 1.5.0 can declare a `consistency_profile` and structured `story_state`. The validator compiles the
 style bible, negative constraints, selected entities, fixed traits, allowed variations,
 and ordered reference roles into the effective prompt. Profile anchors, structured item
 `references`, and legacy `reference_images` share the five-reference platform limit.

@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0.0",
+  "benchmark_id": "diligence-story-8",
+  "title": "勤能补拙八镜头连续性合同基准",
+  "evidence_tier": "synthetic",
+  "minimum_sample_size": 3,
+  "shots": [
+    {
+      "id": "frame-01",
+      "prompt": "十二岁短黑发圆脸学生穿蓝色外套，白天在深色木桌前看着合上的字帖，正面中景，略显笨拙但认真。",
+      "coverage": {"viewpoint": "front", "distance": "medium", "occluded": false, "time_of_day": "day", "emotion": "uncertain"}
+    },
+    {
+      "id": "frame-02",
+      "prompt": "同一学生、同一蓝色外套和木桌，从侧面近景翻开同一本字帖，第一次落笔写歪，神情沮丧。",
+      "coverage": {"viewpoint": "side", "distance": "close", "occluded": false, "time_of_day": "day", "emotion": "frustrated"}
+    },
+    {
+      "id": "frame-03",
+      "prompt": "同一学生重新坐直练习，毛笔遮住一小部分脸，字帖保持打开，侧后方中景，神情专注。",
+      "coverage": {"viewpoint": "three-quarter", "distance": "medium", "occluded": true, "time_of_day": "afternoon", "emotion": "focused"}
+    },
+    {
+      "id": "frame-04",
+      "prompt": "黄昏远景，同一学生仍穿蓝色外套坐在同一木桌前，打开的字帖、毛笔和台灯位置保持一致。",
+      "coverage": {"viewpoint": "side", "distance": "wide", "occluded": false, "time_of_day": "dusk", "emotion": "persistent"}
+    },
+    {
+      "id": "frame-05",
+      "prompt": "夜晚台灯亮起，同一学生低头继续临摹，前臂遮挡蓝色外套胸口，字帖仍然打开，正面近景。",
+      "coverage": {"viewpoint": "front", "distance": "close", "occluded": true, "time_of_day": "night", "emotion": "tired"}
+    },
+    {
+      "id": "frame-06",
+      "prompt": "深夜侧面中景，同一学生揉眼后再次握笔，发型、年龄、蓝色外套、木桌、字帖和台灯保持不变。",
+      "coverage": {"viewpoint": "side", "distance": "medium", "occluded": false, "time_of_day": "night", "emotion": "determined"}
+    },
+    {
+      "id": "frame-07",
+      "prompt": "次日清晨远景，同一学生在同一木桌前完成最后一页练习，打开的字帖旁整齐放着毛笔，自信而平静。",
+      "coverage": {"viewpoint": "three-quarter", "distance": "wide", "occluded": false, "time_of_day": "morning", "emotion": "calm"}
+    },
+    {
+      "id": "frame-08",
+      "prompt": "清晨正面近景，同一学生展示进步后的工整字迹，蓝色外套、短黑发和圆脸保持一致，露出自信微笑。",
+      "coverage": {"viewpoint": "front", "distance": "close", "occluded": false, "time_of_day": "morning", "emotion": "confident"}
+    }
+  ]
+}

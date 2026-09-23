@@ -16,6 +16,7 @@ import calibration  # noqa: E402
 import evaluator  # noqa: E402
 import plan_validator  # noqa: E402
 import provenance  # noqa: E402
+import reviewer_adapter  # noqa: E402
 import schema_lite  # noqa: E402
 import visual_summary  # noqa: E402
 
@@ -258,6 +259,50 @@ class AdvisoryQualityTests(unittest.TestCase):
         self.assertTrue(dimensions[0]["complete"])
         self.assertFalse(dimensions[1]["complete"])
         self.assertEqual(result.scores["decision"], "pending_approval")
+
+    def test_versioned_reviewer_cannot_override_a_human_rejection(self) -> None:
+        report = reviewer_adapter.adapt(
+            {
+                "schema_version": "1.0.0",
+                "batch_id": "quality-study",
+                "round": 1,
+                "reviewer": {
+                    "id": "identity-reviewer",
+                    "version": "1.0.0",
+                    "capabilities": ["identity_embedding"],
+                    "model": None,
+                    "provider": None,
+                    "confidence_threshold": 0.7,
+                },
+                "items": [
+                    {
+                        "item_id": "frame-01",
+                        "findings": [
+                            {
+                                "dimension": "character_identity",
+                                "score": 0.99,
+                                "confidence": 0.99,
+                                "evidence": "identity anchor and frame align",
+                                "region": None,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        result = self.fixture.evaluate(
+            [self.item],
+            {self.item.id: self.receipt},
+            advisory_enabled=True,
+            advisory=reviewer_adapter.merge_advisory([report]),
+            human_labels={self.item.id: "rejected"},
+            reviewer_reports=[report],
+        )
+
+        self.assertEqual(result.scores["decision"], "fail")
+        self.assertEqual(result.scores["reviewer_reports"][0]["authority"], "advisory")
+        schema = json.loads((ROOT / "schemas/scores.schema.json").read_text(encoding="utf-8"))
+        self.assertEqual(schema_lite.validate(result.scores, schema), [])
 
 
 class EvidenceProductTests(unittest.TestCase):
