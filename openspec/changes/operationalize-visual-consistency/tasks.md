@@ -57,5 +57,5 @@
 - [x] 8.2 运行目标测试、全量测试、合同迁移、`validate_distribution.py` 和离线 vendor check
 - [x] 8.3 运行严格 OpenSpec 全量验证并核对未触碰受管技能与 `skills.lock.json`
 - [x] 8.4 按完成阶段 bump minor 版本，同步四份 manifest 与市场 catalog
-- [ ] 8.5 提交、推送、PR/CI、tag/release、市场同步和已安装 Codex 缓存验收
+- [x] 8.5 提交、推送、PR/CI、tag/release、市场同步和已安装 Codex 缓存验收（PR #8、v0.7.0、市场 c64a7f9、缓存 510 tests）
 - [ ] 8.6 只有全部 P0/P1/P2 证据完成后才归档本 change；任何 live 缺口继续保持未完成
