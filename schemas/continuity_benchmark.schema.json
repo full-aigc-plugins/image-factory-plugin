@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/full-aigc-plugins/image-factory-plugin/schemas/continuity_benchmark.schema.json",
+  "title": "ContinuityBenchmark",
+  "description": "A 4, 8, or 12 shot continuity benchmark pack. Exact shot counts are enforced semantically because the bundled schema checker intentionally supports no combinators.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "benchmark_id", "title", "evidence_tier", "minimum_sample_size", "shots"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "benchmark_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 200},
+    "evidence_tier": {"enum": ["synthetic", "live"]},
+    "minimum_sample_size": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "shots": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/shot"}
+    }
+  },
+  "$defs": {
+    "shot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "prompt", "coverage"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+        "prompt": {"type": "string", "minLength": 1, "maxLength": 8000},
+        "coverage": {"$ref": "#/$defs/coverage"}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["viewpoint", "distance", "occluded", "time_of_day", "emotion"],
+      "properties": {
+        "viewpoint": {"enum": ["front", "side", "back", "three-quarter", "mixed"]},
+        "distance": {"enum": ["close", "medium", "wide"]},
+        "occluded": {"type": "boolean"},
+        "time_of_day": {"type": "string", "minLength": 1, "maxLength": 100},
+        "emotion": {"type": "string", "minLength": 1, "maxLength": 100}
+      }
+    }
+  }
+}

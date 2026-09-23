@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/full-aigc-plugins/image-factory-plugin/schemas/continuity_benchmark_run.schema.json",
+  "title": "ContinuityBenchmarkRun",
+  "description": "One explicitly tiered continuity benchmark run with dimensioned human labels and observed operational cost and latency.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "benchmark_id", "evidence_tier", "model", "provider", "prompt_strategy", "first_pass", "rework_rounds", "cost_usd", "elapsed_seconds", "labels"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,127}$"},
+    "benchmark_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
+    "evidence_tier": {"enum": ["synthetic", "live"]},
+    "model": {"type": ["string", "null"], "minLength": 1, "maxLength": 200},
+    "provider": {"type": ["string", "null"], "minLength": 1, "maxLength": 200},
+    "prompt_strategy": {"type": "string", "minLength": 1, "maxLength": 200},
+    "first_pass": {"type": "boolean"},
+    "rework_rounds": {"type": "integer", "minimum": 0, "maximum": 100},
+    "cost_usd": {"type": ["number", "null"], "minimum": 0},
+    "elapsed_seconds": {"type": ["number", "null"], "minimum": 0},
+    "labels": {"type": "array", "minItems": 4, "maxItems": 12, "items": {"$ref": "#/$defs/shotLabel"}}
+  },
+  "$defs": {
+    "shotLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shot_id", "dimensions"],
+      "properties": {
+        "shot_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+        "dimensions": {"$ref": "#/$defs/dimensions"}
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["character_identity", "hairstyle", "age", "wardrobe", "core_props", "scene_state"],
+      "properties": {
+        "character_identity": {"$ref": "#/$defs/humanLabel"},
+        "hairstyle": {"$ref": "#/$defs/humanLabel"},
+        "age": {"$ref": "#/$defs/humanLabel"},
+        "wardrobe": {"$ref": "#/$defs/humanLabel"},
+        "core_props": {"$ref": "#/$defs/humanLabel"},
+        "scene_state": {"$ref": "#/$defs/humanLabel"}
+      }
+    },
+    "humanLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "evidence"],
+      "properties": {
+        "label": {"enum": ["accepted", "rejected", "unlabeled"]},
+        "evidence": {"type": ["string", "null"], "minLength": 1, "maxLength": 2000}
+      }
+    }
+  }
+}

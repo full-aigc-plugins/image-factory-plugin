@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/full-aigc-plugins/image-factory-plugin/schemas/continuity_benchmark_report.schema.json",
+  "title": "ContinuityBenchmarkReport",
+  "description": "Deterministic aggregate of explicitly tiered continuity benchmark runs, including sample sufficiency and stratification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "benchmark_id", "evidence_tier", "minimum_sample_size", "overall", "strata"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "benchmark_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"},
+    "evidence_tier": {"enum": ["synthetic", "live"]},
+    "minimum_sample_size": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "overall": {"$ref": "#/$defs/metrics"},
+    "strata": {"type": "array", "items": {"$ref": "#/$defs/stratum"}}
+  },
+  "$defs": {
+    "dimensionMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["labeled_count", "unlabeled_count", "rejected_count", "rejection_rate"],
+      "properties": {
+        "labeled_count": {"type": "integer", "minimum": 0},
+        "unlabeled_count": {"type": "integer", "minimum": 0},
+        "rejected_count": {"type": "integer", "minimum": 0},
+        "rejection_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    },
+    "dimensionMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["character_identity", "hairstyle", "age", "wardrobe", "core_props", "scene_state"],
+      "properties": {
+        "character_identity": {"$ref": "#/$defs/dimensionMetric"},
+        "hairstyle": {"$ref": "#/$defs/dimensionMetric"},
+        "age": {"$ref": "#/$defs/dimensionMetric"},
+        "wardrobe": {"$ref": "#/$defs/dimensionMetric"},
+        "core_props": {"$ref": "#/$defs/dimensionMetric"},
+        "scene_state": {"$ref": "#/$defs/dimensionMetric"}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_count", "sample_status", "first_pass_rate", "mean_rework_rounds", "character_drift_rate", "element_omission_rate", "mean_cost_usd", "cost_observed_runs", "mean_elapsed_seconds", "elapsed_observed_runs", "dimension_metrics"],
+      "properties": {
+        "run_count": {"type": "integer", "minimum": 1},
+        "sample_status": {"enum": ["sufficient", "insufficient_sample"]},
+        "first_pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "mean_rework_rounds": {"type": "number", "minimum": 0},
+        "character_drift_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "element_omission_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "mean_cost_usd": {"type": ["number", "null"], "minimum": 0},
+        "cost_observed_runs": {"type": "integer", "minimum": 0},
+        "mean_elapsed_seconds": {"type": ["number", "null"], "minimum": 0},
+        "elapsed_observed_runs": {"type": "integer", "minimum": 0},
+        "dimension_metrics": {"$ref": "#/$defs/dimensionMetrics"}
+      }
+    },
+    "stratum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "provider", "prompt_strategy", "metrics"],
+      "properties": {
+        "model": {"type": ["string", "null"], "minLength": 1},
+        "provider": {"type": ["string", "null"], "minLength": 1},
+        "prompt_strategy": {"type": "string", "minLength": 1},
+        "metrics": {"$ref": "#/$defs/metrics"}
+      }
+    }
+  }
+}
