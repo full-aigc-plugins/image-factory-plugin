@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | 0.3.0 release candidate: host-aware built-in-first routing added to the convergence, pixel-check, and supply-chain foundations; fresh release checks recorded in `docs/verification/runtime.md` |
+> | Status | 0.4.0 release candidate: series profiles, effective-prompt compilation, and role-aware anchors added; live continuity is not represented as runtime acceptance evidence |
 > | Scope | The implemented batch image core and prompt-discovery layer |
 > | Audience | Maintainers, reviewers, and integrators of this plugin |
 > | Out of scope | Workbench UI, parent project state, and non-image media pipelines |

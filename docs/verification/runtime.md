@@ -1,6 +1,6 @@
-# Runtime and release verification: 0.3.0 candidate status
+# Runtime and release verification: 0.4.0 candidate status
 
-The `0.3.0` candidate adds host-aware, Codex-built-in-first routing and the immutable `image-factory-skills v1.1.0` `imagegen` snapshot. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh installation, remote SHA, or paid-generation proof. Current-candidate local evidence covers the routing contracts, full unit suite, distribution validator, and online skill-vendor verification; fresh three-host installation and generation remain separate release gates.
+The `0.4.0` candidate adds schema-bound series profiles, effective prompts, and role-aware anchors. The evidence table below remains the immutable `0.1.2` runtime record; it is not presented as fresh installation, remote SHA, paid-generation proof, or live character-continuity acceptance. Current-candidate local evidence covers deterministic contracts and tests; fresh installation and visual continuity generation remain separate release gates.
 
 This file is the evidence ledger for the Image Factory 0.1.2 release
 candidate. It intentionally does not reuse runtime, installation, remote commit,

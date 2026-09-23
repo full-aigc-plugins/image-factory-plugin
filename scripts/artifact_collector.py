@@ -253,7 +253,11 @@ def collect_artifact(
         "bytes": source.stat().st_size,
         "width": width,
         "height": height,
-        "prompt_sha256": hashlib.sha256(item.prompt.encode("utf-8")).hexdigest(),
+        "prompt_sha256": (
+            item.effective_prompt_sha256
+            if getattr(item, "effective_prompt_sha256", "")
+            else hashlib.sha256(item.prompt.encode("utf-8")).hexdigest()
+        ),
         "idempotency_key": item.idempotency_key,
         "source": {
             "kind": "codex_image_gen",

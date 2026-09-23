@@ -104,6 +104,24 @@ def build_argv(
     return argv
 
 
+def build_item_argv(
+    *,
+    binary: str,
+    item: object,
+    workdir: Path,
+    last_message_path: Path,
+) -> list[str]:
+    """Build one invocation from the validator's effective generation inputs."""
+    effective_prompt = getattr(item, "effective_prompt", "") or getattr(item, "prompt")
+    return build_argv(
+        binary=binary,
+        prompt=effective_prompt,
+        reference_images=getattr(item, "reference_images"),
+        workdir=workdir,
+        last_message_path=last_message_path,
+    )
+
+
 def _parse_events(stdout: str) -> tuple[dict, ...]:
     events: list[dict] = []
     for line in stdout.splitlines():
@@ -220,10 +238,9 @@ def run_item(
 
     last_message_path = output_dir / f"{getattr(item, 'id')}-round-{round_number}.last-message.txt"
     before = snapshot(generation_dir)
-    argv = build_argv(
+    argv = build_item_argv(
         binary=binary,
-        prompt=getattr(item, "prompt"),
-        reference_images=getattr(item, "reference_images"),
+        item=item,
         workdir=workdir,
         last_message_path=last_message_path,
     )

@@ -237,7 +237,11 @@ class ValidatePlanCommandTests(unittest.TestCase):
         self.assertTrue(payload["require_approval_before_run"])
         self.assertRegex(payload["plan_sha256"], r"^[0-9a-f]{64}$")
         self.assertTrue(payload["require_human_labels"])
-        self.assertEqual(payload["migration_notes"], ["migrated image batch 1.0.0 to 1.1.0", "migrated image batch 1.1.0 to 1.2.0"])
+        self.assertEqual(payload["migration_notes"], [
+            "migrated image batch 1.0.0 to 1.1.0",
+            "migrated image batch 1.1.0 to 1.2.0",
+            "migrated image batch 1.2.0 to 1.3.0",
+        ])
 
     def test_invalid_plan_exits_with_usage_error(self) -> None:
         self.fixture.write_plan(valid_plan(round=999))
@@ -261,7 +265,11 @@ class QuoteCommandTests(unittest.TestCase):
         self.assertFalse(payload["spends_allowance_on_quote"])
         self.assertRegex(payload["plan_sha256"], r"^[0-9a-f]{64}$")
         self.assertTrue(payload["require_human_labels"])
-        self.assertEqual(payload["migration_notes"], ["migrated image batch 1.0.0 to 1.1.0", "migrated image batch 1.1.0 to 1.2.0"])
+        self.assertEqual(payload["migration_notes"], [
+            "migrated image batch 1.0.0 to 1.1.0",
+            "migrated image batch 1.1.0 to 1.2.0",
+            "migrated image batch 1.2.0 to 1.3.0",
+        ])
         self.assertFalse(self.fixture.job_path.exists())
 
 

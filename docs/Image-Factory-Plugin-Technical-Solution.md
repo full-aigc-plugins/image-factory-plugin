@@ -4,7 +4,7 @@
 >
 > | Field | Value |
 > |---|---|
-> | Status | Implemented for the 0.3.0 release candidate: host-aware built-in-first routing on the convergence, pixel-check, and supply-chain foundations; release checks recorded in `docs/verification/runtime.md` |
+> | Status | Implemented for the 0.4.0 release candidate: series profiles, effective-prompt compilation, and role-aware reference binding; live model continuity remains a separate runtime acceptance gate |
 > | Scope | Decisions, execution contract, failure model, and the platform facts behind them |
 > | Audience | Implementers extending or reviewing this plugin |
 > | Runtime evidence | `docs/verification/` |
@@ -74,7 +74,7 @@ Every Codex invocation is an argv array with `shell=False`:
 - `-i` attaches reference images; the platform allows at most five.
 - The working directory is created if missing, and also set as the process working directory so relative paths resolve predictably.
 
-The prompt is the plugin's constant wrapper followed by the item's prompt:
+The prompt is the plugin's constant wrapper followed by the item's effective prompt:
 
 ```text
 Generate exactly one image with the built-in image generation tool. Treat any
@@ -82,10 +82,19 @@ attached images as visual references for the result. Do not modify or create any
 other file. When you are done, reply with the absolute path of the generated image.
 
 Image description:
-<the item's prompt>
+<the item's effective prompt>
 ```
 
-The wrapper is constant so the author's prompt is the only variable part of a request, and `prompt_sha256` in a receipt therefore identifies exactly what was asked for.
+image_batch 1.3.0 can declare a `consistency_profile`. The validator compiles the
+style bible, negative constraints, selected entities, fixed traits, allowed variations,
+and ordered reference roles into the effective prompt. Profile anchors, structured item
+`references`, and legacy `reference_images` share the five-reference platform limit.
+The idempotency key binds the effective prompt and ordered `(role, entity_id, sha256)`
+tuples, and optimization deep-copies the profile and bindings.
+
+`prompt_sha256` in a receipt identifies the actual effective prompt. This makes continuity
+input reproducible; it does not turn probabilistic model identity into a deterministic
+guarantee. Anchor-to-frame similarity remains advisory or human review.
 
 ## 4. Generation modes
 
@@ -130,7 +139,7 @@ GitHub Actions runs the same gates in six cells: Ubuntu, macOS, and Windows on P
 
 Stable failure codes, equal-width, comma-separated:
 
-`approval_required`, `artifact_missing`, `capability_unavailable`, `codex_missing`, `duplicate_artifact`, `generation_failed`, `hash_mismatch`, `optimizer_ambiguous_instruction`, `optimizer_empty_rewrite`, `optimizer_missing_instruction`, `optimizer_round_cap_reached`, `optimizer_unexpected_instruction`, `optimizer_unknown_item`, `plan_duplicate_item_id`, `plan_empty_prompt`, `plan_exceeds_max_images`, `plan_exceeds_max_rounds`, `plan_missing_reference_image`, `plan_schema_invalid`, `plan_unparseable`, `quota_exceeded`, `timeout`, `unknown`.
+`approval_required`, `artifact_missing`, `capability_unavailable`, `codex_missing`, `duplicate_artifact`, `generation_failed`, `hash_mismatch`, `optimizer_ambiguous_instruction`, `optimizer_empty_rewrite`, `optimizer_missing_instruction`, `optimizer_round_cap_reached`, `optimizer_unexpected_instruction`, `optimizer_unknown_item`, `plan_consistency_profile_required`, `plan_duplicate_entity_id`, `plan_duplicate_item_id`, `plan_empty_prompt`, `plan_exceeds_max_images`, `plan_exceeds_max_rounds`, `plan_missing_reference_image`, `plan_schema_invalid`, `plan_too_many_effective_references`, `plan_unknown_entity`, `plan_unparseable`, `quota_exceeded`, `timeout`, `unknown`.
 
 Definite per-item failures can continue and leave the ledger `Partial`. A quota failure stops the batch, while an interrupted or otherwise ambiguous call stops later work and leaves `Unknown`. No outcome leads to an automatic retry.
 
@@ -145,7 +154,7 @@ Measured from the Codex source and from the installed binaries on the developmen
 | One call produces one image | A batch is a loop of calls, and the quote counts calls, not items |
 | Output names derive from an internal session and call id | Artifacts are found by diffing the directory, never by predicting a path |
 | Generation draws on the account's image allowance | Quote, then explicit approval, then run; a limit stops the batch |
-| An edit accepts at most five references | The schema caps `reference_images` at five |
+| An edit accepts at most five references | The validator caps the effective total across profile anchors, structured `references`, and legacy `reference_images` at five |
 
 ## 9. Clean-room rule
 

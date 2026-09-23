@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 — 2026-09-23
+
+- Add image_batch 1.3.0 series consistency profiles with entity registries, fixed traits, allowed variations, and style/identity anchors.
+- Compile the shared contract into every effective generation prompt and bind prompt plus ordered reference roles to approval, idempotency, and receipts.
+- Preserve profiles and anchor bindings across optimization rounds; surface consistency mode and reference counts in validation and quote output.
+- Keep 1.0.0–1.2.0 plans migration-compatible and retain legacy behavior when no series profile is declared.
+
 ## 0.3.0 — 2026-09-23
 
 - 在 Codex 会话中优先路由到内置 `imagegen` / `image_gen`，默认不要求 Provider API Key。

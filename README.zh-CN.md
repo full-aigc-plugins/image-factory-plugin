@@ -6,7 +6,7 @@
 
 > 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
 
-[![版本](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.3.0)
+[![版本](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.4.0)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [命令契约](#命令契约) · [故障排查](#故障排查)
@@ -15,7 +15,7 @@
 
 `image-factory` 提供两层互补能力。用户确认生图后，Harness 依据显式宿主元数据或当前会话实际工具能力识别环境；在 Codex 中优先使用无需 Provider API Key 的内置 `imagegen` / `image_gen`。只有明确观测到图片额度耗尽，才会在 Codex 中提供 Baoyu 降级；ZCode、Kimi 或其他宿主则只在没有可验证原生图片能力时考虑 Baoyu。Factory 工作流继续负责计划校验、批准、回执、评测与恢复等受治理批次能力。
 
-版本 `0.3.0` 新增宿主感知路由，并锁定 `image-factory-skills v1.1.0` 的可验证 `imagegen` 快照。Codex 先使用内置图片能力，只有明确图片额度耗尽后才提供 Baoyu 降级；既有收敛证据、像素检查、回执和恢复契约保持不变。
+版本 `0.4.0` 新增系列一致性档案、有效 prompt 编译、角色化参考图和返工锚点保留。它让人物、道具和画风约束成为批准与回执可验证的生成输入；真实模型连续性仍需逐图验收，不被单测冒充。
 
 ### 适合谁
 
@@ -27,7 +27,8 @@
 
 | 问题 | 本插件提供 | 可验证入口 |
 |---|---|---|
-| 批次无法复现 | 封闭的计划 schema 与按内容派生的幂等键 | `scripts/plan_validator.py` |
+| 批次无法复现 | 封闭的计划 schema、系列一致性档案与按内容派生的幂等键 | `scripts/plan_validator.py` |
+| 人物和道具跨帧漂移 | 角色/元素注册表、固定特征、角色化参考图与返工保留 | `consistency_profile`、`references` |
 | 还没决定就先花了钱 | 先报价，再要求批准，然后才生成 | `bin/image-factory quote`、`run` |
 | 中断后全部重做 | 可持久台账与显式恢复命令 | `scripts/job_ledger.py`、`recover` |
 | "跑通了"无法核实 | 重算的哈希、大小与尺寸回执 | `scripts/receipt_store.py` |
@@ -57,7 +58,7 @@
 |---|---|
 | 插件 ID | `image-factory` |
 | 宿主 | Codex CLI 或 ChatGPT 桌面应用 |
-| 当前版本 | `0.3.0`（供应链 release candidate，详见[成熟度](#成熟度)） |
+| 当前版本 | `0.4.0`（供应链 release candidate，详见[成熟度](#成熟度)） |
 | 插件清单 | `.codex-plugin/plugin.json` |
 | MCP 配置 | 无——在 MCP 服务器存在之前，清单一律禁止写 MCP 条目 |
 | 主要语言 | Python 3.11+ |
@@ -71,6 +72,7 @@
 |---|---|---|---|---|
 | prompt 检索 | 主题或参考方向 | 带来源的 prompt 模板排序 | 对内置模板做离线检索 | 稳定 |
 | 批次计划校验 | 一个计划文件 | 含幂等键与硬上限的已校验计划 | 花费之前即被拒绝 | 稳定 |
+| 系列一致性 | 风格圣经、实体固定特征与锚点 | 每帧有效 prompt 与角色化参考图 | 提升可控性，不承诺底层模型绝对一致 | 稳定契约 |
 | 报价与批准 | 已校验的计划 | 成本估算与批准记录 | 无批准不生成 | 稳定 |
 | 生成 | 已批准的计划 | 每个计划项一张图 | 一次工具调用产出一张图 | 稳定 |
 | 回执采集 | 产出的文件 | 逐文件重算的哈希、大小与尺寸 | 二次校验可发现验证窗口内被改写的文件 | 稳定 |
@@ -155,7 +157,7 @@ CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖�
 ### 从插件市场安装
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.3.0
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.4.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
@@ -230,6 +232,10 @@ bin/image-factory quote image-plan.json
 
 校验会在花费之前拒绝未知字段、超限与重复幂等键。
 
+多图故事应使用 image_batch 1.3.0 的 `consistency_profile`。人物、道具和画风锚点会
+按固定顺序进入每一帧；`quote` 会显示 `consistency_mode`、档案摘要和每项有效参考图数量。
+完整示例见[系列一致性计划指南](docs/guides/series-consistency.md)。
+
 ### 3. 批准并运行
 
 ```bash
@@ -292,7 +298,7 @@ bin/image-factory status image-plan.json
 
 - 任何环节都不做自动重试。`scripts/generation_runner.py` 把理由写得很明确：静默重试就是"一个坏 prompt 变成一张大账单"的成因。
 - 失败项是终态；正确的下一步是 `optimize`，它会产出一轮等待批准的新 prompt。
-- 幂等键按计划项内容派生，因此重跑计划不会产生重复工作。
+- 幂等键按有效 prompt、参考图内容及其角色派生，因此重跑同一计划不会产生重复工作；同一图片从身份参考改成布局参考会形成新的工作身份。
 - 台账原子写入，中断的运行通过 `recover` 续跑，而不是重新生成。
 - 模型给出的参考性评分会与你的批准/驳回标注一起记录，便于日后用真实决策校准该评分。
 

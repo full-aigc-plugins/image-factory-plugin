@@ -6,7 +6,7 @@
 
 > Turn a reference-driven image task into an auditable production run — validated plan, approved spend, and a hash-verified receipt for every artifact.
 
-[![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.3.0)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.4.0)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) · [Install](#installation) · [Quick start](#quick-start) · [Command contract](#command-contract) · [Troubleshooting](#troubleshooting)
@@ -15,7 +15,7 @@
 
 `image-factory` exposes two complementary layers. After the user confirms generation, the Harness identifies the current session from explicit host metadata or actual tool capabilities. In Codex it prefers the built-in `imagegen` / `image_gen` path, which needs no provider API key. The unchanged Baoyu skills are offered in Codex only after explicit image-quota exhaustion; on ZCode, Kimi, or another host they are considered only when that session has no verified native image capability. The Factory workflow continues to handle governed batches with validation, approval, receipts, evaluation, and recovery.
 
-Version `0.3.0` adds host-aware routing and the verified `imagegen` snapshot from `image-factory-skills v1.1.0`. Codex uses its built-in image capability first; Baoyu is offered only after explicit image-quota exhaustion. The existing convergence, pixel-check, receipt, and recovery contracts remain unchanged.
+Version `0.4.0` adds series profiles, effective-prompt compilation, role-aware references, and anchor-preserving rework. Character, prop, and style constraints become approval- and receipt-bound generation inputs; live model continuity still requires visual acceptance and is not implied by unit tests.
 
 ### Who it is for
 
@@ -27,7 +27,8 @@ Version `0.3.0` adds host-aware routing and the verified `imagegen` snapshot fro
 
 | Problem | What this plugin provides | Verifiable entry point |
 |---|---|---|
-| Batches are unrepeatable | A closed plan schema with content-derived idempotency keys | `scripts/plan_validator.py` |
+| Batches are unrepeatable | A closed plan schema, series profile, and content-derived idempotency keys | `scripts/plan_validator.py` |
+| Characters and props drift across frames | Entity registry, fixed traits, role-aware references, and anchor-preserving rework | `consistency_profile`, `references` |
 | Spend happens before you decide | A quote plus a required approval before any generation | `bin/image-factory quote`, `run` |
 | Interrupted runs regenerate everything | A durable ledger with an explicit recovery command | `scripts/job_ledger.py`, `recover` |
 | "It worked" is unverifiable | Recomputed hash, size, and dimension receipts | `scripts/receipt_store.py` |
@@ -57,7 +58,7 @@ Image batch + receipts + evaluation record
 |---|---|
 | Plugin ID | `image-factory` |
 | Host | Codex CLI or ChatGPT desktop app |
-| Current version | `0.3.0` (supply-chain release candidate — see [Maturity](#maturity)) |
+| Current version | `0.4.0` (supply-chain release candidate — see [Maturity](#maturity)) |
 | Plugin manifest | `.codex-plugin/plugin.json` |
 | MCP configuration | none — the manifest forbids an MCP entry until an MCP server exists |
 | Primary language | Python 3.11+ |
@@ -71,6 +72,7 @@ Image batch + receipts + evaluation record
 |---|---|---|---|---|
 | Prompt discovery | A theme or reference direction | Ranked prompt templates with attribution | Offline search over bundled templates | Stable |
 | Batch plan validation | A plan file | Validated plan with idempotency keys and hard caps | Rejected before anything is spent | Stable |
+| Series consistency | Style bible, entity traits, and anchors | Effective prompt and role-aware references per frame | Improves control; cannot guarantee model-level identity | Stable contract |
 | Quote and approval | A validated plan | Cost estimate and an approval record | No generation without approval | Stable |
 | Generation | An approved plan | One image per plan item | One tool call produces one image | Stable |
 | Receipt collection | Produced files | Recomputed hash, size, and dimension per file | A second check catches a file rewritten mid-validation | Stable |
@@ -155,7 +157,7 @@ CI runs on Linux, macOS, and Windows without installing any package at test time
 ### From the plugin marketplace
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.3.0
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.4.0
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
@@ -233,6 +235,11 @@ bin/image-factory quote image-plan.json
 
 Validation rejects an unknown field, a cap violation, or a duplicate idempotency key before anything is spent.
 
+Multi-image stories should use the image_batch 1.3.0 `consistency_profile`. Character,
+prop, and style anchors are injected into every selected frame in a fixed order; `quote`
+reports the consistency mode, profile digest, and effective reference count per item.
+See the complete example in the [series consistency plan guide](docs/guides/series-consistency.md).
+
 ### 3. Approve and run
 
 ```bash
@@ -295,7 +302,7 @@ Recorded on the ledger entry: `capability_unavailable`, `codex_missing`, `quota_
 
 - No automatic retry anywhere. `scripts/generation_runner.py` states the reason plainly: a silent retry is how one bad prompt becomes a large bill.
 - A failed item is terminal; the way forward is `optimize`, which produces a new prompt round for approval.
-- Idempotency keys are content-derived per plan item, so re-running a plan does not duplicate work.
+- Idempotency keys bind the effective prompt plus reference bytes and roles, so re-running an identical plan does not duplicate work; changing an identity reference into a layout reference creates a new work identity.
 - The ledger is written atomically, and an interrupted run resumes through `recover` rather than regenerating.
 - An advisory model score is recorded alongside your approve or reject labels, so the score can later be calibrated against real decisions.
 

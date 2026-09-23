@@ -63,19 +63,23 @@ class ImageBatchMigrationTests(unittest.TestCase):
 
         result = contract_migrations.migrate_image_batch(original)
 
-        self.assertEqual(result.document["schema_version"], "1.2.0")
+        self.assertEqual(result.document["schema_version"], "1.3.0")
         self.assertIs(result.document["limits"]["require_approval_before_run"], True)
         self.assertIs(result.document["judge_policy"]["require_human_labels"], True)
         self.assertEqual(
             result.notes,
-            ("migrated image batch 1.0.0 to 1.1.0", "migrated image batch 1.1.0 to 1.2.0"),
+            (
+                "migrated image batch 1.0.0 to 1.1.0",
+                "migrated image batch 1.1.0 to 1.2.0",
+                "migrated image batch 1.2.0 to 1.3.0",
+            ),
         )
         self.assertEqual(schema_lite.validate(result.document, load_schema("image_batch.schema.json")), [])
         self.assertEqual(json.dumps(original, sort_keys=True), before)
 
     def test_current_plan_returns_an_unchanged_copy(self) -> None:
         original = {
-            "schema_version": "1.2.0",
+            "schema_version": "1.3.0",
             "batch_id": "portrait-study",
             "round": 1,
             "items": [{"id": "item-01", "prompt": "portrait"}],

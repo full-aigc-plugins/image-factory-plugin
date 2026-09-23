@@ -43,6 +43,14 @@ class PlanError:
 
 
 @dataclass(frozen=True)
+class ReferenceBinding:
+    path: str
+    role: str
+    entity_id: str | None
+    sha256: str
+
+
+@dataclass(frozen=True)
 class PlanItem:
     id: str
     prompt: str
@@ -53,6 +61,11 @@ class PlanItem:
     # Declared evaluation criteria. Deliberately excluded from the idempotency
     # key: they judge the artifact, they are not a generation input.
     pixel_checks: tuple[dict, ...] = ()
+    effective_prompt: str = ""
+    effective_prompt_sha256: str = ""
+    reference_bindings: tuple[ReferenceBinding, ...] = ()
+    entity_ids: tuple[str, ...] = ()
+    allowed_variations: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -72,6 +85,7 @@ class PlanResult:
     plan_sha256: str
     require_human_labels: bool
     migration_notes: tuple[str, ...]
+    consistency_profile_sha256: str | None = None
 
 
 def file_sha256(target: Path) -> str:
@@ -92,25 +106,89 @@ def compute_idempotency_key(
     round_number: int,
     prompt: str,
     reference_sha256: tuple[str, ...],
+    reference_bindings: tuple[ReferenceBinding, ...] = (),
 ) -> str:
     """Hash what would actually be sent, so identical work maps to one key.
 
     Reference order is preserved because an edit treats the first reference as the
     identity source; reordering them is a different request.
     """
+    identity = {
+        "batch_id": batch_id,
+        "item_id": item_id,
+        "round": round_number,
+        "prompt": prompt,
+        "reference_sha256": list(reference_sha256),
+    }
+    if reference_bindings:
+        identity["reference_bindings"] = [
+            {
+                "role": binding.role,
+                "entity_id": binding.entity_id,
+                "sha256": binding.sha256,
+            }
+            for binding in reference_bindings
+        ]
     payload = json.dumps(
-        {
-            "batch_id": batch_id,
-            "item_id": item_id,
-            "round": round_number,
-            "prompt": prompt,
-            "reference_sha256": list(reference_sha256),
-        },
+        identity,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _canonical_sha256(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _compile_effective_prompt(
+    *,
+    prompt: str,
+    profile: dict | None,
+    entities: tuple[dict, ...],
+    allowed_variations: tuple[str, ...],
+    bindings: tuple[ReferenceBinding, ...],
+    structured_references: bool,
+) -> str:
+    if profile is None and not structured_references:
+        return prompt
+
+    lines = ["[SERIES CONSISTENCY CONTRACT]"]
+    if profile is not None:
+        lines.append(f"Style bible: {profile['style_bible'].strip()}")
+        negative = tuple(str(value).strip() for value in profile.get("negative_constraints", ()))
+        if negative:
+            lines.append(f"Global negative constraints: {'; '.join(negative)}")
+        if entities:
+            lines.append("Entities that must remain visually consistent:")
+            for entity in entities:
+                traits = "; ".join(str(value).strip() for value in entity["fixed_traits"])
+                lines.append(
+                    f"- {entity['id']} ({entity['kind']}): {entity['description'].strip()}. "
+                    f"Fixed traits: {traits}"
+                )
+    if allowed_variations:
+        lines.append(f"Allowed variations: {'; '.join(allowed_variations)}")
+    else:
+        lines.append("Allowed variations: none declared; preserve all fixed traits.")
+    if bindings:
+        lines.append("Attached reference order and roles:")
+        for index, binding in enumerate(bindings, start=1):
+            suffix = f", entity={binding.entity_id}" if binding.entity_id else ""
+            lines.append(f"{index}. role={binding.role}{suffix}")
+    lines.extend(("[SCENE REQUEST]", prompt))
+    return "\n".join(lines)
 
 
 def canonical_plan_sha256(result_fields: dict) -> str:
@@ -196,6 +274,21 @@ def validate_plan(
 
     errors: list[PlanError] = []
     rows = instance["items"]
+    profile = instance.get("consistency_profile")
+    profile_sha256 = _canonical_sha256(profile) if profile is not None else None
+    entities_by_id: dict[str, dict] = {}
+    if profile is not None:
+        for entity in profile.get("entities", ()):
+            entity_id = entity["id"]
+            if entity_id in entities_by_id:
+                errors.append(
+                    PlanError(
+                        "plan_duplicate_entity_id",
+                        f"duplicate consistency entity id {entity_id!r}",
+                    )
+                )
+                continue
+            entities_by_id[entity_id] = entity
 
     if len(rows) > max_images:
         errors.append(
@@ -225,20 +318,83 @@ def validate_plan(
             continue
         seen.add(item_id)
 
-        references = tuple(row.get("reference_images") or ())
-        if len(references) > MAX_REFERENCE_IMAGES:
+        entity_ids = tuple(row.get("entity_ids") or ())
+        if len(entity_ids) != len(set(entity_ids)):
             errors.append(
                 PlanError(
-                    "plan_schema_invalid",
-                    f"item {item_id!r} passes {len(references)} reference images; the platform accepts {MAX_REFERENCE_IMAGES}",
+                    "plan_duplicate_entity_id",
+                    f"item {item_id!r} repeats an entity id",
+                    item_id,
+                )
+            )
+            continue
+        if entity_ids and profile is None:
+            errors.append(
+                PlanError(
+                    "plan_consistency_profile_required",
+                    f"item {item_id!r} declares entities without a consistency profile",
+                    item_id,
+                )
+            )
+            continue
+        unknown_entities = tuple(entity_id for entity_id in entity_ids if entity_id not in entities_by_id)
+        if unknown_entities:
+            errors.append(
+                PlanError(
+                    "plan_unknown_entity",
+                    f"item {item_id!r} names unknown consistency entities: {', '.join(unknown_entities)}",
                     item_id,
                 )
             )
             continue
 
-        hashes: list[str] = []
+        binding_specs: list[tuple[str, str, str | None]] = []
+        if profile is not None:
+            binding_specs.extend(
+                (path, "style", None)
+                for path in (profile.get("style_reference_images") or ())
+            )
+            for entity_id in entity_ids:
+                entity = entities_by_id[entity_id]
+                role = "identity" if entity["kind"] == "character" else "prop"
+                binding_specs.extend(
+                    (path, role, entity_id)
+                    for path in (entity.get("reference_images") or ())
+                )
+        invalid_reference_entity = False
+        for reference in row.get("references") or ():
+            reference_entity = reference.get("entity_id")
+            if reference_entity is not None and reference_entity not in entities_by_id:
+                errors.append(
+                    PlanError(
+                        "plan_unknown_entity",
+                        f"item {item_id!r} reference names unknown entity {reference_entity!r}",
+                        item_id,
+                    )
+                )
+                invalid_reference_entity = True
+                continue
+            binding_specs.append((reference["path"], reference["role"], reference_entity))
+        if invalid_reference_entity:
+            continue
+        binding_specs.extend(
+            (reference, "generic", None)
+            for reference in (row.get("reference_images") or ())
+        )
+        if len(binding_specs) > MAX_REFERENCE_IMAGES:
+            errors.append(
+                PlanError(
+                    "plan_too_many_effective_references",
+                    f"item {item_id!r} resolves to {len(binding_specs)} reference images; "
+                    f"the platform accepts {MAX_REFERENCE_IMAGES}",
+                    item_id,
+                )
+            )
+            continue
+
+        bindings: list[ReferenceBinding] = []
         missing = False
-        for reference in references:
+        for reference, role, reference_entity in binding_specs:
             target = Path(reference)
             if not target.is_absolute():
                 target = base_dir / target
@@ -252,11 +408,33 @@ def validate_plan(
                 )
                 missing = True
                 continue
-            hashes.append(file_sha256(target))
+            bindings.append(
+                ReferenceBinding(
+                    path=reference,
+                    role=role,
+                    entity_id=reference_entity,
+                    sha256=file_sha256(target),
+                )
+            )
         if missing:
             continue
 
-        reference_hashes = tuple(hashes)
+        reference_bindings = tuple(bindings)
+        references = tuple(binding.path for binding in reference_bindings)
+        reference_hashes = tuple(binding.sha256 for binding in reference_bindings)
+        selected_entities = tuple(entities_by_id[entity_id] for entity_id in entity_ids)
+        allowed_variations = tuple(
+            str(value).strip() for value in (row.get("allowed_variations") or ())
+        )
+        effective_prompt = _compile_effective_prompt(
+            prompt=prompt,
+            profile=profile,
+            entities=selected_entities,
+            allowed_variations=allowed_variations,
+            bindings=reference_bindings,
+            structured_references=bool(row.get("references")),
+        )
+        effective_prompt_sha256 = _sha256_text(effective_prompt)
         declared_checks = tuple(row.get("pixel_checks") or ())
         check_errors = False
         for check in declared_checks:
@@ -279,10 +457,20 @@ def validate_plan(
                     batch_id=batch_id,
                     item_id=item_id,
                     round_number=round_number,
-                    prompt=prompt,
+                    prompt=effective_prompt,
                     reference_sha256=reference_hashes,
+                    reference_bindings=(
+                        reference_bindings
+                        if profile is not None or bool(row.get("references"))
+                        else ()
+                    ),
                 ),
                 pixel_checks=declared_checks,
+                effective_prompt=effective_prompt,
+                effective_prompt_sha256=effective_prompt_sha256,
+                reference_bindings=reference_bindings,
+                entity_ids=entity_ids,
+                allowed_variations=allowed_variations,
             )
         )
 
@@ -309,11 +497,21 @@ def validate_plan(
                     "advisory_enabled": advisory_enabled,
                     "require_human_labels": require_human_labels,
                 },
+                "consistency_profile_sha256": profile_sha256,
                 "items": [
                     {
                         "id": item.id,
                         "prompt": item.prompt,
+                        "effective_prompt_sha256": item.effective_prompt_sha256,
                         "reference_sha256": list(item.reference_sha256),
+                        "reference_bindings": [
+                            {
+                                "role": binding.role,
+                                "entity_id": binding.entity_id,
+                                "sha256": binding.sha256,
+                            }
+                            for binding in item.reference_bindings
+                        ],
                         "idempotency_key": item.idempotency_key,
                     }
                     for item in items
@@ -337,4 +535,5 @@ def validate_plan(
         plan_sha256=plan_sha256,
         require_human_labels=require_human_labels,
         migration_notes=migration.notes,
+        consistency_profile_sha256=profile_sha256,
     )

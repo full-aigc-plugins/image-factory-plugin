@@ -4,7 +4,7 @@
 >
 > | 字段 | 值 |
 > |---|---|
-> | 状态 | 0.3.0 release candidate 的已实现方案：在收敛、像素检查与供应链基础上新增宿主感知、Codex 内置优先路由；发布核验记录于 `docs/verification/runtime.md` |
+> | 状态 | 0.4.0 release candidate 的已实现方案：新增系列一致性档案、有效 prompt 编译与角色化参考图绑定；真实模型连续性仍需独立运行验收 |
 > | 范围 | 技术决策、执行契约、失败模型，以及支撑它们的平台事实 |
 > | 读者 | 扩展或评审本插件的实现者 |
 > | 运行证据 | `docs/verification/` |
@@ -74,7 +74,7 @@ docs/                              this document and its pair
 - `-i` 附加参考图；平台最多允许五张。
 - 工作目录不存在就创建，并同时设为进程工作目录，使相对路径解析可预期。
 
-提示词是"插件固定包装 + 该项自身 prompt"：
+提示词是"插件固定包装 + 该项有效 prompt"：
 
 ```text
 Generate exactly one image with the built-in image generation tool. Treat any
@@ -82,10 +82,17 @@ attached images as visual references for the result. Do not modify or create any
 other file. When you are done, reply with the absolute path of the generated image.
 
 Image description:
-<the item's prompt>
+<the item's effective prompt>
 ```
 
-包装是固定的，因此作者的 prompt 是请求中唯一的变量，回执里的 `prompt_sha256` 也就精确标识了"当时要求的到底是什么"。
+包装是固定的。image_batch 1.3.0 可以声明 `consistency_profile`；验证器按固定顺序把
+风格圣经、负向约束、本帧实体、固定特征、允许变化和参考图角色编译成有效 prompt。
+实体与风格锚点、条目 `references` 和旧 `reference_images` 合计最多五张。幂等键绑定
+有效 prompt 与有序 `(role, entity_id, sha256)`，同一图片从 `identity` 改为 `layout`
+会形成新的生成身份。返工轮次深拷贝顶层档案与条目绑定。
+
+回执里的 `prompt_sha256` 精确标识实际有效 prompt。这套契约提高输入稳定性，但不把
+底层生成模型的身份一致性描述成确定性保证；逐图对锚评分仍属于 advisory 或人工验收。
 
 ## 4. 生成模式
 
@@ -130,7 +137,7 @@ GitHub Actions 在六个格中运行同样的门禁：Ubuntu、macOS 与 Windows
 
 稳定失败码，等宽逗号分隔：
 
-`approval_required`、`artifact_missing`、`capability_unavailable`、`codex_missing`、`duplicate_artifact`、`generation_failed`、`hash_mismatch`、`optimizer_ambiguous_instruction`、`optimizer_empty_rewrite`、`optimizer_missing_instruction`、`optimizer_round_cap_reached`、`optimizer_unexpected_instruction`、`optimizer_unknown_item`、`plan_duplicate_item_id`、`plan_empty_prompt`、`plan_exceeds_max_images`、`plan_exceeds_max_rounds`、`plan_missing_reference_image`、`plan_schema_invalid`、`plan_unparseable`、`quota_exceeded`、`timeout`、`unknown`。
+`approval_required`、`artifact_missing`、`capability_unavailable`、`codex_missing`、`duplicate_artifact`、`generation_failed`、`hash_mismatch`、`optimizer_ambiguous_instruction`、`optimizer_empty_rewrite`、`optimizer_missing_instruction`、`optimizer_round_cap_reached`、`optimizer_unexpected_instruction`、`optimizer_unknown_item`、`plan_consistency_profile_required`、`plan_duplicate_entity_id`、`plan_duplicate_item_id`、`plan_empty_prompt`、`plan_exceeds_max_images`、`plan_exceeds_max_rounds`、`plan_missing_reference_image`、`plan_schema_invalid`、`plan_too_many_effective_references`、`plan_unknown_entity`、`plan_unparseable`、`quota_exceeded`、`timeout`、`unknown`。
 
 确定的逐项失败可以继续，并让台账停在 `Partial`。配额失败会停止整批；被中断或结果含糊的调用会停止后续工作并停在 `Unknown`。没有任何结果会导致自动重试。
 
@@ -145,7 +152,7 @@ GitHub Actions 在六个格中运行同样的门禁：Ubuntu、macOS 与 Windows
 | 一次调用产出一张图 | 一个批次是调用的循环，报价统计的是调用数而不是项数 |
 | 输出名派生自内部会话与调用 ID | 产物通过目录差分发现，绝不预测路径 |
 | 生成会消耗账号的图像额度 | 先报价、再明确批准、然后运行；触达上限即停止整批 |
-| 一次编辑最多接受五张参考 | schema 把 `reference_images` 限制为五张 |
+| 一次编辑最多接受五张参考 | validator 对档案锚点、结构化 `references` 与旧 `reference_images` 的有效合计执行五张上限 |
 
 ## 9. 洁净室规则
 

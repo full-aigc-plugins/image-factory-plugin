@@ -326,12 +326,16 @@ def command_validate_plan(args: argparse.Namespace) -> tuple[int, str]:
         "require_approval_before_run": result.require_approval_before_run,
         "plan_sha256": result.plan_sha256,
         "require_human_labels": result.require_human_labels,
+        "consistency_mode": "series" if result.consistency_profile_sha256 else "off",
+        "consistency_profile_sha256": result.consistency_profile_sha256,
         "migration_notes": list(result.migration_notes),
         "items": [
             {
                 "item_id": item.id,
                 "idempotency_key": item.idempotency_key,
                 "reference_images": list(item.reference_images),
+                "reference_roles": [binding.role for binding in item.reference_bindings],
+                "effective_prompt_sha256": item.effective_prompt_sha256,
             }
             for item in result.items
         ],
@@ -352,6 +356,11 @@ def command_quote(args: argparse.Namespace) -> tuple[int, str]:
         "approval_required": result.require_approval_before_run,
         "plan_sha256": result.plan_sha256,
         "require_human_labels": result.require_human_labels,
+        "consistency_mode": "series" if result.consistency_profile_sha256 else "off",
+        "consistency_profile_sha256": result.consistency_profile_sha256,
+        "effective_reference_counts": {
+            item.id: len(item.reference_images) for item in result.items
+        },
         "migration_notes": list(result.migration_notes),
         # Quoting is free: it reads the plan and spends nothing.
         "spends_allowance_on_quote": False,
@@ -365,6 +374,7 @@ def command_quote(args: argparse.Namespace) -> tuple[int, str]:
         f"images to generate: {len(result.items)}",
         f"approval required: {result.require_approval_before_run}",
         f"human labels required: {result.require_human_labels}",
+        f"consistency mode: {'series' if result.consistency_profile_sha256 else 'off'}",
         f"plan sha256: {result.plan_sha256}",
         *[f"migration note: {note}" for note in result.migration_notes],
         "this quote spends nothing",

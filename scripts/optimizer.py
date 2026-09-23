@@ -404,6 +404,8 @@ def plan_next_round(
         next_plan["limits"] = copy.deepcopy(current_plan["limits"])
     if "judge_policy" in current_plan:
         next_plan["judge_policy"] = copy.deepcopy(current_plan["judge_policy"])
+    if "consistency_profile" in current_plan:
+        next_plan["consistency_profile"] = copy.deepcopy(current_plan["consistency_profile"])
     next_plan = contract_migrations.migrate_image_batch(next_plan).document
 
     return OptimizeResult(

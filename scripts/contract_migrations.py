@@ -57,34 +57,42 @@ def migrate_image_batch(document: object) -> MigrationResult:
         raise ValueError("image batch must be a JSON object")
     plan = copy.deepcopy(document)
     version = plan.get("schema_version")
-    if version == "1.2.0":
+    if version == "1.3.0":
         return MigrationResult(plan, ())
-    if version not in ("1.0.0", "1.1.0"):
+    if version not in ("1.0.0", "1.1.0", "1.2.0"):
         raise ValueError(f"unsupported image batch schema_version {version!r}")
-    plan["schema_version"] = "1.1.0"
-    limits = plan.get("limits")
-    if limits is None:
-        limits = {"max_images": 20, "max_rounds": 3}
-        plan["limits"] = limits
-    if not isinstance(limits, dict):
-        raise ValueError("image batch limits must be a JSON object")
-    policy = plan.get("judge_policy")
-    if policy is None:
-        policy = {
-            "min_dimension": 256,
-            "reject_duplicates": True,
-            "pass_threshold": 0.8,
-        }
-        plan["judge_policy"] = policy
-    if not isinstance(policy, dict):
-        raise ValueError("image batch judge_policy must be a JSON object")
-    limits["require_approval_before_run"] = True
-    policy["require_human_labels"] = True
-    notes = ["migrated image batch 1.0.0 to 1.1.0"]
-    # 1.1.0 -> 1.2.0 adds optional per-item pixel checks; existing documents
-    # validate unchanged, so this leg is a pass-through with a note.
-    plan["schema_version"] = "1.2.0"
-    notes.append("migrated image batch 1.1.0 to 1.2.0")
+    notes: list[str] = []
+    if version == "1.0.0":
+        plan["schema_version"] = "1.1.0"
+        limits = plan.get("limits")
+        if limits is None:
+            limits = {"max_images": 20, "max_rounds": 3}
+            plan["limits"] = limits
+        if not isinstance(limits, dict):
+            raise ValueError("image batch limits must be a JSON object")
+        policy = plan.get("judge_policy")
+        if policy is None:
+            policy = {
+                "min_dimension": 256,
+                "reject_duplicates": True,
+                "pass_threshold": 0.8,
+            }
+            plan["judge_policy"] = policy
+        if not isinstance(policy, dict):
+            raise ValueError("image batch judge_policy must be a JSON object")
+        limits["require_approval_before_run"] = True
+        policy["require_human_labels"] = True
+        notes.append("migrated image batch 1.0.0 to 1.1.0")
+        version = "1.1.0"
+    if version == "1.1.0":
+        # 1.1.0 -> 1.2.0 adds optional per-item pixel checks.
+        plan["schema_version"] = "1.2.0"
+        notes.append("migrated image batch 1.1.0 to 1.2.0")
+        version = "1.2.0"
+    if version == "1.2.0":
+        # 1.2.0 -> 1.3.0 adds only optional series-consistency fields.
+        plan["schema_version"] = "1.3.0"
+        notes.append("migrated image batch 1.2.0 to 1.3.0")
     return MigrationResult(plan, tuple(notes))
 
 
