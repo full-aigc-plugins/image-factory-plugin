@@ -190,7 +190,9 @@ class DistributionTests(unittest.TestCase):
             "scripts/validate_distribution.py",
         ):
             self.assertTrue((ROOT / filename).is_file(), filename)
-        self.assertFalse((ROOT / "plugin.json").exists())
+        # Migrated 2026-09-28: portable Agent Plugins v1.0.0 surface. This
+        # package bundles no MCP server, so it ships a manifest but no mcp.json.
+        self.assertTrue((ROOT / "plugin.json").is_file(), "missing portable manifest")
         self.assertFalse((ROOT / "mcp.json").exists())
         self.assertFalse((ROOT / ".mcp.json").exists())
         self.assertEqual(png_shape("assets/logo.png"), (1024, 1024, 6))

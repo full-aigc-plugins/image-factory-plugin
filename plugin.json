@@ -1,0 +1,52 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "image-factory",
+  "version": "0.8.0",
+  "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
+  "author": {
+    "name": "Full Stack Skills / PartMe.AI",
+    "url": "https://github.com/partme-ai"
+  },
+  "homepage": "https://github.com/full-aigc-plugins/image-factory-plugin",
+  "repository": "https://github.com/full-aigc-plugins/image-factory-plugin",
+  "license": "Apache-2.0",
+  "keywords": [
+    "image",
+    "batch",
+    "generation",
+    "recipe",
+    "codex"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Image Factory",
+        "shortDescription": "Discover, batch-produce, and evaluate images",
+        "longDescription": "Prefer Codex built-in imagegen for direct image generation, offer unchanged Baoyu workflows only after explicit image-quota exhaustion, or run Image Factory's governed production loop with plan validation, approval, verified receipts, evaluation, and recovery.",
+        "developerName": "Full Stack Skills / PartMe.AI",
+        "category": "Creativity",
+        "capabilities": [
+          "Interactive",
+          "Read",
+          "Write"
+        ],
+        "websiteURL": "https://github.com/full-aigc-plugins/image-factory-plugin",
+        "privacyPolicyURL": "https://github.com/full-aigc-plugins/image-factory-plugin/blob/main/PRIVACY.md",
+        "termsOfServiceURL": "https://github.com/full-aigc-plugins/image-factory-plugin/blob/main/TERMS.md",
+        "defaultPrompt": [
+          "Generate an image, article cover, or social image-card series",
+          "Plan and run a governed image batch with verified receipts",
+          "Evaluate, optimize, or recover an existing image batch"
+        ],
+        "brandColor": "#10B981",
+        "composerIcon": "./assets/composer-icon.png",
+        "logo": "./assets/logo-approved.png",
+        "logoDark": "./assets/logo-approved.png",
+        "screenshots": []
+      }
+    },
+    "ai.nanoco.nanoclaw": {
+      "agentName": "Image Factory"
+    }
+  }
+}
