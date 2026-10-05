@@ -1,5 +1,14 @@
 # Image Factory Plugin
 
+## Plugin marketplaces
+
+This plugin belongs to **AIGC content creation**.
+
+| Category | Marketplace | Purpose |
+| --- | --- | --- |
+| Full-stack development | [Full Stack Plugins](https://github.com/partme-ai/full-stack-plugins) | Architecture and UI design, code understanding, quality checks, code review, workflow governance, and server operations |
+| AIGC content creation | [Full AIGC Plugins](https://github.com/partme-ai/full-aigc-plugins) | Image, video, audio, music, 3D, and multimodal content creation |
+
 ![Image Factory — Produce image batches you can verify](assets/image-factory-hero.png)
 
 <img src="assets/logo.png" alt="Image Factory logo" width="128">
