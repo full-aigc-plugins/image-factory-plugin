@@ -22,7 +22,7 @@
       "interface": {
         "displayName": "Image Factory",
         "shortDescription": "Discover, batch-produce, and evaluate images",
-        "logo": "https://cdn.jsdelivr.net/gh/full-aigc-plugins/image-factory-plugin@v0.8.0/assets/logo-approved.png"
+        "logo": "https://cdn.jsdelivr.net/gh/full-aigc-plugins/image-factory-plugin@v0.9.0/assets/logo-approved.png"
       }
     }
   ]
