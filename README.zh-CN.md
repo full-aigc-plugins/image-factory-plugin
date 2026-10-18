@@ -1,4 +1,4 @@
-# Image Factory 插件
+# Image Factory
 
 ## 插件市场导航
 
@@ -11,148 +11,30 @@
 
 ![Image Factory——生产可核验的批量图片](assets/image-factory-hero.png)
 
-<img src="assets/logo.png" alt="Image Factory 图标" width="128">
+> 把「给一批参考图、定一个视觉方向」变成一次可审计的生产：计划先校验、花费先批准、每件产物都有可复核的哈希回执。
 
-> 把"给定参考做一批图"变成一次可审计的生产运行——校验计划、批准花费，每件产物都有可核验回执。
-
-[![版本](https://img.shields.io/badge/version-0.8.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.8.0)
+[![版本](https://img.shields.io/badge/release-0.9.1%2Bcodex.20261018-1A73E8)](https://github.com/full-aigc-plugins/image-factory-plugin/releases)
+[![宿主](https://img.shields.io/badge/hosts-Codex%20%7C%20ZCode%20%7C%20Kimi-6E56CF)](#安装)
+[![技能](https://img.shields.io/badge/skills-10-00A67E)](#技能)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
-[English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [命令契约](#命令契约) · [故障排查](#故障排查)
+[English](README.md) | [简体中文](README.zh-CN.md) · [安装](#安装) · [快速开始](#快速开始) · [技能](#技能) · [故障排查](#故障排查)
 
 ## 项目定位
 
-`image-factory` 提供两层互补能力。用户确认生图后，Harness 依据显式宿主元数据或当前会话实际工具能力识别环境；在 Codex 中优先使用无需 Provider API Key 的内置 `imagegen` / `image_gen`。只有明确观测到图片额度耗尽，才会在 Codex 中提供 Baoyu 降级；ZCode、Kimi 或其他宿主则只在没有可验证原生图片能力时考虑 Baoyu。Factory 工作流继续负责计划校验、批准、回执、评测与恢复等受治理批次能力。
+`image-factory` 用来生产可核验的批量图片。它把参考图和视觉方向变成一份已校验的计划，先报价，等你批准，再由宿主的图像工具逐项生成，最后为每个文件重新计算哈希、大小与尺寸并写入回执。
 
-版本 `0.8.0` 增加可选多哈希近重复证据、分层校准与漂移告警、移动审片工作区和真实运行验收矩阵。内置“勤能补拙”基准仍为 synthetic；真实付费 4/8/12、跨宿主/模型与故障注入均为 `NOT_RUN`，人物和元素稳定性尚未通过真实验收。
+插件提供两层能力。在 Codex 中优先使用内置 `imagegen` / `image_gen`，不需要 Provider Key；只有在明确观测到图片额度耗尽时，才会在 Codex 中提供原样的 Baoyu 工作流，或者在没有可验证原生出图能力的宿主上考虑它。Factory 闭环负责受治理的批次：计划校验、批准、回执、评测与恢复。
 
-### 适合谁
-
-- 需要按统一视觉方向、基于参考图批量出图的内容与市场团队。
-- 需要确定性、可恢复、带回执的流水线，而不是一次性 prompt 的工程师。
-- 需要知道"哪条 prompt 产出了哪个文件、花了多少"的审阅者。
-
-### 解决什么问题
-
-| 问题 | 本插件提供 | 可验证入口 |
-|---|---|---|
-| 批次无法复现 | 封闭的计划 schema、系列一致性档案与按内容派生的幂等键 | `scripts/plan_validator.py` |
-| 人物和道具跨帧漂移 | 角色/元素注册表、固定特征、角色化参考图与返工保留 | `consistency_profile`、`references` |
-| 还没决定就先花了钱 | 先报价，再要求批准，然后才生成 | `bin/image-factory quote`、`run` |
-| 中断后全部重做 | 可持久台账与显式恢复命令 | `scripts/job_ledger.py`、`recover` |
-| "跑通了"无法核实 | 重算的哈希、大小与尺寸回执 | `scripts/receipt_store.py` |
-
-## 一眼看懂
-
-```text
-参考图 + 视觉方向
-      │
-      ▼
-┌──────────────────────────────────────────────────────────┐
-│ image-factory                                      │
-│  ① discover   离线检索 prompt 方向                       │
-│  ② plan       校验批次计划并报价                          │
-│  ③ approve    花费前由你明确批准                         │
-│  ④ run        由 Codex 内置图像工具逐项生成              │
-│  ⑤ collect    为每件产物生成哈希校验回执                 │
-│  ⑥ evaluate   确定性门禁 + 参考性评分                    │
-│  ⑦ optimize   生成新一轮 prompt，等你批准                │
-└──────────────────────────────────────────────────────────┘
-      │
-      ▼
-图片批次 + 回执 + 评测记录
-```
-
-| 项目属性 | 值 |
-|---|---|
+| 项目 | 值 |
+| --- | --- |
 | 插件 ID | `image-factory` |
-| 宿主 | Codex CLI 或 ChatGPT 桌面应用 |
-| 当前版本 | `0.8.0`（P1 Evidence release candidate，详见[成熟度](#成熟度)） |
-| 插件清单 | `.codex-plugin/plugin.json` |
-| MCP 配置 | 无——在 MCP 服务器存在之前，清单一律禁止写 MCP 条目 |
-| 主要语言 | Python 3.11+ |
-| 许可证 | Apache-2.0 |
+| 版本 | `0.9.1+codex.20261018` |
+| 成熟度 | 未宣称生产就绪；最新的真实运行记录对应 `0.8.0` 候选版本 |
+| 运行环境 | Python 3.11 及以上，仅用标准库 |
+| MCP 服务器 | 无；清单中没有 MCP 条目 |
 
-## 能力与边界
-
-### 已支持
-
-| 能力 | 输入 | 输出 | 限制 | 状态 |
-|---|---|---|---|---|
-| prompt 检索 | 主题或参考方向 | 带来源的 prompt 模板排序 | 对内置模板做离线检索 | 稳定 |
-| 批次计划校验 | 一个计划文件 | 含幂等键与硬上限的已校验计划 | 花费之前即被拒绝 | 稳定 |
-| 系列一致性 | 风格圣经、实体固定特征与锚点 | 每帧有效 prompt 与角色化参考图 | 提升可控性，不承诺底层模型绝对一致 | 稳定契约 |
-| 报价与批准 | 已校验的计划 | 成本估算与批准记录 | 无批准不生成 | 稳定 |
-| 生成 | 已批准的计划 | 每个计划项一张图 | 一次工具调用产出一张图 | 稳定 |
-| 回执采集 | 产出的文件 | 逐文件重算的哈希、大小与尺寸 | 二次校验可发现验证窗口内被改写的文件 | 稳定 |
-| 评测 | 已完成的批次 | 确定性门禁结果 + 参考性评分 | 模型给出的评分仅供参考 | 稳定 |
-| 优化 | 失败项 | 需要批准的新一轮 prompt | 绝不覆盖上一轮 | 稳定 |
-| 恢复 | 中断的任务 | 不重新调用 Codex 的台账核对 | 只核对已核验的回执 | 稳定 |
-| Codex 直接生图 | prompt 与可选参考图 | 通过内置 `image_gen` 生成一张或多张图片 | 当前 Codex 会话暴露该工具时始终优先 | 受管 `imagegen` 快照 |
-| 外部图片降级 | 已确认的额度事件，或没有原生图片能力的非 Codex 宿主 | 通过所选 Baoyu 工作流生成图片、封面或社交卡片 | 用户选择降级并在本机配置 Provider 凭据 | 外部受管技能 |
-
-### 不负责
-
-- 重写或修补 Baoyu 工作流。三个技能从不可变上游发布完整同步，并用摘要校验。
-- 根据已安装技能或文件路径猜测宿主。Harness 只使用当前会话元数据或实际工具能力。
-- 代替用户决定提供商或处理凭据。Baoyu 降级需要用户明确选择，凭据保留在本机环境变量或 Provider 配置中，不粘贴到对话。
-- 控制尺寸、质量、背景或张数。内置工具只接受 prompt 与参考图，因此批次项的差异只能来自这两者。
-- 拥有图形工作台、项目管理或视频合成。这些界面不在本仓库范围内。
-- 撰写、翻译、排版或发布文章。这些能力归属单独的内容写作插件。
-
-### 成熟度
-
-| 状态 | 含义 |
-|---|---|
-| 稳定 | 有自动化测试与确定性门禁 |
-| release candidate | 外部门禁逐条记录，未观测的标为 `NOT_RUN`；生成路径目前仅在 macOS 上验证 |
-| 封锁 / NOT_RUN | 未验证；不得描述为可用 |
-
-`0.1.2` 的九项外部门禁中已有七项观测通过，逐条记录在 [`docs/verification/runtime.md`](docs/verification/runtime.md)：远程 CI、标签一致性、Marketplace 全新安装、无花费冒烟、五次已授权的真实出图、一次已验证的多轮「评测→优化→重跑」闭环，以及一次从全新 Codex 会话驱动的付费运行。仍为 `NOT_RUN` 的有两项：生成路径未在 Linux 或 Windows 上执行过，以及额度耗尽路径从未被实际观测——后者是刻意的，因为故意耗尽出图额度既无必要也未被授权。两项的采集步骤见 [`docs/guides/runtime-evidence-collection.md`](docs/guides/runtime-evidence-collection.md)。
-
-## 架构与核心流程
-
-```mermaid
-flowchart LR
-    A[参考图] --> B[prompt-search]
-    B --> C[批次计划]
-    C --> D{validate-plan}
-    D -->|非法| C
-    D -->|合法| E[quote]
-    E --> F{用户批准}
-    F -->|被拒| C
-    F -->|已批准| G[generation_runner]
-    G --> H[Codex 内置图像工具]
-    H --> I[回执存储]
-    I --> J[evaluate]
-    J --> K{存在失败项?}
-    K -->|是| L[optimize - 新一轮]
-    L --> F
-    K -->|否| M[已验收批次]
-    G --> N[(任务台账)]
-    N --> G
-```
-
-### 组件职责
-
-| 组件 | 负责 | 不负责 |
-|---|---|---|
-| `bin/image-factory` | 调用 `scripts/image_factory_cli.py` 的 CLI 入口 | 业务规则 |
-| `scripts/image_factory_cli.py` | 子命令分发与退出码 | 媒体处理 |
-| `scripts/plan_validator.py` | 计划 schema、上限与幂等键 | prompt 质量 |
-| `scripts/generation_runner.py` | 每次尝试都是一个全新子进程 | 重试策略 |
-| `scripts/job_ledger.py` | 持久状态迁移与密钥清洗 | 执行 |
-| `scripts/receipt_store.py` | 逐产物回执与复核 | 远端生命周期 |
-| `scripts/job_lock.py` | 跨进程建议锁 | 调度 |
-| `skills/`（8 个） | 5 个 Factory 路由/治理技能 + 3 个原样 Baoyu 图片技能 | 运行时强制或上游技能所有权 |
-
-## 兼容性
-
-| 插件版本 | 宿主 | 运行环境 | 状态 |
-|---|---|---|---|
-| `0.1.2` | Codex CLI 或 ChatGPT 桌面应用 | CI 矩阵覆盖 Python 3.11 与 3.13；Codex CLI 需在 `PATH` 上或通过 `CODEX_HOME` 可达 | release candidate；生成路径已在 macOS 验证 |
-
-CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖包。
+`0.8.0` 增加了多哈希证据、分层校准、审片工作区和真实运行验收矩阵。真实付费 4/8/12、跨宿主与故障注入用例仍为 `NOT_RUN`；合成测试不能证明真实人物、道具或画风稳定性。
 
 ## 安装
 
@@ -160,242 +42,153 @@ CI 在 Linux、macOS 与 Windows 上运行，且测试期不安装任何依赖�
 
 - `PATH` 上有 Python 3.11 或更新版本。
 - Codex CLI 在 `PATH` 上可达，或用 `CODEX_HOME` 指向其安装位置。
-- 只使用 Factory 批量流程时不需要 API Key 或 npm 依赖。
-- 直接使用 `baoyu-image-gen` 需要 `bun` 或 `npx`；所选提供商可能需要其文档声明的凭据。`codex-cli` 提供商则复用已登录的 Codex CLI。
+- 只跑 Factory 批次时不需要 API Key，也不需要 npm 包。
+- Baoyu 降级需要 `bun` 或 `npx`，以及所选 Provider 文档要求的凭据；`codex-cli` Provider 复用已登录的 Codex CLI。
 
 ### 从插件市场安装
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.8.0
+codex plugin marketplace add partme-ai/full-aigc-plugins
+codex plugin add image-factory@full-aigc-plugins
+```
+
+### 从仓库内置市场安装
+
+```bash
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.9.1
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
-重启 Codex 或 ChatGPT 桌面应用，然后新建任务以加载 Skills。
+重启 Codex 或 ChatGPT 桌面应用，新建任务以加载技能。
 
-### 从源码安装
-
-```bash
-git clone https://github.com/full-aigc-plugins/image-factory-plugin.git
-cd image-factory-plugin
-bin/image-factory probe
-```
-
-### 确认加载成功
-
-```bash
-codex plugin list
-```
-
-预期条目：
-
-```text
-image-factory@partme-ai-image-factory  installed, enabled
-```
-
-再确认本地运行环境：
-
-```bash
-bin/image-factory probe
-```
-
-预期结果：一份 JSON 能力报告，覆盖 Python、Codex CLI 与台账访问，且不打印任何秘密值。
-
-### 国内镜像（AtomGit）
-
-如果 GitHub 访问缓慢或不可达，可改用 AtomGit 镜像安装。命令完全一致，只把市场地址换成镜像：
-
-```bash
-codex plugin marketplace add https://atomgit.com/partme-ai/partme-image-factory.git --ref main
-codex plugin add image-factory@partme-ai-image-factory
-```
-
-如需一步安装 partme-ai 全部插件目录：
-
-```bash
-codex plugin marketplace add https://atomgit.com/partme-ai/plugins.git
-codex plugin add image-factory@partme-ai-image-factory
-```
-
-注意事项：
-
-- AtomGit 源与 GitHub 源共用市场名，后添加的会覆盖先添加的。切回官方源执行
-  `codex plugin marketplace add https://github.com/partme-ai/plugins.git`。
-- ZCode 与 Kimi 用户可先将镜像仓库克隆到本地，再在各平台的 marketplace 配置中登记本地目录。
+二次开发可直接克隆仓库并执行 `bin/image-factory probe`；它会输出 Python、Codex CLI 与台账访问能力的 JSON 报告，且不打印任何秘密值。`codex plugin list` 应显示 `image-factory@partme-ai-image-factory  installed, enabled`。
 
 ## 快速开始
 
-### 1. 先找方向
+1. 离线检索带出处的提示词方向：
 
 ```bash
-bin/image-factory prompt-search '绘本插画' --limit 3 --json
+bin/image-factory prompt-search 'storybook illustration' --limit 3 --json
 ```
 
-检索是离线的、带来源标注的：返回内置模板方向及其出处。
-
-### 2. 写并校验批次计划
+2. 写批次计划，先校验再报价。校验会在花费之前拒绝未知字段、超限和重复幂等键：
 
 ```bash
 bin/image-factory validate-plan image-plan.json
 bin/image-factory quote image-plan.json
 ```
 
-校验会在花费之前拒绝未知字段、超限与重复幂等键。
-
-多图故事应使用 image_batch 1.5.0 的 `consistency_profile`。人物、道具和画风锚点会
-按固定顺序进入每一帧；`story_state` 进一步把永久锁定、场次锁定和镜头转换编译进实际
-提示词。`quote` 会显示 `consistency_mode`、档案摘要和每项有效参考图数量。完整示例见
-[系列一致性计划指南](docs/guides/series-consistency.md)。
-
-### 3. 批准并运行
+3. 批准确切的计划哈希后执行：
 
 ```bash
 bin/image-factory run image-plan.json --approval image-approval.json
 ```
 
-每次尝试都是一个针对内置图像工具的全新子进程。这里没有重试循环——源码里写得很直白：静默重试就是"一个坏 prompt 变成一张大账单"的成因。
-
-### 4. 评测、优化或恢复
+4. 评测，或核对中断的运行：
 
 ```bash
 bin/image-factory evaluate image-plan.json
 bin/image-factory recover image-plan.json
-bin/image-factory status image-plan.json
 ```
 
-`recover` 会把已核验的回执核对进台账，且不会重新调用 Codex，因此中断的运行是恢复而不是重做。
+每次尝试都是针对内置图像工具的全新流式子进程。这里没有重试循环：静默重试正是「一个坏提示词变成一张大账单」的成因。失败项是终态，`optimize` 会生成需要重新批准的新一轮提示词。
 
-`evaluate` 还会写出校准报告以及可重建的 HTML/JSON 视觉汇总。系列评审使用人物身份、
-服装、道具、画风、场景状态、无文字和宽高比七个封闭维度，并要求可观察证据；派生汇总
-被删除后可用 `summarize` 从已核验回执与评分重建，全程不调用生成。
+## 可完成的工作
 
-标准视觉评审器可通过重复的 `--reviewer-report` 接入；评审器 id、版本、能力、置信度、
-不确定度和证据区域会保留在 scores 1.4.0 中，低置信度 finding 不驱动返工。离线连续性
-基准使用 `benchmark --pack ... --run ... --out ...` 聚合一次通过率、人物漂移率、元素丢失率、
-返工、成本和耗时。参见[视觉连续性 Foundation](docs/guides/visual-consistency-foundation.zh-CN.md)。
-0.8.0 增加可选 aHash/dHash/pHash 逐算法距离、Wilson 区间与分层/漂移报告、390px
-基准帧对照审片页及独立运行验收矩阵。真实付费 4/8/12、跨宿主/模型与故障注入仍全部是
-`NOT_RUN`，不能由 synthetic 测试推断人物或元素稳定性已通过。详见
-[生产质量证据](docs/guides/production-quality-evidence.zh-CN.md)与
-[真实运行验收矩阵](docs/guides/runtime-acceptance-matrix.zh-CN.md)。
+| 工作流 | 内置路径 | 可验证输出 |
+| --- | --- | --- |
+| 找方向 | 对内置模板执行 `prompt-search` | 带来源标注的提示词方向排序 |
+| 生产受治理批次 | `validate-plan` → `quote` → `run` | 逐产物的哈希、大小与尺寸回执 |
+| 保持系列一致 | `consistency_profile`、实体特征、角色化参考图 | `quote` 报告的实际提示词与参考图数量 |
+| 评测与迭代 | `evaluate` + `image-factory-review` | 确定性门禁结果、参考性维度评分、下一轮计划 |
+| 恢复中断运行 | `recover` | 核对后的台账，不额外调用生成 |
+| 临时出一张图 | Codex 内置 `imagegen` | Factory 台账之外的位图产物 |
+
+多图故事应声明 `consistency_profile`；锚点按固定顺序注入每一帧，`story_state` 把锁定项与镜头转换编译进实际提示词。锚点能提升可控性，但不承诺底层模型的身份一致性。
+
+## 技能
+
+| 技能 | 作用 |
+| --- | --- |
+| `image-factory-use` | 为批次请求选择入口，本身不执行具体工作 |
+| `image-factory-run` | 校验、报价、取得批准、逐项生成并采集回执 |
+| `image-factory-judge` | 运行确定性门禁，把参考性评分与人工标注并列记录，并写出下一轮 |
+| `image-factory-review` | 产出供 `evaluate` 与 `optimize` 消费的独立分维度评审文档 |
+| `image-factory-recover` | 读取台账，把中断或状态不明的批次映射到唯一合法下一步 |
+| `image-factory-harness` | 优先选择 Codex `imagegen`，仅在额度证据出现后使用 Baoyu，并规范化交付证据 |
+| `imagegen` | Codex 位图生成与编辑指令的受管快照 |
+| `baoyu-image-gen` | 经 `bun` 或 `npx` 调用的多 Provider 出图 |
+| `baoyu-cover-image` | 多画幅文章封面生成 |
+| `baoyu-xhs-images` | 社交图片卡片系列生成 |
+
+三个 Baoyu 技能来自 `baoyu-skills v2.5.2`，`imagegen` 与 `image-factory-use/run/judge/recover` 来自 `image-factory-skills v1.1.0`，两组都由 `skills.lock.json` 固定；`image-factory-harness` 与 `image-factory-review` 为插件自有。以上副本都不要就地修改。
+
+## 斜杠命令
+
+| 命令 | 作用 |
+| --- | --- |
+| `/image-factory` | 总入口，按情况路由到运行、评测或恢复 |
+| `/image-factory-run` | 对批次报价、批准、生成并采集回执 |
+| `/image-factory-judge` | 评测已完成批次并驱动提示词优化 |
+| `/image-factory-recover` | 从任务台账恢复中断的批次 |
 
 ## 配置
 
 | 设置 | 所在位置 | 说明 |
-|---|---|---|
+| --- | --- | --- |
 | Codex 主目录 | `CODEX_HOME` 环境变量 | 默认为 Codex 的标准位置 |
-| 任务台账 | `--job` 指定路径，或 `<plan>.job.json` | 纯 JSON，原子写入 |
+| 任务台账 | `--job` 路径，或 `<plan>.job.json` | 纯 JSON，原子写入 |
 | 回执 | `<job>.receipts/` | 每件产物一个 JSON 文件 |
 | 任务锁 | `<job>.lock` | 跨进程建议锁 |
-| 凭据 | 无 | 插件不保存秘密，台账也会拒绝形似凭据的键 |
+| 凭据 | 无 | 插件不保存秘密，台账会拒绝形似凭据的键 |
+| Baoyu Provider | 本机环境变量或 Provider 配置 | 由用户选择，插件不写入 |
 
-## 命令契约
+退出码为 `0` 成功、`1` 失败、`2` 用法错误、`3` 需要批准、`4` 能力不可用、`5` 任务被锁定、`6` 需要恢复。
 
-| 命令 | 用途 | 主要参数 |
-|---|---|---|
-| `probe` | 报告 Python、Codex CLI 与台账可用性 | — |
-| `prompt-search` | 离线且带来源的 prompt 检索 | `--limit`、`--json` |
-| `validate-plan` | 校验封闭的计划 schema 与上限 | — |
-| `quote` | 花费前估算批次成本 | — |
-| `run` | 针对内置图像工具执行批次 | `--approval` |
-| `recover` | 把回执核对进台账 | — |
-| `evaluate` | 对批次运行确定性门禁 | — |
-| `summarize` | 从已核验证据重建 contact sheet 与故事板 | `--out-dir` |
-| `calibrate` | 重新计算分层校准和评审器漂移，不改阈值 | `--scores`、`--out` |
-| `acceptance-init/add/record` | 独立记录真实运行案例，不启动生成 | `--matrix`、`--case` |
-| `optimize` | 依据失败项生成新一轮 prompt | — |
-| `status` | 读取当前台账状态 | — |
+## 架构与安全
 
-### 稳定退出码
-
-| 退出码 | 含义 | 建议动作 |
-|---|---|---|
-| `0` | 成功 | 继续 |
-| `1` | 失败 | 阅读消息并修正输入 |
-| `2` | 用法错误 | 修正命令行 |
-| `3` | 需要批准 | 报价并批准该批次 |
-| `4` | 能力不可用 | 修复 Codex CLI 的可用性 |
-| `5` | 任务被锁定 | 等待另一个进程结束 |
-| `6` | 需要恢复 | 先执行 `recover` 再继续 |
-
-### 错误类别
-
-记录在台账条目上：`capability_unavailable`、`codex_missing`、`quota_exceeded`、`timeout`、`generation_failed`、`artifact_missing`、`hash_mismatch`、`duplicate_artifact`、`plan_invalid`、`approval_required`、`job_already_running`、`recovery_required`、`unknown`。
-
-## 重试、幂等与恢复
-
-- 任何环节都不做自动重试。`scripts/generation_runner.py` 把理由写得很明确：静默重试就是"一个坏 prompt 变成一张大账单"的成因。
-- 失败项是终态；正确的下一步是 `optimize`，它会产出一轮等待批准的新 prompt。
-- 幂等键按有效 prompt、参考图内容及其角色派生，因此重跑同一计划不会产生重复工作；同一图片从身份参考改成布局参考会形成新的工作身份。
-- 台账原子写入，中断的运行通过 `recover` 续跑，而不是重新生成。
-- 模型给出的参考性评分会与你的批准/驳回标注一起记录，便于日后用真实决策校准该评分。
-
-## 数据与状态
-
-| 数据 | 位置 | 生命周期 | 是否含秘密 |
-|---|---|---|---|
-| 任务台账 | `--job` 指定路径或 `<plan>.job.json` | 直到你删除 | 否；形似凭据的键会被拒绝 |
-| 产物回执 | `<job>.receipts/` | 直到你删除 | 否 |
-| 产出的图片 | 你选择的输出目录 | 直到你删除 | 否 |
-| prompt 模板 | 内置于仓库 | 随插件版本化 | 否 |
-
-台账状态机：`Draft`、`PlanValidated`、`Approved`、`Running`、`Completed`、`Partial`、`Unknown`、`Evaluated`、`PendingApproval`、`Optimized`、`Accepted`。
-
-## 安全
-
-- 本插件不含任何 API Key、Token 或凭据；认证使用的是 Codex 自身的。
-- 台账在写入任何内容之前会拒绝形似凭据的键。
-- 参考输入在使用前会先校验，计划校验会拒绝未知字段。
-- 每个哈希、大小与尺寸都从磁盘文件重算，并有二次校验以发现验证窗口内被改写的文件。
-- 插件绝不调用外部生成 API，也绝不自行升级上游依赖。
-
-## 开发与验证
-
-```bash
-python -m unittest discover -s tests -v
-python scripts/validate_distribution.py .
+```mermaid
+flowchart LR
+    A[参考图 + 方向] --> B[提示词检索]
+    B --> C{校验 + 报价}
+    C -->|非法| B
+    C -->|合法| D{批准}
+    D -->|已批准| E[Codex 图像工具]
+    E --> F[回执 + 台账]
+    F --> G{评测}
+    G -->|存在失败项| H[优化 → 重新批准]
+    G -->|无失败项| I[已验收批次]
 ```
 
-技能源仓使用自身的 `SKILLS_SYNC_TOKEN` 完成跨仓 `repository_dispatch`。事件到达本仓后，`.github/workflows/skills-sync.yml` 只使用本仓受限的 `GITHUB_TOKEN` 校验不可变来源身份、更新受管快照、推送评审分支并创建同步 PR；已退役的 `FULL_AIGC_SKILLS_SYNC_TOKEN` 别名不再使用。
+| 组件 | 负责 | 不负责 |
+| --- | --- | --- |
+| `bin/image-factory` | CLI 入口 | 业务规则 |
+| `scripts/plan_validator.py` | 封闭计划 schema、上限、幂等键 | 提示词质量 |
+| `scripts/generation_runner.py` | 每次尝试一个全新子进程 | 重试策略 |
+| `scripts/job_ledger.py`、`scripts/receipt_store.py` | 持久状态、密钥清洗、逐产物复核 | 远端生命周期 |
+| `skills/`（10 个） | 路由、治理与评审指令 | 运行时强制 |
 
-仓库中已记录的证据：
-
-- [离线验证](docs/verification/offline.md) 与 [运行期验证](docs/verification/runtime.md)——逐条记录外部门禁的 `PASS`／`NOT_RUN` 状态。
-- [上游快照验证](docs/verification/upstream-snapshots.md)——内置 Skill 快照均有校验和。
-- [提示词参考层](docs/prompt-library.md)——内置模板、案例索引与来源标注。
-- [使用案例](docs/use-cases/README.zh-CN.md)——六类中文案例库。
+认证由 Codex 自身完成。Factory 路径不调用外部生成 API，不自行升级上游依赖，也不写入任何凭据：台账在落盘前会拒绝形似凭据的键。参考输入在使用前会校验，每个哈希、大小与尺寸都从磁盘重算，并做二次检查以发现验证窗口内被改写的文件。
 
 ## 故障排查
 
 | 现象 | 优先检查 | 处理方式 |
-|---|---|---|
+| --- | --- | --- |
 | `probe` 报告 Codex CLI 缺失 | `PATH` 或 `CODEX_HOME` | 用 `CODEX_HOME` 指向安装位置，或修正 `PATH` |
 | 计划校验失败 | 计划 schema | 修正被点名的字段；未知字段是有意拒绝的 |
-| 运行拒绝启动 | 批准文件 | 对该计划报价并批准新的 revision |
-| 批次中途停止 | 台账状态 | 执行 `recover`；已核验的回执会被核对而不是重做 |
-| 哈希校验失败 | 磁盘上的产物 | 视为硬失败；文件在生成之后被改动过 |
-| 期望回执里出现模型名 | 平台边界 | 模型由 Codex 决定；回执只记录 Codex 告知的内容 |
+| 运行拒绝启动 | 批准文件 | 重新报价并批准新的 revision |
+| 批次中途停止 | 台账状态 | 执行 `recover`；已核验回执会被核对而不是重做 |
+| 哈希校验失败 | 磁盘上的产物 | 视为硬失败：文件在生成之后被改动过 |
+| 图片额度耗尽 | Codex 额度证据 | 此时才选择 Baoyu 降级，并在本机配置其 Provider |
+| 在 Linux 或 Windows 上生成 | 平台支持 | 生成路径只在 macOS 上验证过，其他平台保持 `NOT_RUN` |
+| 回执里没有模型名 | 平台边界 | 模型由 Codex 决定；回执只记录 Codex 告知的内容 |
 
-## 项目结构
+## 升级
 
-```text
-image-factory-plugin/
-├── .codex-plugin/plugin.json   # 身份与展示元数据
-├── .agents/plugins/marketplace.json
-├── bin/image-factory           # CLI 入口
-├── scripts/                    # CLI、校验器、运行器、台账、回执、锁
-├── skills/                     # 4 个 Skill：use、run、judge、recover
-├── tests/                      # 离线门禁与分发契约
-├── vendor/upstream/            # 固定的上游 Skill 快照
-└── docs/                       # 架构、技术方案、验证记录、使用案例
+```bash
+codex plugin marketplace upgrade partme-ai-image-factory
+codex plugin add image-factory@partme-ai-image-factory
 ```
-
-## 深入文档
-
-- [Architecture](docs/Image-Factory-Plugin-Architecture.md) · [架构文档](docs/Image-Factory-Plugin-Architecture.zh_CN.md)
-- [Technical solution](docs/Image-Factory-Plugin-Technical-Solution.md) · [技术方案](docs/Image-Factory-Plugin-Technical-Solution.zh_CN.md)
-- [设计规格](docs/superpowers/specs/2026-09-12-image-factory-plugin-design.md)
-- [生产加固设计](docs/superpowers/specs/2026-09-14-image-factory-production-hardening-design.md)
-- [实施计划](docs/superpowers/plans/2026-09-12-image-factory-plugin-implementation.md)
 
 ## 贡献与支持
 
@@ -403,4 +196,4 @@ image-factory-plugin/
 
 ## 许可证
 
-Apache-2.0，见 [LICENSE](LICENSE)。
+Apache-2.0，见 [LICENSE](LICENSE)、[NOTICE](NOTICE) 与 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。vendor 的 Baoyu 技能与 `imagegen` 快照保留其上游条款。

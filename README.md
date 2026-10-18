@@ -1,4 +1,4 @@
-# Image Factory Plugin
+# Image Factory
 
 ## Plugin marketplaces
 
@@ -9,400 +9,186 @@ This plugin belongs to **AIGC content creation**.
 | Full-stack development | [Full Stack Plugins](https://github.com/partme-ai/full-stack-plugins) | Architecture and UI design, code understanding, quality checks, code review, workflow governance, and server operations |
 | AIGC content creation | [Full AIGC Plugins](https://github.com/partme-ai/full-aigc-plugins) | Image, video, audio, music, 3D, and multimodal content creation |
 
-![Image Factory — Produce image batches you can verify](assets/image-factory-hero.png)
+![Image Factory — produce image batches you can verify](assets/image-factory-hero.png)
 
-<img src="assets/logo.png" alt="Image Factory logo" width="128">
+> Turn a reference-driven image task into an auditable production run: a validated plan, an approved spend, and a hash-verified receipt for every artifact.
 
-> Turn a reference-driven image task into an auditable production run — validated plan, approved spend, and a hash-verified receipt for every artifact.
-
-[![Version](https://img.shields.io/badge/version-0.8.0-blue)](https://github.com/full-aigc-plugins/image-factory-plugin/releases/tag/v0.8.0)
+[![Version](https://img.shields.io/badge/release-0.9.1%2Bcodex.20261018-1A73E8)](https://github.com/full-aigc-plugins/image-factory-plugin/releases)
+[![Hosts](https://img.shields.io/badge/hosts-Codex%20%7C%20ZCode%20%7C%20Kimi-6E56CF)](#installation)
+[![Skills](https://img.shields.io/badge/skills-10-00A67E)](#skills)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
-[English](README.md) | [简体中文](README.zh-CN.md) · [Install](#installation) · [Quick start](#quick-start) · [Command contract](#command-contract) · [Troubleshooting](#troubleshooting)
+[English](README.md) | [简体中文](README.zh-CN.md) · [Install](#installation) · [Quick start](#quick-start) · [Skills](#skills) · [Troubleshooting](#troubleshooting)
 
 ## Positioning
 
-`image-factory` exposes two complementary layers. After the user confirms generation, the Harness identifies the current session from explicit host metadata or actual tool capabilities. In Codex it prefers the built-in `imagegen` / `image_gen` path, which needs no provider API key. The unchanged Baoyu skills are offered in Codex only after explicit image-quota exhaustion; on ZCode, Kimi, or another host they are considered only when that session has no verified native image capability. The Factory workflow continues to handle governed batches with validation, approval, receipts, evaluation, and recovery.
+`image-factory` produces verifiable image batches. It turns references and a visual direction into a validated plan, quotes the batch, waits for your approval, generates one image per plan item through the host's image tool, and records a recomputed hash, size, and dimension receipt for every file.
 
-Version `0.8.0` adds versioned multi-hash evidence, stratified calibration/drift alerts, a mobile review workspace, and a runtime acceptance matrix. All paid 4/8/12, cross-host/model, and fault-injection cases remain `NOT_RUN`; synthetic tests do not establish live character, prop, or style stability.
-
-### Who it is for
-
-- Content and marketing teams producing a batch of images from references and a shared visual direction.
-- Engineers who need a deterministic, resumable pipeline with receipts rather than a one-shot prompt.
-- Reviewers who need to know which prompt produced which file, and what it cost.
-
-### What problem it solves
-
-| Problem | What this plugin provides | Verifiable entry point |
-|---|---|---|
-| Batches are unrepeatable | A closed plan schema, series profile, and content-derived idempotency keys | `scripts/plan_validator.py` |
-| Characters and props drift across frames | Entity registry, fixed traits, role-aware references, and anchor-preserving rework | `consistency_profile`, `references` |
-| Spend happens before you decide | A quote plus a required approval before any generation | `bin/image-factory quote`, `run` |
-| Interrupted runs regenerate everything | A durable ledger with an explicit recovery command | `scripts/job_ledger.py`, `recover` |
-| "It worked" is unverifiable | Recomputed hash, size, and dimension receipts | `scripts/receipt_store.py` |
-
-## At a glance
-
-```text
-References + direction
-      │
-      ▼
-┌──────────────────────────────────────────────────────────┐
-│ image-factory                                      │
-│  ① discover   offline prompt directions                  │
-│  ② plan       validated batch plan and quote             │
-│  ③ approve    explicit user decision before spend        │
-│  ④ run        Codex built-in image tool, one item at a time│
-│  ⑤ collect    hash-verified receipt per artifact         │
-│  ⑥ evaluate   deterministic gates plus an advisory score │
-│  ⑦ optimize   a new prompt round you approve             │
-└──────────────────────────────────────────────────────────┘
-      │
-      ▼
-Image batch + receipts + evaluation record
-```
+The plugin exposes two layers. In Codex the built-in `imagegen` / `image_gen` path is preferred and needs no provider key. The unchanged Baoyu workflows are offered only after an explicitly observed image-quota exhaustion in Codex, or on a host without a verified native image capability. The Factory loop adds the governed batch: plan validation, approval, receipts, evaluation, and recovery.
 
 | Property | Value |
-|---|---|
+| --- | --- |
 | Plugin ID | `image-factory` |
-| Host | Codex CLI or ChatGPT desktop app |
-| Current version | `0.8.0` (P1 Evidence release candidate — see [Maturity](#maturity)) |
-| Plugin manifest | `.codex-plugin/plugin.json` |
-| MCP configuration | none — the manifest forbids an MCP entry until an MCP server exists |
-| Primary language | Python 3.11+ |
-| License | Apache-2.0 |
+| Version | `0.9.1+codex.20261018` |
+| Maturity | No production-readiness claim; the newest runtime record covers the `0.8.0` candidate |
+| Runtime | Python 3.11+, standard library only |
+| MCP server | None; the manifest declares no MCP entry |
 
-## Capabilities and boundaries
-
-### Supported
-
-| Capability | Input | Output | Limit | Status |
-|---|---|---|---|---|
-| Prompt discovery | A theme or reference direction | Ranked prompt templates with attribution | Offline search over bundled templates | Stable |
-| Batch plan validation | A plan file | Validated plan with idempotency keys and hard caps | Rejected before anything is spent | Stable |
-| Series consistency | Style bible, entity traits, and anchors | Effective prompt and role-aware references per frame | Improves control; cannot guarantee model-level identity | Stable contract |
-| Quote and approval | A validated plan | Cost estimate and an approval record | No generation without approval | Stable |
-| Generation | An approved plan | One image per plan item | One tool call produces one image | Stable |
-| Receipt collection | Produced files | Recomputed hash, size, and dimension per file | A second check catches a file rewritten mid-validation | Stable |
-| Evaluation | A completed batch | Deterministic gate results plus an advisory score | The model-authored score is advisory only | Stable |
-| Optimization | Failed items | A new prompt round requiring approval | Never overwrites the previous round | Stable |
-| Recovery | An interrupted job | Reconciled ledger without re-invoking Codex | Reconciles verified receipts only | Stable |
-| Codex direct image generation | A prompt and optional references | One or more images through built-in `image_gen` | Preferred whenever the current Codex session exposes the tool | Managed `imagegen` snapshot |
-| External image fallback | A confirmed quota event or a non-Codex host without native image capability | Image, cover, or social-card outputs through the selected Baoyu workflow | User chooses the fallback and configures provider credentials locally | External managed skills |
-
-### Not responsible for
-
-- Reimplementing or patching the Baoyu workflows. Their complete source is synchronized from an immutable upstream release and checked by digest.
-- Inferring the host from installed skills or filesystem paths. The Harness uses current-session metadata or actual tool capability.
-- Choosing a provider or handling credentials on the user's behalf. A Baoyu fallback requires an explicit user choice, and credentials stay in local environment or provider configuration rather than chat.
-- Controlling size, quality, background, or image count. The built-in tool accepts only a prompt and reference images, so batch items differ only by those.
-- Owning a graphical workbench, project management, or video composition. Those surfaces are outside this repository.
-- Writing, translating, formatting, or publishing articles. Those capabilities belong in the separate content-writing plugin.
-
-### Maturity
-
-| Status | Meaning |
-|---|---|
-| Stable | Automated tests plus a deterministic gate |
-| Release candidate | External gates are recorded one by one, with `NOT_RUN` where unobserved; the generation path is verified on macOS only |
-| Blocked / NOT_RUN | Not verified; never present it as available |
-
-Seven of the nine external gates for `0.1.2` are observed and recorded in [`docs/verification/runtime.md`](docs/verification/runtime.md): remote CI, tag parity, a clean Marketplace install, a no-spend smoke, five authorized generation calls, a verified multi-round evaluate/optimize/re-run loop, and a paid run driven from a fresh Codex conversation. Two stay `NOT_RUN`: the generation path has not been exercised on Linux or Windows, and the exhausted-allowance path has never been seen live — deliberately, since exhausting the image allowance is neither required nor authorized. [`docs/guides/runtime-evidence-collection.md`](docs/guides/runtime-evidence-collection.md) has the procedure for both.
-
-## Architecture and core flow
-
-```mermaid
-flowchart LR
-    A[References] --> B[prompt-search]
-    B --> C[Batch plan]
-    C --> D{validate-plan}
-    D -->|invalid| C
-    D -->|valid| E[quote]
-    E --> F{User approval}
-    F -->|rejected| C
-    F -->|approved| G[generation_runner]
-    G --> H[Codex built-in image tool]
-    H --> I[Receipt store]
-    I --> J[evaluate]
-    J --> K{Failures?}
-    K -->|yes| L[optimize - new round]
-    L --> F
-    K -->|no| M[Accepted batch]
-    G --> N[(Job ledger)]
-    N --> G
-```
-
-### Component responsibilities
-
-| Component | Owns | Does not own |
-|---|---|---|
-| `bin/image-factory` | CLI entry that calls `scripts/image_factory_cli.py` | Business rules |
-| `scripts/image_factory_cli.py` | Subcommand dispatch and exit codes | Media handling |
-| `scripts/plan_validator.py` | Plan schema, caps, idempotency keys | Prompt quality |
-| `scripts/generation_runner.py` | One fresh subprocess per attempt | Retry policy |
-| `scripts/job_ledger.py` | Durable state transitions and secret scrubbing | Execution |
-| `scripts/receipt_store.py` | Per-artifact receipts and re-verification | Remote lifetime |
-| `scripts/job_lock.py` | Cross-process advisory locking | Scheduling |
-| `skills/` (8) | Five Factory routing/governance skills plus three unchanged Baoyu image skills | Runtime enforcement or upstream skill ownership |
-
-## Compatibility
-
-| Plugin version | Host | Runtime | Status |
-|---|---|---|---|
-| `0.1.2` | Codex CLI or ChatGPT desktop app | Python 3.11 and 3.13 in the CI matrix; Codex CLI reachable on `PATH` or through `CODEX_HOME` | Release candidate, locally verified |
-
-CI runs on Linux, macOS, and Windows without installing any package at test time.
+`0.8.0` added multi-hash evidence, stratified calibration, a review workspace, and a runtime acceptance matrix. The paid 4/8/12, cross-host, and fault-injection cases remain `NOT_RUN`; synthetic tests do not establish live character, prop, or style stability.
 
 ## Installation
 
 ### Prerequisites
 
 - Python 3.11 or newer on `PATH`.
-- The Codex CLI reachable on `PATH`, or a `CODEX_HOME` pointing at an installation.
-- Factory-only batches need no API key or npm dependency.
-- Direct `baoyu-image-gen` requires `bun` or `npx`; the selected provider may require its documented credential. The `codex-cli` provider instead uses an existing logged-in Codex CLI.
+- The Codex CLI reachable on `PATH`, or `CODEX_HOME` pointing at an installation.
+- Factory-only batches need no API key and no npm package.
+- The Baoyu fallback requires `bun` or `npx` plus whatever credential the selected provider documents; the `codex-cli` provider reuses an already signed-in Codex CLI.
 
 ### From the plugin marketplace
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.8.0
+codex plugin marketplace add partme-ai/full-aigc-plugins
+codex plugin add image-factory@full-aigc-plugins
+```
+
+### From the repository-local marketplace
+
+```bash
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.9.1
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
-Restart Codex or the ChatGPT desktop app, then open a new task so the Skills load.
+Restart Codex or the ChatGPT desktop app and open a new task so the skills load.
 
-### From source
-
-```bash
-git clone https://github.com/full-aigc-plugins/image-factory-plugin.git
-cd image-factory-plugin
-bin/image-factory probe
-```
-
-### Confirm it loaded
-
-```bash
-codex plugin list
-```
-
-Expected entry:
-
-```text
-image-factory@partme-ai-image-factory  installed, enabled
-```
-
-Then confirm the local runtime:
-
-```bash
-bin/image-factory probe
-```
-
-Expected result: a JSON capability report for Python, the Codex CLI, and ledger access, with no secret value printed.
-
-### China mirror (AtomGit)
-
-If GitHub is slow or unreachable, install from the AtomGit mirror instead. The
-commands are identical apart from the marketplace URL:
-
-```bash
-codex plugin marketplace add https://atomgit.com/partme-ai/partme-image-factory.git --ref main
-codex plugin add image-factory@partme-ai-image-factory
-```
-
-To install the whole partme-ai plugin catalog from the mirror in one step:
-
-```bash
-codex plugin marketplace add https://atomgit.com/partme-ai/plugins.git
-codex plugin add image-factory@partme-ai-image-factory
-```
-
-Notes:
-
-- The AtomGit source and the GitHub source share marketplace names, so adding
-  one replaces the other. Switch back with
-  `codex plugin marketplace add https://github.com/partme-ai/plugins.git`.
-- For ZCode or Kimi, clone the mirror repository and register the local
-  directory in the respective marketplace configuration.
+For development, clone the repository and run `bin/image-factory probe`; it prints a JSON capability report for Python, the Codex CLI, and ledger access and never prints a secret value. `codex plugin list` should show `image-factory@partme-ai-image-factory  installed, enabled`.
 
 ## Quick start
 
-### 1. Find a direction
+1. Find an attributed prompt direction offline:
 
 ```bash
 bin/image-factory prompt-search 'storybook illustration' --limit 3 --json
 ```
 
-The search is offline and attributed; it returns bundled template directions with their sources.
-
-### 2. Write and validate a batch plan
+2. Write a batch plan, then validate and quote it. Validation rejects unknown fields, cap violations, and duplicate idempotency keys before anything is spent:
 
 ```bash
 bin/image-factory validate-plan image-plan.json
 bin/image-factory quote image-plan.json
 ```
 
-Validation rejects an unknown field, a cap violation, or a duplicate idempotency key before anything is spent.
-
-Multi-image stories should use the image_batch 1.5.0 `consistency_profile`. Character,
-prop, and style anchors are injected into every selected frame in a fixed order, while
-`story_state` compiles permanent locks, scene locks, and frame transitions into the effective
-prompt. `quote` reports the consistency mode, profile digest, and effective reference count per item.
-See the complete example in the [series consistency plan guide](docs/guides/series-consistency.md).
-
-### 3. Approve and run
+3. Approve the exact plan hash and run:
 
 ```bash
 bin/image-factory run image-plan.json --approval image-approval.json
 ```
 
-Each attempt runs as a fresh streaming subprocess against the built-in image tool. Events and session attribution are persisted beside the ledger while the process is active. There is no retry loop, because a silent retry is how one bad prompt becomes a large bill.
-
-### 4. Evaluate, optimize, or recover
+4. Evaluate or reconcile an interrupted run:
 
 ```bash
 bin/image-factory evaluate image-plan.json
 bin/image-factory recover image-plan.json
-bin/image-factory status --job job.json --watch --json
 ```
 
-`recover` reconciles verified receipts and session-attributed late artifacts into the ledger without re-invoking Codex. See [`docs/guides/runtime-reliability.md`](docs/guides/runtime-reliability.md).
+Each attempt is a fresh streaming subprocess against the built-in image tool. There is no retry loop: a silent retry is how one bad prompt becomes a large bill. A failed item is terminal; `optimize` produces a new prompt round that needs its own approval.
 
-`evaluate` also writes a calibration report and a rebuildable HTML/JSON visual summary.
-Series reviews use closed identity, wardrobe, prop, style, scene, text-absence, and
-aspect-ratio dimensions with observable evidence. Use `summarize` to rebuild the
-derived review files from verified receipts and scores without generation calls.
+## What you can build
 
-Pass one or more versioned `--reviewer-report` files to retain reviewer id, version,
-capabilities, confidence, uncertainty, and evidence regions in scores 1.4.0; uncertain
-findings never drive rework. The offline `benchmark --pack ... --run ... --out ...`
-command aggregates first-pass, drift, omission, rework, cost, and latency metrics without
-generation or ledger mutation. See the [visual consistency Foundation guide](docs/guides/visual-consistency-foundation.zh-CN.md).
-The opt-in `multi-hash-v1` policy records aHash/dHash/pHash distances without claiming
-identity recognition. `calibrate` reports Wilson intervals and drift without changing
-thresholds; `summarize --anchors` creates a 390px-capable review page with a local
-human-label export. See the [production quality guide](docs/guides/production-quality-evidence.zh-CN.md)
-and [runtime acceptance matrix](docs/guides/runtime-acceptance-matrix.zh-CN.md).
+| Workflow | Built-in path | Verifiable output |
+| --- | --- | --- |
+| Find a direction | `prompt-search` over bundled templates | Ranked prompt directions with source attribution |
+| Produce a governed batch | `validate-plan` → `quote` → `run` | Per-artifact hash, size, and dimension receipts |
+| Keep a series consistent | `consistency_profile`, entity traits, role-aware references | Effective prompt and reference count reported by `quote` |
+| Evaluate and iterate | `evaluate` + `image-factory-review` | Deterministic gate results, advisory dimension scores, next-round plan |
+| Recover an interrupted run | `recover` | Reconciled ledger without another generation call |
+| Make one ad-hoc image | Codex built-in `imagegen` | A bitmap asset outside the Factory ledger |
+
+Multi-image stories declare `consistency_profile`; anchors are injected into every selected frame in a fixed order and `story_state` compiles locks and transitions into the effective prompt. Anchors improve control but cannot guarantee model-level identity.
+
+## Skills
+
+| Skill | Purpose |
+| --- | --- |
+| `image-factory-use` | Picks the entry point for a batch request and never performs the work itself |
+| `image-factory-run` | Validates, quotes, obtains approval, generates one image per item, and collects receipts |
+| `image-factory-judge` | Runs deterministic gates, records advisory scores beside human labels, and writes the next round |
+| `image-factory-review` | Writes the independent dimensioned advisory document consumed by `evaluate` and `optimize` |
+| `image-factory-recover` | Reads the ledger and maps an interrupted or unknown batch to the single legal next step |
+| `image-factory-harness` | Chooses Codex `imagegen` first, Baoyu only after quota evidence, and normalizes delivery evidence |
+| `imagegen` | Managed snapshot of the Codex raster-image generation and editing instructions |
+| `baoyu-image-gen` | Vendored multi-provider image generation through `bun` or `npx` |
+| `baoyu-cover-image` | Vendored article-cover generation across aspect ratios |
+| `baoyu-xhs-images` | Vendored social image-card series generation |
+
+The three Baoyu skills come from `baoyu-skills v2.5.2`, while `imagegen` and `image-factory-use/run/judge/recover` come from `image-factory-skills v1.1.0`; both sets are pinned in `skills.lock.json`. `image-factory-harness` and `image-factory-review` are plugin-local. Edit none of these copies in place.
+
+## Slash commands
+
+| Command | What it does |
+| --- | --- |
+| `/image-factory` | Total entry point; routes to run, judge, or recover |
+| `/image-factory-run` | Quotes, approves, generates, and collects receipts for a batch |
+| `/image-factory-judge` | Evaluates a finished batch and drives prompt optimization |
+| `/image-factory-recover` | Restores an interrupted batch from the job ledger |
 
 ## Configuration
 
 | Setting | Where it lives | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Codex home | `CODEX_HOME` environment variable | Defaults to the standard Codex location |
-| Job ledger | The `--job` path, or `<plan>.job.json` | Plain JSON; atomic writes |
+| Job ledger | The `--job` path, or `<plan>.job.json` | Plain JSON written atomically |
 | Receipts | `<job>.receipts/` | One JSON file per artifact |
 | Job lock | `<job>.lock` | Cross-process advisory lock |
-| Credentials | None | The plugin stores no secret, and the ledger rejects credential-like keys |
+| Credentials | None | The plugin stores no secret and the ledger rejects credential-like keys |
+| Baoyu provider | Local environment or provider config | Chosen by the user, never written by the plugin |
 
-## Command contract
+Exit codes are `0` success, `1` failure, `2` usage error, `3` approval required, `4` capability unavailable, `5` job locked, and `6` recovery required.
 
-| Command | Purpose | Notable flags |
-|---|---|---|
-| `probe` | Report Python, Codex CLI, and ledger availability | — |
-| `prompt-search` | Offline, attributed prompt discovery | `--limit`, `--json` |
-| `validate-plan` | Validate the closed plan schema and caps | — |
-| `quote` | Estimate the batch before spending | — |
-| `run` | Execute the batch against the built-in image tool | `--approval` |
-| `recover` | Reconcile receipts into the ledger | — |
-| `evaluate` | Run deterministic gates over the batch | — |
-| `summarize` | Rebuild the contact sheet and storyboard from verified evidence | `--out-dir` |
-| `calibrate` | Recompute stratified advisory evidence and reviewer drift | `--scores`, `--out` |
-| `acceptance-init/add/record` | Track independent live-runtime cases without running them | `--matrix`, `--case` |
-| `optimize` | Generate a new prompt round from failures | — |
-| `status` | Read the current ledger state | — |
+## Architecture and security
 
-### Stable exit codes
-
-| Exit | Meaning | Suggested action |
-|---|---|---|
-| `0` | Success | Continue |
-| `1` | Failure | Read the message and fix the input |
-| `2` | Usage error | Correct the command line |
-| `3` | Approval required | Quote and approve the batch |
-| `4` | Capability unavailable | Fix the Codex CLI availability |
-| `5` | Job locked | Wait for the other process to finish |
-| `6` | Recovery required | Run `recover` before continuing |
-
-### Error categories
-
-Recorded on the ledger entry: `capability_unavailable`, `codex_missing`, `quota_exceeded`, `timeout`, `generation_failed`, `artifact_missing`, `hash_mismatch`, `duplicate_artifact`, `plan_invalid`, `approval_required`, `job_already_running`, `recovery_required`, `unknown`.
-
-## Retry, idempotency, and recovery
-
-- No automatic retry anywhere. `scripts/generation_runner.py` states the reason plainly: a silent retry is how one bad prompt becomes a large bill.
-- A failed item is terminal; the way forward is `optimize`, which produces a new prompt round for approval.
-- Idempotency keys bind the effective prompt plus reference bytes and roles, so re-running an identical plan does not duplicate work; changing an identity reference into a layout reference creates a new work identity.
-- The ledger and attempt progress are written atomically; event JSONL is durable, and an interrupted run resumes through the original attempt rather than regenerating.
-- Approved runs stop before the first external call when the work, generation, or destination filesystem is below the conservative capacity budget.
-- An advisory model score is recorded alongside your approve or reject labels, so the score can later be calibrated against real decisions.
-
-## Data and state
-
-| Data | Location | Lifecycle | Secrets |
-|---|---|---|---|
-| Job ledger | The `--job` path or `<plan>.job.json` | Until you delete it | None; credential-like keys are refused |
-| Artifact receipts | `<job>.receipts/` | Until you delete them | None |
-| Produced images | Your chosen output directory | Until you delete them | None |
-| Prompt templates | Bundled in the repository | Versioned with the plugin | None |
-
-Ledger state machine: `Draft`, `PlanValidated`, `Approved`, `Running`, `Completed`, `Partial`, `Unknown`, `Evaluated`, `PendingApproval`, `Optimized`, `Accepted`.
-
-## Security
-
-- No API key, token, or credential exists in this plugin; authentication is Codex's own.
-- The ledger rejects credential-like keys before writing anything.
-- Reference inputs are validated before use, and plan validation rejects unknown fields.
-- Every hash, size, and dimension is recomputed from the file on disk, with a second check to catch a file rewritten mid-validation.
-- The plugin never calls an external generation API and never updates an upstream dependency on its own.
-
-## Development and verification
-
-```bash
-python -m unittest discover -s tests -v
-python scripts/validate_distribution.py .
+```mermaid
+flowchart LR
+    A[References + direction] --> B[Prompt search]
+    B --> C{Validate + quote}
+    C -->|invalid| B
+    C -->|valid| D{Approval}
+    D -->|approved| E[Codex image tool]
+    E --> F[Receipts + ledger]
+    F --> G{Evaluate}
+    G -->|failures| H[Optimize → new approval]
+    G -->|none| I[Accepted batch]
 ```
 
-The producer repository authenticates cross-repository `repository_dispatch` with its `SKILLS_SYNC_TOKEN`. After the event reaches this repository, `.github/workflows/skills-sync.yml` uses only this repository's scoped `GITHUB_TOKEN` to verify the immutable source identity, update the vendored snapshot, push the review branch, and open the sync PR. The retired `FULL_AIGC_SKILLS_SYNC_TOKEN` alias is not used.
+| Component | Owns | Does not own |
+| --- | --- | --- |
+| `bin/image-factory` | CLI entry point | Business rules |
+| `scripts/plan_validator.py` | Closed plan schema, caps, idempotency keys | Prompt quality |
+| `scripts/generation_runner.py` | One fresh subprocess per attempt | Retry policy |
+| `scripts/job_ledger.py`, `scripts/receipt_store.py` | Durable state, scrubbing, per-artifact re-verification | Remote lifetime |
+| `skills/` (10) | Routing, governance, and review instructions | Runtime enforcement |
 
-Recorded evidence:
-
-- [Offline verification](docs/verification/offline.md) and [runtime verification](docs/verification/runtime.md) — including the `NOT_RUN` usage-limit line and the release-candidate verdict.
-- [Upstream snapshot verification](docs/verification/upstream-snapshots.md) — vendored Skill snapshots are checksummed.
-- [Prompt reference integration](docs/prompt-library.md) — bundled templates, case indexes, and source attribution.
-- [Use cases](docs/use-cases/README.zh-CN.md) — a six-part Chinese case library.
+Authentication is Codex's own. The Factory path never calls an external generation API, never updates an upstream dependency on its own, and never writes a credential: the ledger rejects credential-like keys before writing anything. Reference inputs are validated before use, and every hash, size, and dimension is recomputed from disk with a second check that catches a file rewritten mid-validation.
 
 ## Troubleshooting
 
 | Symptom | Check first | Resolution |
-|---|---|---|
+| --- | --- | --- |
 | `probe` reports the Codex CLI missing | `PATH` or `CODEX_HOME` | Point `CODEX_HOME` at the installation or fix `PATH` |
 | Plan validation fails | The plan schema | Fix the named field; unknown fields are rejected on purpose |
-| The run refuses to start | The approval file | Quote the plan and approve the new revision |
+| The run refuses to start | The approval file | Quote the plan again and approve the new revision |
 | A run stops mid-batch | Ledger state | Run `recover`; verified receipts are reconciled, not regenerated |
-| Hash verification fails | The artifact on disk | Treat it as a hard failure; the file changed after generation |
-| A model name was expected in receipts | Platform boundary | The model is chosen by Codex; receipts record only what Codex reports |
+| Hash verification fails | The artifact on disk | Treat it as a hard failure: the file changed after generation |
+| The image quota is exhausted | Codex quota evidence | Only then choose a Baoyu fallback and configure its provider locally |
+| Generation runs on Linux or Windows | Platform support | The generation path is verified on macOS only; elsewhere it stays `NOT_RUN` |
+| A model name is missing from receipts | Platform boundary | The model is chosen by Codex; receipts record only what Codex reports |
 
-## Project structure
+## Upgrade
 
-```text
-image-factory-plugin/
-├── .codex-plugin/plugin.json   # identity and presentation metadata
-├── .agents/plugins/marketplace.json
-├── bin/image-factory           # CLI entry point
-├── scripts/                    # CLI, validator, runner, ledger, receipts, locks
-├── skills/                     # 4 Skills: use, run, judge, recover
-├── tests/                      # offline gates and distribution contracts
-├── vendor/upstream/            # pinned upstream Skill snapshots
-└── docs/                       # architecture, technical solution, verification, use cases
+```bash
+codex plugin marketplace upgrade partme-ai-image-factory
+codex plugin add image-factory@partme-ai-image-factory
 ```
-
-## Deep links
-
-- [Architecture](docs/Image-Factory-Plugin-Architecture.md) · [架构文档](docs/Image-Factory-Plugin-Architecture.zh_CN.md)
-- [Technical solution](docs/Image-Factory-Plugin-Technical-Solution.md) · [技术方案](docs/Image-Factory-Plugin-Technical-Solution.zh_CN.md)
-- [Design specification](docs/superpowers/specs/2026-09-12-image-factory-plugin-design.md)
-- [Production hardening design](docs/superpowers/specs/2026-09-14-image-factory-production-hardening-design.md)
-- [Implementation plan](docs/superpowers/plans/2026-09-12-image-factory-plugin-implementation.md)
 
 ## Contributing and support
 
@@ -410,4 +196,4 @@ Open functional issues at <https://github.com/full-aigc-plugins/image-factory-pl
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+Apache-2.0 — see [LICENSE](LICENSE), [NOTICE](NOTICE), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Vendored Baoyu skills and the `imagegen` snapshot keep their upstream terms.
