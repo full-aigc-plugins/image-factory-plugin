@@ -1,5 +1,5 @@
 {
-  "name": "@partme-dsh/image-factory",
+  "name": "image-factory",
   "version": "0.9.0",
   "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
   "type": "module",
@@ -31,5 +31,6 @@
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
-  }
+  },
+  "private": true
 }

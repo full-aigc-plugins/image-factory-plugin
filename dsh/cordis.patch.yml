@@ -4,4 +4,4 @@
 # for the other hosts.
 - insert:
     - id: image-factory-plugin
-      name: '@partme-dsh/image-factory'
+      name: 'image-factory'
