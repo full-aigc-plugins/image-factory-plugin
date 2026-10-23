@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "image-factory",
-  "version": "0.9.1",
-  "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
+  "version": "0.8.0",
+  "description": "Prompt discovery, plan validation, approval, batch generation, evaluation and recovery. Every artifact carries a hash-verified receipt.",
   "author": {
     "name": "Full Stack Skills / PartMe.AI",
     "url": "https://github.com/partme-ai"
@@ -20,8 +20,8 @@
   "extensions": {
     "com.openai": {
       "interface": {
-        "displayName": "Image Factory",
-        "shortDescription": "Discover, batch-produce, and evaluate images",
+        "displayName": "Batch Image Generation · Image Factory",
+        "shortDescription": "Plan approval, batch generation, evaluation and receipts",
         "longDescription": "Prefer Codex built-in imagegen for direct image generation, offer unchanged Baoyu workflows only after explicit image-quota exhaustion, or run Image Factory's governed production loop with plan validation, approval, verified receipts, evaluation, and recovery.",
         "developerName": "Full Stack Skills / PartMe.AI",
         "category": "Creativity",
@@ -39,10 +39,11 @@
           "Evaluate, optimize, or recover an existing image batch"
         ],
         "brandColor": "#10B981",
-        "composerIcon": "./assets/composer-icon.png",
+        "composerIcon": "./assets/logo-approved.png",
         "logo": "./assets/logo-approved.png",
         "logoDark": "./assets/logo-approved.png",
-        "screenshots": []
+        "screenshots": [],
+        "composerIconDark": "./assets/logo-approved.png"
       }
     },
     "ai.nanoco.nanoclaw": {

@@ -1,7 +1,7 @@
 {
   "name": "image-factory",
-  "version": "0.9.1",
-  "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts.",
+  "version": "0.8.0",
+  "description": "Prompt discovery, plan validation, approval, batch generation, evaluation and recovery. Every artifact carries a hash-verified receipt.",
   "author": {
     "name": "Full Stack Skills / PartMe.AI"
   },
@@ -13,8 +13,8 @@
     "receipts"
   ],
   "interface": {
-    "displayName": "Image Factory",
-    "shortDescription": "Discover, batch-produce, and evaluate images",
+    "displayName": "Batch Image Generation · Image Factory",
+    "shortDescription": "Plan approval, batch generation, evaluation and receipts",
     "longDescription": "Host-aware direct image generation with native capability preferred and Baoyu fallback when appropriate, plus governed batch production with prompt discovery, verified receipts, evaluation, and recovery.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "websiteURL": "https://github.com/full-aigc-plugins/image-factory-plugin"
