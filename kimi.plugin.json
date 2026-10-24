@@ -1,7 +1,7 @@
 {
   "name": "image-factory",
   "version": "0.8.0",
-  "description": "Prompt discovery, plan validation, approval, batch generation, evaluation and recovery. Every artifact carries a hash-verified receipt.",
+  "description": "提示词发现、计划校验、审批、批量生成、质量评估与中断恢复；每张图带哈希校验回执。",
   "author": {
     "name": "Full Stack Skills / PartMe.AI"
   },
@@ -13,8 +13,8 @@
     "receipts"
   ],
   "interface": {
-    "displayName": "Image Factory · Batch Image Generation",
-    "shortDescription": "Plan approval, batch generation, evaluation and receipts",
+    "displayName": "Image（批量 AI 出图）",
+    "shortDescription": "计划审批、批量生成、质量评估与产物回执",
     "longDescription": "Host-aware direct image generation with native capability preferred and Baoyu fallback when appropriate, plus governed batch production with prompt discovery, verified receipts, evaluation, and recovery.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "websiteURL": "https://github.com/full-aigc-plugins/image-factory-plugin"
@@ -32,5 +32,11 @@
       "command": "python3 ./hooks/check_factory_intent.py",
       "timeout": 15
     }
-  ]
+  ],
+  "displayName_i18n": {
+    "zh-CN": "Image（批量 AI 出图）"
+  },
+  "description_i18n": {
+    "zh-CN": "提示词发现、计划校验、审批、批量生成、质量评估与中断恢复；每张图带哈希校验回执。"
+  }
 }

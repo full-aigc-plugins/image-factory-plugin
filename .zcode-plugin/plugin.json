@@ -1,13 +1,15 @@
 {
   "name": "image-factory",
-  "displayName": "Image Factory · Batch Image Generation",
+  "displayName": "Image（批量 AI 出图）",
   "displayName_i18n": {
-    "en": "Image Factory · Batch Image Generation"
+    "en": "Image Factory · Batch Image Generation",
+    "zh-CN": "Image（批量 AI 出图）"
   },
   "version": "0.8.0",
-  "description": "Prompt discovery, plan validation, approval, batch generation, evaluation and recovery. Every artifact carries a hash-verified receipt.",
+  "description": "提示词发现、计划校验、审批、批量生成、质量评估与中断恢复；每张图带哈希校验回执。",
   "description_i18n": {
-    "en": "Prompt discovery, plan validation, approval, batch generation, evaluation and recovery. Every artifact carries a hash-verified receipt."
+    "en": "Prompt discovery, plan validation, approval, batch generation, evaluation and recovery. Every artifact carries a hash-verified receipt.",
+    "zh-CN": "提示词发现、计划校验、审批、批量生成、质量评估与中断恢复；每张图带哈希校验回执。"
   },
   "author": {
     "name": "Full Stack Skills / PartMe.AI",

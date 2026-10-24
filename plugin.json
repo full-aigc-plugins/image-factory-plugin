@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "image-factory",
   "version": "0.8.0",
-  "description": "Prompt discovery, plan validation, approval, batch generation, evaluation and recovery. Every artifact carries a hash-verified receipt.",
+  "description": "提示词发现、计划校验、审批、批量生成、质量评估与中断恢复；每张图带哈希校验回执。",
   "author": {
     "name": "Full Stack Skills / PartMe.AI",
     "url": "https://github.com/partme-ai"
@@ -49,5 +49,12 @@
     "ai.nanoco.nanoclaw": {
       "agentName": "Image Factory"
     }
+  },
+  "displayName": "Image（批量 AI 出图）",
+  "displayName_i18n": {
+    "zh-CN": "Image（批量 AI 出图）"
+  },
+  "description_i18n": {
+    "zh-CN": "提示词发现、计划校验、审批、批量生成、质量评估与中断恢复；每张图带哈希校验回执。"
   }
 }
