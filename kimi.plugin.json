@@ -13,7 +13,7 @@
     "receipts"
   ],
   "interface": {
-    "displayName": "Batch Image Generation · Image Factory",
+    "displayName": "Image Factory · Batch Image Generation",
     "shortDescription": "Plan approval, batch generation, evaluation and receipts",
     "longDescription": "Host-aware direct image generation with native capability preferred and Baoyu fallback when appropriate, plus governed batch production with prompt discovery, verified receipts, evaluation, and recovery.",
     "developerName": "Full Stack Skills / PartMe.AI",

@@ -1,7 +1,7 @@
 {
   "name": "partme-ai-image-factory",
   "interface": {
-    "displayName": "Batch Image Generation · Image Factory"
+    "displayName": "Image Factory · Batch Image Generation"
   },
   "plugins": [
     {
@@ -20,7 +20,7 @@
       "description": "Prompt discovery, plan validation, approval, batch generation, evaluation and recovery. Every artifact carries a hash-verified receipt.",
       "icon": "https://cdn.jsdelivr.net/gh/full-aigc-plugins/image-factory-plugin@v0.8.0/assets/logo-approved.png",
       "interface": {
-        "displayName": "Batch Image Generation · Image Factory",
+        "displayName": "Image Factory · Batch Image Generation",
         "shortDescription": "Plan approval, batch generation, evaluation and receipts",
         "logo": "https://cdn.jsdelivr.net/gh/full-aigc-plugins/image-factory-plugin@v0.8.0/assets/logo-approved.png"
       }

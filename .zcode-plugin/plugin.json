@@ -1,8 +1,8 @@
 {
   "name": "image-factory",
-  "displayName": "Batch Image Generation · Image Factory",
+  "displayName": "Image Factory · Batch Image Generation",
   "displayName_i18n": {
-    "en": "Batch Image Generation · Image Factory"
+    "en": "Image Factory · Batch Image Generation"
   },
   "version": "0.8.0",
   "description": "Prompt discovery, plan validation, approval, batch generation, evaluation and recovery. Every artifact carries a hash-verified receipt.",

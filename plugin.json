@@ -20,7 +20,7 @@
   "extensions": {
     "com.openai": {
       "interface": {
-        "displayName": "Batch Image Generation · Image Factory",
+        "displayName": "Image Factory · Batch Image Generation",
         "shortDescription": "Plan approval, batch generation, evaluation and receipts",
         "longDescription": "Prefer Codex built-in imagegen for direct image generation, offer unchanged Baoyu workflows only after explicit image-quota exhaustion, or run Image Factory's governed production loop with plan validation, approval, verified receipts, evaluation, and recovery.",
         "developerName": "Full Stack Skills / PartMe.AI",
