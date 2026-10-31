@@ -1,4 +1,5 @@
 import json
+import shlex
 import struct
 import subprocess
 import sys
@@ -10,6 +11,8 @@ from scripts import validate_distribution
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+import image_factory_cli  # noqa: E402
 PLUGIN_ID = "image-factory"
 DISPLAY_NAME = "Image Factory"
 REPOSITORY = "https://github.com/full-aigc-plugins/image-factory-plugin"
@@ -206,6 +209,28 @@ class DistributionTests(unittest.TestCase):
         self.assertIn("README.md", chinese)
         for text in (english, chinese):
             self.assertIn(PLUGIN_ID, text)
+
+    def test_readme_identity_and_quick_start_parse_without_generation(self) -> None:
+        version = load_json('plugin.json')['version']
+        package_version = load_json('package.json')['version']
+        self.assertEqual(load_json('.codex-plugin/plugin.json')['version'], version)
+        parser = image_factory_cli.build_parser()
+        for filename in ('README.md', 'README.zh-CN.md'):
+            text = (ROOT / filename).read_text(encoding='utf-8')
+            self.assertIn(f'badge/release-{version}-1A73E8', text)
+            self.assertIn(f'`{package_version}`', text)
+            self.assertNotIn('--approval', text)
+            for command in ('run', 'evaluate', 'recover'):
+                lines = [line for line in text.splitlines() if line.startswith(f'bin/image-factory {command} ')]
+                self.assertEqual(len(lines), 1, f'{filename}: {command}')
+                args = parser.parse_args(shlex.split(lines[0])[1:])
+                self.assertEqual(args.command, command)
+                self.assertEqual(args.plan, 'image-plan.json')
+                self.assertEqual(args.job, 'image-plan.job.json')
+                if command == 'run':
+                    self.assertTrue(args.approve)
+                if command == 'evaluate':
+                    self.assertEqual(args.scores, 'image-scores.json')
 
 
 if __name__ == "__main__":
