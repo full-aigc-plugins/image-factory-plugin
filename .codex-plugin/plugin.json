@@ -18,7 +18,7 @@
   ],
   "skills": "./skills/",
   "interface": {
-    "displayName": "Image Factory · Batch Image Generation",
+    "displayName": "Image Factory",
     "shortDescription": "Plan approval, batch generation, evaluation and receipts",
     "longDescription": "Prefer Codex built-in imagegen for direct image generation, offer unchanged Baoyu workflows only after explicit image-quota exhaustion, or run Image Factory's governed production loop with plan validation, approval, verified receipts, evaluation, and recovery.",
     "developerName": "Full Stack Skills / PartMe.AI",
@@ -37,11 +37,11 @@
       "Evaluate, optimize, or recover an existing image batch"
     ],
     "brandColor": "#10B981",
-    "composerIcon": "./assets/logo-approved.png",
+    "composerIcon": "./assets/composer-icon.png",
     "logo": "./assets/logo-approved.png",
     "logoDark": "./assets/logo-approved.png",
     "screenshots": [],
-    "composerIconDark": "./assets/logo-approved.png"
+    "composerIconDark": "./assets/composer-icon.png"
   },
   "displayName": "Image（批量 AI 出图）",
   "displayName_i18n": {
