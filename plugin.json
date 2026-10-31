@@ -20,7 +20,7 @@
   "extensions": {
     "com.openai": {
       "interface": {
-        "displayName": "Image Factory · Batch Image Generation",
+        "displayName": "Image Factory",
         "shortDescription": "Plan approval, batch generation, evaluation and receipts",
         "longDescription": "Prefer Codex built-in imagegen for direct image generation, offer unchanged Baoyu workflows only after explicit image-quota exhaustion, or run Image Factory's governed production loop with plan validation, approval, verified receipts, evaluation, and recovery.",
         "developerName": "Full Stack Skills / PartMe.AI",
@@ -39,22 +39,24 @@
           "Evaluate, optimize, or recover an existing image batch"
         ],
         "brandColor": "#10B981",
-        "composerIcon": "./assets/logo-approved.png",
+        "composerIcon": "./assets/composer-icon.png",
         "logo": "./assets/logo-approved.png",
         "logoDark": "./assets/logo-approved.png",
         "screenshots": [],
-        "composerIconDark": "./assets/logo-approved.png"
+        "composerIconDark": "./assets/composer-icon.png"
       }
     },
     "ai.nanoco.nanoclaw": {
       "agentName": "Image Factory"
+    },
+    "ai.partme.localization": {
+      "displayName": "Image（批量 AI 出图）",
+      "displayName_i18n": {
+        "zh-CN": "Image（批量 AI 出图）"
+      },
+      "description_i18n": {
+        "zh-CN": "提示词发现、计划校验、审批、批量生成、质量评估与中断恢复；每张图带哈希校验回执。"
+      }
     }
-  },
-  "displayName": "Image（批量 AI 出图）",
-  "displayName_i18n": {
-    "zh-CN": "Image（批量 AI 出图）"
-  },
-  "description_i18n": {
-    "zh-CN": "提示词发现、计划校验、审批、批量生成、质量评估与中断恢复；每张图带哈希校验回执。"
   }
 }
