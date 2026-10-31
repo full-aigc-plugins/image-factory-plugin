@@ -13,7 +13,7 @@ This plugin belongs to **AIGC content creation**.
 
 > Turn a reference-driven image task into an auditable production run: a validated plan, an approved spend, and a hash-verified receipt for every artifact.
 
-[![Version](https://img.shields.io/badge/release-0.9.1%2Bcodex.20261018-1A73E8)](https://github.com/full-aigc-plugins/image-factory-plugin/releases)
+[![Version](https://img.shields.io/badge/release-0.8.0-1A73E8)](https://github.com/full-aigc-plugins/image-factory-plugin/releases)
 [![Hosts](https://img.shields.io/badge/hosts-Codex%20%7C%20ZCode%20%7C%20Kimi-6E56CF)](#installation)
 [![Skills](https://img.shields.io/badge/skills-10-00A67E)](#skills)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
@@ -29,7 +29,8 @@ The plugin exposes two layers. In Codex the built-in `imagegen` / `image_gen` pa
 | Property | Value |
 | --- | --- |
 | Plugin ID | `image-factory` |
-| Version | `0.9.1+codex.20261018` |
+| Plugin manifest version | `0.8.0` |
+| npm package metadata | `0.9.0` |
 | Maturity | No production-readiness claim; the newest runtime record covers the `0.8.0` candidate |
 | Runtime | Python 3.11+, standard library only |
 | MCP server | None; the manifest declares no MCP entry |
@@ -53,6 +54,8 @@ codex plugin add image-factory@full-aigc-plugins
 ```
 
 ### From the repository-local marketplace
+
+The tagged `v0.9.1` marketplace installation is separate from this checkout's `0.8.0` plugin manifest.
 
 ```bash
 codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.9.1
@@ -78,17 +81,17 @@ bin/image-factory validate-plan image-plan.json
 bin/image-factory quote image-plan.json
 ```
 
-3. Approve the exact plan hash and run:
+3. Review the quote and explicitly approve spending for this run (`--approve` is a flag, not an approval-file path):
 
 ```bash
-bin/image-factory run image-plan.json --approval image-approval.json
+bin/image-factory run --plan image-plan.json --job image-plan.job.json --approve
 ```
 
-4. Evaluate or reconcile an interrupted run:
+4. Evaluate with recorded scores, or reconcile an interrupted run without generating again:
 
 ```bash
-bin/image-factory evaluate image-plan.json
-bin/image-factory recover image-plan.json
+bin/image-factory evaluate --plan image-plan.json --job image-plan.job.json --scores image-scores.json
+bin/image-factory recover --plan image-plan.json --job image-plan.job.json
 ```
 
 Each attempt is a fresh streaming subprocess against the built-in image tool. There is no retry loop: a silent retry is how one bad prompt becomes a large bill. A failed item is terminal; `optimize` produces a new prompt round that needs its own approval.
