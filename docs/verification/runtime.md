@@ -1,3 +1,5 @@
+> 0.9.2 仅更新插件展示文案，尚无该版本的真实宿主或付费运行验收记录。
+
 # Runtime and release verification: 0.8.0 candidate status
 
 The `0.8.0` candidate adds versioned multi-hash composition evidence, stratified calibration and reviewer-drift alerts, an export-only review workspace, and a structured runtime acceptance matrix. The deterministic and synthetic tests do not prove live character or element continuity. The historical `0.1.2` runtime record below remains immutable and must not be reused as fresh 0.8.0 acceptance.

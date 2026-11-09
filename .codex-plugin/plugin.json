@@ -1,7 +1,7 @@
 {
   "name": "image-factory",
-  "version": "0.8.0",
-  "description": "提示词发现、计划校验、审批、批量生成、质量评估与中断恢复；每张图带哈希校验回执。",
+  "version": "0.9.2+codex.20261109",
+  "description": "批量出图先计划再执行：提示词、审批、生成、质量评估与中断恢复，每张图都有回执。",
   "author": {
     "name": "Full Stack Skills / PartMe.AI",
     "url": "https://github.com/partme-ai"
@@ -18,8 +18,8 @@
   ],
   "skills": "./skills/",
   "interface": {
-    "displayName": "Image Factory",
-    "shortDescription": "Plan approval, batch generation, evaluation and receipts",
+    "displayName": "Image（批量 AI 出图）",
+    "shortDescription": "批量出图先计划再执行：提示词、审批、生成、质量评估与中断恢复，每张图都有回执。",
     "longDescription": "Prefer Codex built-in imagegen for direct image generation, offer unchanged Baoyu workflows only after explicit image-quota exhaustion, or run Image Factory's governed production loop with plan validation, approval, verified receipts, evaluation, and recovery.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "category": "Creativity",

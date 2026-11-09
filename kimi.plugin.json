@@ -1,7 +1,7 @@
 {
   "name": "image-factory",
-  "version": "0.8.0",
-  "description": "提示词发现、计划校验、审批、批量生成、质量评估与中断恢复；每张图带哈希校验回执。",
+  "version": "0.9.2",
+  "description": "批量出图先计划再执行：提示词、审批、生成、质量评估与中断恢复，每张图都有回执。",
   "author": {
     "name": "Full Stack Skills / PartMe.AI"
   },
@@ -14,7 +14,7 @@
   ],
   "interface": {
     "displayName": "Image（批量 AI 出图）",
-    "shortDescription": "计划审批、批量生成、质量评估与产物回执",
+    "shortDescription": "批量出图先计划再执行：提示词、审批、生成、质量评估与中断恢复，每张图都有回执。",
     "longDescription": "Host-aware direct image generation with native capability preferred and Baoyu fallback when appropriate, plus governed batch production with prompt discovery, verified receipts, evaluation, and recovery.",
     "developerName": "Full Stack Skills / PartMe.AI",
     "websiteURL": "https://github.com/full-aigc-plugins/image-factory-plugin"

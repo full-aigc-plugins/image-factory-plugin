@@ -14,10 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import image_factory_cli  # noqa: E402
 PLUGIN_ID = "image-factory"
-DISPLAY_NAME = "Image Factory"
+DISPLAY_NAME = "Image（批量 AI 出图）"
 REPOSITORY = "https://github.com/full-aigc-plugins/image-factory-plugin"
 BRAND_COLOR = "#10B981"
-RELEASE_VERSION = "0.8.0"
+RELEASE_VERSION = "0.9.2"
 
 
 def load_json(relative: str) -> dict:
@@ -213,7 +213,7 @@ class DistributionTests(unittest.TestCase):
     def test_readme_identity_and_quick_start_parse_without_generation(self) -> None:
         version = load_json('plugin.json')['version']
         package_version = load_json('package.json')['version']
-        self.assertEqual(load_json('.codex-plugin/plugin.json')['version'], version)
+        self.assertEqual(load_json('.codex-plugin/plugin.json')['version'].split('+', 1)[0], version)
         parser = image_factory_cli.build_parser()
         for filename in ('README.md', 'README.zh-CN.md'):
             text = (ROOT / filename).read_text(encoding='utf-8')

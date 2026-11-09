@@ -13,7 +13,7 @@
 
 > 把「给一批参考图、定一个视觉方向」变成一次可审计的生产：计划先校验、花费先批准、每件产物都有可复核的哈希回执。
 
-[![版本](https://img.shields.io/badge/release-0.8.0-1A73E8)](https://github.com/full-aigc-plugins/image-factory-plugin/releases)
+[![版本](https://img.shields.io/badge/release-0.9.2-1A73E8)](https://github.com/full-aigc-plugins/image-factory-plugin/releases)
 [![宿主](https://img.shields.io/badge/hosts-Codex%20%7C%20ZCode%20%7C%20Kimi-6E56CF)](#安装)
 [![技能](https://img.shields.io/badge/skills-10-00A67E)](#技能)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
@@ -30,7 +30,7 @@
 | --- | --- |
 | 插件 ID | `image-factory` |
 | 插件清单版本 | `0.8.0` |
-| npm 包元数据 | `0.9.0` |
+| npm 包元数据 | `0.9.2` |
 | 成熟度 | 未宣称生产就绪；最新的真实运行记录对应 `0.8.0` 候选版本 |
 | 运行环境 | Python 3.11 及以上，仅用标准库 |
 | MCP 服务器 | 无；清单中没有 MCP 条目 |
@@ -55,10 +55,10 @@ codex plugin add image-factory@full-aigc-plugins
 
 ### 从仓库内置市场安装
 
-市场安装使用独立的 `v0.9.1` 标签；当前检出目录的插件清单版本是 `0.8.0`。
+当前检出目录与仓库内置市场均声明插件版本 `0.9.2`。
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.9.1
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.9.2
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
