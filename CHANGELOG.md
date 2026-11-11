@@ -2,6 +2,11 @@
 
 # Changelog
 
+## 0.9.3 — 2026-11-11
+
+- Package the DeepSeek Harness adapter with repository skills and scripts from the plugin root.
+- Runtime and paid-operation acceptance remains pending for this release.
+
 ## 0.8.0 — 2026-09-23
 
 - Add opt-in versioned aHash/dHash/pHash duplicate evidence while retaining the original aHash-only plan path; image_batch 1.6.0 and scores 1.4.0 migrate without inventing visual evidence.
