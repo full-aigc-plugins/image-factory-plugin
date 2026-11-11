@@ -1,6 +1,6 @@
 {
   "name": "image-factory",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "批量出图先计划再执行：提示词、审批、生成、质量评估与中断恢复，每张图都有回执。",
   "author": {
     "name": "Full Stack Skills / PartMe.AI"

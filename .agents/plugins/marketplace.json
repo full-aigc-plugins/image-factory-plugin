@@ -9,20 +9,20 @@
       "source": {
         "source": "url",
         "url": "https://github.com/full-aigc-plugins/image-factory-plugin.git",
-        "ref": "v0.9.2"
+        "ref": "v0.9.3"
       },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_USE"
       },
       "category": "Creativity",
-      "version": "0.9.2",
+      "version": "0.9.3",
       "description": "批量出图先计划再执行：提示词、审批、生成、质量评估与中断恢复，每张图都有回执。",
-      "icon": "https://cdn.jsdelivr.net/gh/full-aigc-plugins/image-factory-plugin@v0.9.2/assets/logo-approved.png",
+      "icon": "https://cdn.jsdelivr.net/gh/full-aigc-plugins/image-factory-plugin@v0.9.3/assets/logo-approved.png",
       "interface": {
         "displayName": "Image（批量 AI 出图）",
         "shortDescription": "批量出图先计划再执行：提示词、审批、生成、质量评估与中断恢复，每张图都有回执。",
-        "logo": "https://cdn.jsdelivr.net/gh/full-aigc-plugins/image-factory-plugin@v0.9.2/assets/logo-approved.png"
+        "logo": "https://cdn.jsdelivr.net/gh/full-aigc-plugins/image-factory-plugin@v0.9.3/assets/logo-approved.png"
       },
       "displayName": "Image（批量 AI 出图）"
     }
