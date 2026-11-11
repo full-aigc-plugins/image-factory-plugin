@@ -9,7 +9,7 @@ host manifest; Claude Code, Codex, ZCode and Kimi keep using those.
 Run this from the plugin checkout root:
 
 ```sh
-dsh plugin --profile desktop add link:./dsh
+dsh plugin --profile desktop add link:/path/to/image-factory-plugin
 ```
 
 ## What DSH gets

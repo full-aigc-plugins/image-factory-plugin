@@ -1,13 +1,14 @@
 {
-  "name": "image-factory-plugin",
-  "version": "0.9.2",
+  "name": "image-factory",
+  "version": "0.9.3",
   "private": true,
   "type": "module",
   "main": "./dsh/lib/index.js",
   "dsh": {
     "bundle": {
-      "patch": "./cordis.patch.yml"
+      "patch": "./dsh/cordis.patch.yml"
     }
   },
-  "icon": "./dsh/icon.png"
+  "icon": "./dsh/icon.png",
+  "description": "Discover prompts, batch-produce and evaluate images, and record verified artifact receipts."
 }
