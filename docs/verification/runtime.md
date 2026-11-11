@@ -1,3 +1,4 @@
+> 0.9.3 仅修正 DeepSeek Harness 插件分发，尚无该版本的真实宿主或付费运行验收记录。
 > 0.9.2 仅更新插件展示文案，尚无该版本的真实宿主或付费运行验收记录。
 
 # Runtime and release verification: 0.8.0 candidate status

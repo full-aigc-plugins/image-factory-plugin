@@ -1,3 +1,4 @@
+> 0.9.3 release candidate adds DeepSeek Harness root bundle distribution; live runtime acceptance remains pending.
 > Version 0.9.2 updates the Chinese plugin display copy across hosts; historical acceptance records retain their original version.
 
 # Image Factory Plugin Technical Solution

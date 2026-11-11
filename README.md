@@ -13,7 +13,7 @@ This plugin belongs to **AIGC content creation**.
 
 > Turn a reference-driven image task into an auditable production run: a validated plan, an approved spend, and a hash-verified receipt for every artifact.
 
-[![Version](https://img.shields.io/badge/release-0.9.2-1A73E8)](https://github.com/full-aigc-plugins/image-factory-plugin/releases)
+[![Version](https://img.shields.io/badge/release-0.9.3-1A73E8)](https://github.com/full-aigc-plugins/image-factory-plugin/releases)
 [![Hosts](https://img.shields.io/badge/hosts-Codex%20%7C%20ZCode%20%7C%20Kimi-6E56CF)](#installation)
 [![Skills](https://img.shields.io/badge/skills-10-00A67E)](#skills)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
@@ -30,7 +30,7 @@ The plugin exposes two layers. In Codex the built-in `imagegen` / `image_gen` pa
 | --- | --- |
 | Plugin ID | `image-factory` |
 | Plugin manifest version | `0.8.0` |
-| npm package metadata | `0.9.2` |
+| npm package metadata | `0.9.3` |
 | Maturity | No production-readiness claim; the newest runtime record covers the `0.8.0` candidate |
 | Runtime | Python 3.11+, standard library only |
 | MCP server | None; the manifest declares no MCP entry |
@@ -55,10 +55,10 @@ codex plugin add image-factory@full-aigc-plugins
 
 ### From the repository-local marketplace
 
-This checkout and the repository-local marketplace both declare plugin version `0.9.2`.
+This checkout and the repository-local marketplace both declare plugin version `0.9.3`.
 
 ```bash
-codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.9.2
+codex plugin marketplace add full-aigc-plugins/image-factory-plugin --ref v0.9.3
 codex plugin add image-factory@partme-ai-image-factory
 ```
 
